@@ -1,0 +1,1183 @@
+import json
+import os
+import os.path
+import random
+
+from datetime import datetime, timedelta
+
+from django.db import models
+from django.conf import settings
+from django.contrib.staticfiles.templatetags.staticfiles import static
+from django.contrib.auth.models import User, Group, Permission
+from django.core.exceptions import ValidationError
+
+from . import utils as u
+from .middleware import get_request
+
+
+class DeletableManager(models.Manager):
+    def get_queryset(self):
+        if settings.PSEUDO_DELETION:
+            return super(DeletableManager, self).get_queryset().filter(is_del=False)
+        return super(DeletableManager, self).get_queryset()
+
+
+class EntityModel(models.Model):
+    """ 实体类模型
+    加入了一部分的方法：
+    * 可删除：这类模型删除的话实际上会隐藏起来，但是不会正式删除数据
+    * 时间戳：加入了 date_created 和 date_updated 记录创建和修改的时间
+    """
+
+    name = models.CharField(
+        verbose_name='名称',
+        max_length=255,
+        blank=True,
+        default='',
+    )
+
+    is_del = models.BooleanField(
+        verbose_name='已删除',
+        default=False,
+    )
+
+    is_active = models.BooleanField(
+        verbose_name='是否有效',
+        default=True,
+    )
+
+    is_sticky = models.BooleanField(
+        verbose_name='是否置顶',
+        default=False,
+    )
+
+    sorting = models.SmallIntegerField(
+        verbose_name='排序',
+        default=0,
+        help_text='数字越大越靠前',
+    )
+
+    date_created = models.DateTimeField(
+        verbose_name='创建时间',
+        auto_now_add=True,
+    )
+
+    date_updated = models.DateTimeField(
+        verbose_name='修改时间',
+        auto_now=True,
+    )
+
+    objects = DeletableManager()
+
+    default_objects = models.Manager()
+
+    use_for_related_fields = True
+
+    class Meta:
+        abstract = True
+        ordering = ['-date_created']
+
+    def __str__(self):
+        # 如果 name 不填，那么显示内容的前 20 个字符
+        return self.name \
+               or hasattr(self, 'content') and self.content[:20] \
+               or str(self.pk)
+
+    def delete(self, *args, **kwargs):
+        """ 接管默认的 Delete 方法，不做真正的删除 """
+        if settings.PSEUDO_DELETION:
+            self.is_del = True
+            self.save()
+        else:
+            super().delete(*args, **kwargs)
+
+    def destroy(self):
+        super().delete()
+
+
+class HierarchicalModel(models.Model):
+    """ 层次模型，具备 parent 和 children 属性
+    """
+    parent = models.ForeignKey(
+        verbose_name='上级',
+        to='self',
+        related_name='children',
+        blank=True,
+        null=True,
+    )
+
+    class Meta:
+        abstract = True
+
+
+class Tag(models.Model):
+    """ 标签
+    """
+
+    name = models.CharField(
+        verbose_name='名称',
+        max_length=255,
+    )
+
+    class Meta:
+        verbose_name = '标签'
+        verbose_name_plural = '标签'
+        db_table = 'base_tag'
+
+    def __str__(self):
+        return self.name
+
+
+class TaggedModel(models.Model):
+    tags = models.ManyToManyField(
+        verbose_name='标签',
+        to=Tag,
+        related_name='%(class)ss',
+        blank=True,
+    )
+
+    class Meta:
+        abstract = True
+
+
+class GeoPositionedModel(models.Model):
+    """ 包含地理位置的模型
+    """
+
+    # 地球半径（米）
+    EARTH_RADIUS = 6378245.0
+
+    geo_lng = models.FloatField(
+        verbose_name='经度',
+        default=0,
+        blank=True,
+    )
+
+    geo_lat = models.FloatField(
+        verbose_name='纬度',
+        default=0,
+        blank=True,
+    )
+
+    radius = models.FloatField(
+        verbose_name='半径',
+        default=0,
+        blank=True,
+    )
+
+    geo_label = models.CharField(
+        verbose_name='位置标签',
+        max_length=255,
+        blank=True,
+        default='',
+    )
+
+    adcode = models.IntegerField(
+        verbose_name='行政区划编码',
+        default=0,
+        help_text='保存时试图自动获取区划编码',
+    )
+
+    geo_info = models.TextField(
+        verbose_name='地理信息',
+        default='',
+        blank=True,
+        help_text='保存时自动尝试获取地理信息',
+    )
+
+    class Meta:
+        abstract = True
+
+    def save(self, *args, **kwargs):
+        # 自动解析地理位置
+        if settings.AUTO_GEO_DECODE:
+            try:
+                info = self.get_geo_decode()
+                self.geo_info = json.dumps(info)
+                self.adcode = info.get('addressComponent').get('adcode')
+            except:
+                pass
+        super().save(self, *args, **kwargs)
+
+    @staticmethod
+    def inside_china(lat, lng):
+        """ 粗算坐标是否在国内
+        :param lat:
+        :param lng:
+        :return:
+        """
+        return 73.66 < lng < 135.05 and 3.86 < lat < 53.55
+
+    @staticmethod
+    def latlng_baidu2qq(lat, lng):
+        """ 百度地图坐标转换成QQ地图坐标
+        :param lat:
+        :param lng:
+        :return:
+        """
+        import math
+        x_pi = math.pi * 3000.0 / 180.0
+        x = lng - 0.0065
+        y = lat - 0.006
+        z = (x * x + y * y) ** 0.5 - 0.00002 * math.sin(y * x_pi)
+        theta = math.atan2(y, x) - 0.000003 * math.cos(x * x_pi)
+        lng = z * math.cos(theta)
+        lat = z * math.sin(theta)
+        return lat, lng
+
+    def geo_qq(self):
+        """ 获取 qq 坐标系的坐标（纬度latitude，经度longitude）
+        :return:
+        """
+        return self.latlng_baidu2qq(self.geo_lat, self.geo_lng)
+
+    def geo_lat_qq(self):
+        """ 返回 QQ 坐标系纬度 """
+        return self.geo_qq[0]
+
+    def geo_lng_qq(self):
+        """ 返回 QQ 坐标系经度 """
+        return self.geo_qq[1]
+
+    @staticmethod
+    def geo_decode(lat, lng):
+        from sys import stderr
+        from urllib.request import urlopen
+        from django.conf import settings
+        try:
+            resp = urlopen(
+                'http://api.map.baidu.com/geocoder/v2/'
+                '?location={},{}&output=json&ak={}'.format(
+                    lat, lng, settings.BMAP_KEY
+                )
+            )
+            return json.loads(resp.read().decode()).get('result')
+        except:
+            # 反解地理信息失败
+            import traceback
+            from sys import stderr
+            print(traceback.format_exc(), file=stderr)
+            return None
+
+    def get_geo_decode(self):
+        return self.geo_decode(self.geo_lat, self.geo_lng)
+
+    def get_label(self):
+        info = self.get_geo_decode()
+        return info and info.get('formatted_address')
+
+    def get_district_number(self):
+        info = self.get_geo_decode()
+        address = info and info.get('addressComponent')
+        return address and address.get('adcode')
+
+    def get_district(self):
+        return AddressDistrict.objects.filter(pk=self.get_district_number() or 0).first()
+
+    def get_full_address(self):
+        district = self.get_district()
+        return district.full_name + self.geo_label
+
+    def get_district_label(self):
+        import re
+        district = self.get_district()
+        return re.sub(
+            r'(?:地区|区|自治州|市郊县|盟|市市辖区|市|省|特別行政區|自治州)$',
+            '',
+            district.name
+        ) if district else ''
+
+    def distance(self):
+        """ 获取这个对象离当前登录用户的地理距离，单位是公米 """
+        request = get_request()
+        if not hasattr(request.user, 'customer'):
+            return None
+        return self.distance_to(request.user.customer)
+
+    def distance_to(self, item):
+        """ 获取当前对象到另一个 GeoPositionedModel 对象的距离
+        :param item:
+        :return:
+        """
+        return u.earth_distance(
+            item.geo_lat,
+            item.geo_lng,
+            self.geo_lat,
+            self.geo_lng
+        )
+
+    @staticmethod
+    def annotate_distance_from(qs, lat, lng, field_name='distance'):
+        """ 将 queryset 附加一个字段名
+        :param qs: 原始 queryset
+        :param lat: 参考点的纬度坐标
+        :param lng: 参考点的经度坐标
+        :param field_name: 附加到对象上的距离字段
+        :return: 返回按照对指定坐标点距离从近到远排序的 queryset
+        """
+        return qs.extra(select={field_name: """{R} * acos(
+            sin(radians({lat})) * sin(radians(geo_lat)) +
+            cos(radians({lat})) * cos(radians(geo_lat)) * cos(radians({lng}-geo_lng))
+        )""".format(R=GeoPositionedModel.EARTH_RADIUS, lat=lat, lng=lng)})
+
+    @staticmethod
+    def filter_by_distance(qs, lat, lng, distance, exclude=False):
+        """ 根据距离筛选 QuerySet
+        :param qs: 原始 queryset
+        :param lat: 参考点的纬度坐标
+        :param lng: 参考点的经度坐标
+        :param distance: 基准距离
+        :param exclude: 如果是 False（默认），返回距离小于基准距离的集合
+        如果为 True，则返回距离大于基准距离的集合
+        :return:
+        """
+        # 社区公告计算筛选范围
+        return qs.extra(where=[
+            """{R} * acos(
+                sin(radians({lat})) * sin(radians(geo_lat)) +
+                cos(radians({lat})) * cos(radians(geo_lat)) * cos(radians({lng}-geo_lng))
+            ) {op} {distance}""".format(
+                R=GeoPositionedModel.EARTH_RADIUS,
+                lat=lat,
+                lng=lng,
+                distance=distance,
+                op='>' if exclude else '<'
+            )
+        ])
+
+
+class Keyword(models.Model):
+    """ 关键词
+    关键词采集自所有的文本，包括用户搜索的输入、商店的详细信息等等；
+    可以给一个统一的接口接受一个文本以更新关键词；
+    关键词的统计有一个主题的概念，可以分主题对内容进行统计；
+    """
+
+    name = models.CharField(
+        verbose_name='名称',
+        max_length=255,
+    )
+
+    frequency = models.BigIntegerField(
+        verbose_name='词频',
+        default=0,
+    )
+
+    subject = models.CharField(
+        verbose_name='主题',
+        max_length=50,
+        blank=True,
+    )
+
+    class Meta:
+        verbose_name = '关键词'
+        verbose_name_plural = '关键词'
+        db_table = 'base_keyword'
+        # unique_together = [['name', 'subject']]
+
+    @staticmethod
+    def collect(text, split=True, subject=''):
+        """ 收集一个文本的关键词
+        给出一段文本，然后对文本进行分词，将所有的分词结果词累计到 keyword 中。
+        :param text: 收集的文本
+        :param split: 是否进行分词
+        :param subject: 统计的主题
+        :return:
+        """
+        import jieba
+        import re
+        from collections import Counter
+        text = re.sub(
+            r'[^\u4E00-\u9FA5A-Za-z0-9_-]',
+            ' ',
+            text
+        )
+        words = Counter(jieba.cut(text) if split else [text]).items()
+        result = list()
+        for word, freq in words:
+            if text.strip():
+                kw, created = Keyword.objects.get_or_create(name=word, subject=subject)
+                kw.frequency += freq
+                kw.save()
+                result.append(kw)
+        return result
+
+
+class UserOwnedModel(models.Model):
+    """ 由用户拥有的模型类
+    包含作者字段
+    """
+
+    author = models.ForeignKey(
+        verbose_name='作者',
+        to=User,
+        related_name='%(class)ss_owned',
+        blank=True,
+        null=True,
+    )
+
+    class Meta:
+        abstract = True
+
+
+class ImageModel(UserOwnedModel, EntityModel):
+    """ 图片对象
+    由于需要审批，因此需要单独抽出
+    """
+
+    image = models.ImageField(
+        verbose_name='图片',
+        upload_to='images/'
+    )
+
+    is_active = models.BooleanField(
+        verbose_name='是否可用',
+        default=True,
+    )
+
+    class Meta:
+        verbose_name = '图片'
+        verbose_name_plural = '图片'
+        db_table = 'base_image'
+
+    def url(self):
+        """ 根据可用状态返回图片的 URL
+        如果未审批的话返回替代的图片
+        :return:
+        """
+        return self.image.url if self.is_active \
+            else static('core/images/image-pending.png')
+
+
+class GalleryModel(models.Model):
+    images = models.ManyToManyField(
+        verbose_name='图片',
+        to='ImageModel',
+        related_name='%(class)ss_attached',
+        blank=True,
+    )
+
+    class Meta:
+        abstract = True
+
+
+class VideoModel(UserOwnedModel, EntityModel):
+    """ 视频对象
+    """
+
+    video = models.FileField(
+        verbose_name='视频',
+        upload_to='video/'
+    )
+
+    duration = models.FloatField(
+        verbose_name='时长',
+        blank=True,
+        default=0,
+    )
+
+    is_active = models.BooleanField(
+        verbose_name='是否可用',
+        default=True,
+    )
+
+    class Meta:
+        verbose_name = '视频'
+        verbose_name_plural = '视频'
+        db_table = 'base_video'
+
+    def url(self):
+        return self.video.url if self.is_active else None
+
+
+class AudioModel(UserOwnedModel, EntityModel):
+    """ 音频对象
+    """
+
+    audio = models.FileField(
+        verbose_name='音频',
+        upload_to='audio/',
+        blank=True,
+        null=True,
+    )
+
+    duration = models.FloatField(
+        verbose_name='时长',
+        blank=True,
+        default=0,
+    )
+
+    is_active = models.BooleanField(
+        verbose_name='是否可用',
+        default=True,
+    )
+
+    audio_mp3 = models.FileField(
+        verbose_name='音频mp3文件',
+        upload_to='audio/mp3/',
+        null=True,
+        blank=True,
+    )
+
+    audio_ogg = models.FileField(
+        verbose_name='音频ogg文件',
+        upload_to='audio/ogg/',
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        verbose_name = '音频'
+        verbose_name_plural = '音频'
+        db_table = 'base_audio'
+
+    def url(self):
+        return self.audio.url if self.is_active else None
+
+    @classmethod
+    def make_from_uploaded_file(cls, file):
+        """
+        Creates and return an AudioModel instance.
+        Usage:
+        <input type="file" name="upload" />
+        audio = AudioModel.make_from_uploaded_file(request.FILES['upload'])
+        :param file:
+        :return:
+        """
+        audio = cls.objects.create()
+        temp_path = os.path.join(
+            settings.MEDIA_ROOT,
+            'audio',
+            '{}.{}'.format(audio.id, file.name.split('.')[-1]),
+        )
+        if settings.NORMALIZE_AUDIO:
+            ogg_path = 'audio/ogg/{}.ogg'.format(audio.id)
+            mp3_path = 'audio/mp3/{}.mp3'.format(audio.id)
+            os.makedirs(os.path.join(settings.MEDIA_ROOT, os.path.dirname(ogg_path)), exist_ok=True)
+            os.makedirs(os.path.join(settings.MEDIA_ROOT, os.path.dirname(mp3_path)), exist_ok=True)
+            of = open(temp_path, 'wb')
+            of.write(file.read())
+            of.close()
+            from .libs.audiotranscode import AudioTranscode
+            at = AudioTranscode()
+            at.transcode(temp_path, os.path.join(settings.MEDIA_ROOT, ogg_path))
+            at.transcode(temp_path, os.path.join(settings.MEDIA_ROOT, mp3_path))
+            audio.audio_ogg.name = ogg_path
+            audio.audio_mp3.name = mp3_path
+            from mutagen.mp3 import MP3
+            audio.duration = MP3(os.path.join(settings.MEDIA_ROOT, mp3_path)).info.length
+        else:
+            # TODO: not tested
+            raw_path = 'audio/raw/{}'.format(file.name)
+            os.makedirs(os.path.join(settings.MEDIA_ROOT, os.path.dirname(raw_path)), exist_ok=True)
+            of = open(raw_path, 'wb')
+            of.write(file.read())
+            of.close()
+            audio.audio.name = raw_path
+
+        audio.save()
+        return audio
+
+
+class AbstractMessageModel(models.Model):
+    """ 消息
+    """
+    TYPE_TEXT = 'TEXT'
+    TYPE_IMAGE = 'IMAGE'
+    TYPE_VIDEO = 'VIDEO'
+    TYPE_AUDIO = 'AUDIO'
+    TYPE_COMBO = 'COMBO'
+    TYPE_OBJECT = 'OBJECT'
+    TYPE_PROMPT = 'PROMPT'
+    TYPE_CHOICES = (
+        (TYPE_TEXT, '文本'),
+        (TYPE_IMAGE, '图片'),
+        (TYPE_VIDEO, '视频'),
+        (TYPE_AUDIO, '音频'),
+        (TYPE_COMBO, '混合'),
+        (TYPE_OBJECT, '对象'),
+        (TYPE_PROMPT, '提示'),
+    )
+
+    type = models.CharField(
+        verbose_name='消息类型',
+        choices=TYPE_CHOICES,
+        max_length=20,
+        default=TYPE_TEXT,
+    )
+
+    content = models.TextField(
+        verbose_name='内容',
+        blank=True,
+        default='',
+    )
+
+    images = models.ManyToManyField(
+        verbose_name='图片',
+        to='ImageModel',
+        related_name='%(class)ss',
+        blank=True,
+    )
+
+    videos = models.ManyToManyField(
+        verbose_name='视频',
+        to='VideoModel',
+        related_name='%(class)ss',
+        blank=True,
+    )
+
+    audios = models.ManyToManyField(
+        verbose_name='音频',
+        to='AudioModel',
+        related_name='%(class)ss',
+        blank=True,
+    )
+
+    params = models.TextField(
+        verbose_name='参数',
+        blank=True,
+        default='',
+        help_text='用 json 存放一些动态的参数',
+    )
+
+    class Meta:
+        abstract = True
+
+
+class Comment(HierarchicalModel,
+              UserOwnedModel,
+              EntityModel,
+              AbstractMessageModel):
+    content = models.TextField(
+        verbose_name='内容',
+    )
+
+    class Meta:
+        verbose_name = '评论'
+        verbose_name_plural = '评论'
+        db_table = 'base_comment'
+
+
+class CommentableModel(models.Model):
+    comments = models.ManyToManyField(
+        verbose_name='评论',
+        to='Comment',
+        related_name='%(class)ss',
+        blank=True,
+    )
+
+    class Meta:
+        abstract = True
+
+
+class Rating(UserOwnedModel,
+             EntityModel):
+    taxonomy = models.CharField(
+        verbose_name='分类',
+        max_length=50,
+        blank=True,
+        default='',
+    )
+
+    score = models.FloatField(
+        verbose_name='评分',
+    )
+
+    class Meta:
+        verbose_name = '评分'
+        verbose_name_plural = '评分'
+        db_table = 'base_rating'
+
+
+class RatableModel(models.Model):
+    ratings = models.ManyToManyField(
+        verbose_name='评分',
+        to='Rating',
+        related_name='%(class)ss',
+        blank=True,
+    )
+
+    class Meta:
+        abstract = True
+
+
+class Message(AbstractMessageModel,
+              EntityModel):
+    subject = models.CharField(
+        verbose_name='主题分类',
+        max_length=20,
+        blank=True,
+        default='',
+    )
+
+    broadcast = models.ForeignKey(
+        verbose_name='推送',
+        to='Broadcast',
+        related_name='messages',
+        null=True,
+        blank=True,
+    )
+
+    sender = models.ForeignKey(
+        verbose_name='发送用户',
+        to=User,
+        related_name='messages_sent',
+        null=True,
+        blank=True,
+    )
+
+    receiver = models.ForeignKey(
+        verbose_name='接收用户',
+        to=User,
+        related_name='messages_received',
+        null=True,
+        blank=True,
+    )
+
+    is_read = models.BooleanField(
+        verbose_name='是否已读',
+        default=False,
+    )
+
+    class Meta:
+        verbose_name = '消息'
+        verbose_name_plural = '消息'
+        db_table = 'base_message'
+
+
+class Broadcast(AbstractMessageModel):
+    use_sms = models.BooleanField(
+        verbose_name='是否推送手机短信',
+        default=False,
+    )
+
+    use_jpush = models.BooleanField(
+        verbose_name='是否推送手机通知',
+        default=False,
+    )
+
+    use_email = models.BooleanField(
+        verbose_name='是否推送电子邮件',
+        default=False,
+    )
+
+    use_wechat = models.BooleanField(
+        verbose_name='是否推送微信公众号模板消息',
+        default=False,
+    )
+
+    STATUS_DRAFT = 'DRAFT'
+    STATUS_DONE = 'DONE'
+    STATUS_CHOICES = (
+        (STATUS_DRAFT, '草稿'),
+        (STATUS_DONE, '已发送'),
+    )
+
+    status = models.CharField(
+        verbose_name='状态',
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_DRAFT,
+    )
+
+    groups = models.ManyToManyField(
+        verbose_name='推送组',
+        to=Group,
+        blank=True,
+        related_name='broadcasts',
+    )
+
+    users = models.ManyToManyField(
+        verbose_name='推送用户',
+        to=User,
+        blank=True,
+        related_name='broadcasts',
+    )
+
+    date_sent = models.DateTimeField(
+        verbose_name='推送时间',
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        verbose_name = '消息推送'
+        verbose_name_plural = '消息推送'
+        db_table = 'base_broadcast'
+
+    def get_recipients(self):
+        return User.objects.filter(
+            models.Q(groups__broadcasts=self) |
+            models.Q(broadcasts=self)
+        ).distinct()
+
+    def target_text(self):
+        """ 推送群体显示的字段 """
+        return ', '.join([u.username for u in self.users.all()]) + ', ' + \
+               ', '.join([g.name for g in self.groups.all()])
+
+    def send(self):
+        """ 执行推送
+        :return:
+        """
+        if self.status == self.STATUS_DONE:
+            raise ValidationError('消息已推送，不能重复操作。')
+
+        for user in self.get_recipients():
+            self.messages.create(
+                receiver=user,
+                name=self.name,
+                content=self.content,
+                params=self.params,
+            )
+            # TODO: 特殊发送渠道需要外接触发实现
+        self.status = self.STATUS_DONE
+        self.date_sent = datetime.now()
+        self.save()
+
+
+class AddressDistrict(HierarchicalModel):
+    """ 地区
+    """
+    id = models.IntegerField(
+        verbose_name='区划编码',
+        primary_key=True,
+    )
+
+    name = models.CharField(
+        verbose_name='名称',
+        max_length=45,
+        blank=True,
+        default='',
+    )
+
+    class Meta:
+        verbose_name = '地区'
+        verbose_name_plural = '地区'
+        db_table = 'base_address_district'
+
+    def full_name(self):
+        return self.parent.full_name() + self.name if self.parent else self.name
+
+    def __str__(self):
+        return self.name
+
+    @staticmethod
+    def get_geo_decode_by_lat_lng(lat, lng):
+        from urllib.request import urlopen
+        from django.conf import settings
+        try:
+            resp = urlopen(
+                'http://api.map.baidu.com/geocoder/v2/'
+                '?location={},{}&output=json&ak={}'.format(lat, lng, settings.BMAP_KEY)
+            )
+            return json.loads(resp.read().decode()).get('result')
+        except:
+            import traceback
+            from sys import stderr
+            print(traceback.format_exc(), file=stderr)
+            return None
+
+
+class AbstractValidationModel(models.Model):
+    """ 抽象验证类
+    1. 提交一次验证的时候，必须没有非 EXPIRED 的验证信息；
+    2. 提交验证之后，创建一条新的 PersonalValidationInfo 信息；
+    3. 新提交的验证，状态为 PENDING，记录 date_submitted；
+    4. 管理员权限可以进行审批，或者驳回，改变状态并记录 date_response；
+    5. 任何阶段，用户可以取消掉现有的验证信息，变成 EXPIRED 并记录时间；
+    6. 取消掉唯一一条活动的验证信息之后，可以提交新的验证信息；
+    """
+
+    STATUS_DRAFT = 'DRAFT'
+    STATUS_PENDING = 'PENDING'
+    STATUS_REJECTED = 'REJECTED'
+    STATUS_SUCCESS = 'SUCCESS'
+    STATUS_EXPIRED = 'EXPIRED'
+    STATUS_CHOICES = (
+        (STATUS_DRAFT, '草稿'),
+        (STATUS_PENDING, '等待审批'),
+        (STATUS_REJECTED, '驳回'),
+        (STATUS_SUCCESS, '成功'),
+        (STATUS_EXPIRED, '已失效'),
+    )
+
+    status = models.CharField(
+        verbose_name='验证状态',
+        max_length=20,
+        choices=STATUS_CHOICES,
+    )
+
+    date_submitted = models.DateTimeField(
+        verbose_name='提交时间',
+        blank=True,
+        null=True,
+    )
+
+    date_response = models.DateTimeField(
+        verbose_name='审批时间',
+        blank=True,
+        null=True,
+    )
+
+    date_expired = models.DateTimeField(
+        verbose_name='失效时间',
+        blank=True,
+        null=True,
+    )
+
+    remark = models.CharField(
+        verbose_name='审核不通过原因',
+        max_length=255,
+        blank=True,
+        default='',
+    )
+
+    class Meta:
+        abstract = True
+
+
+class AbstractTransactionModel(models.Model):
+    user_debit = models.ForeignKey(
+        verbose_name='借方用户',
+        to=User,
+        related_name='%(class)ss_debit',
+        null=True,
+        blank=True,
+        help_text='即余额增加的用户',
+    )
+
+    user_credit = models.ForeignKey(
+        verbose_name='贷方用户',
+        to=User,
+        related_name='%(class)ss_credit',
+        null=True,
+        blank=True,
+        help_text='即余额减少的用户',
+
+    )
+
+    amount = models.DecimalField(
+        verbose_name='金额',
+        max_digits=18,
+        decimal_places=2,
+    )
+
+    remark = models.CharField(
+        verbose_name='备注',
+        blank=True,
+        default='',
+        max_length=255,
+    )
+
+    class Meta:
+        abstract = True
+
+
+class Release(EntityModel):
+    version = models.CharField(
+        verbose_name='版本号',
+        max_length=20,
+        blank=True,
+        default='',
+        unique=True,
+    )
+
+    platform = models.CharField(
+        verbose_name='客户端',
+        max_length=20,
+        blank=True,
+        default='',
+    )
+
+    url = models.CharField(
+        verbose_name='下载地址',
+        max_length=255,
+        blank=True,
+        default='',
+    )
+
+    date_release = models.DateTimeField(
+        verbose_name='发布时间',
+        blank=True,
+        null=True,
+    )
+
+    description = models.TextField(
+        verbose_name='描述',
+        blank=True,
+        default='',
+    )
+
+    class Meta:
+        verbose_name = '发布版本'
+        verbose_name_plural = '发布版本'
+        db_table = 'base_release'
+
+
+class GroupInfo(EntityModel):
+    group = models.OneToOneField(
+        verbose_name='组',
+        to=Group,
+        related_name='info',
+    )
+
+    is_builtin = models.BooleanField(
+        verbose_name='是否内置',
+        default=False,
+    )
+
+    description = models.CharField(
+        verbose_name='描述',
+        max_length=255,
+        blank=True,
+        default='',
+    )
+
+    class Meta:
+        verbose_name = '组信息'
+        verbose_name_plural = '组信息'
+        db_table = 'base_group_info'
+
+
+class Menu(HierarchicalModel, models.Model):
+    seq = models.IntegerField(
+        verbose_name='序号',
+        blank=True,
+        default=0,
+    )
+
+    groups = models.ManyToManyField(
+        verbose_name='组',
+        to=Group,
+        related_name='menus',
+    )
+
+    name = models.CharField(
+        verbose_name='菜单名称',
+        max_length=100,
+        help_text='建议与路由名称同步',
+    )
+
+    title = models.CharField(
+        verbose_name='菜单标题',
+        max_length=150,
+    )
+
+    class Meta:
+        verbose_name = '菜单'
+        verbose_name_plural = '菜单'
+        db_table = 'base_menu'
+        ordering = ['seq']
+
+    def __str__(self):
+        return '%s: %s' % (self.name, self.title)
+
+
+class Option(models.Model):
+    """
+    选项
+
+    TODO: 这里需要做一个初始化脚本，执行安装的话能够将预设置的逻辑选项导入系统。
+    """
+
+    key = models.CharField(
+        verbose_name='选项关键字', max_length=45, unique=True)
+
+    name = models.CharField(
+        verbose_name='选项名称', max_length=100, blank=True, default='')
+
+    value = models.CharField(
+        verbose_name='选项值', max_length=1000,
+        blank=True, default='')
+
+    class Meta:
+        verbose_name = '系统选项'
+        verbose_name_plural = '系统选项'
+        db_table = 'settings_option'
+
+    @classmethod
+    def get(cls, key):
+        """ 获取选项值
+        :param key: 选项的关键字
+        :return: 匹配到的选项值，如果没有此选项，返回 None
+        """
+        opt = cls.objects.filter(key=key).first()
+        return opt and opt.value
+
+    @classmethod
+    def unset(cls, key):
+        """ 删除选项值
+        :param key: 选项的关键字
+        :return: 没有返回值
+        """
+        cls.objects.filter(key=key).delete()
+
+    @classmethod
+    def set(cls, key, val):
+        """ 设置选项值
+        :param key: 选项的关键字
+        :param val: 需要设置的目标值
+        :return: 没有返回值
+        """
+        if val is None:
+            cls.unset(key)
+        opt = cls.objects.filter(key=key).first() or \
+              cls.objects.create(key=key, value='')
+        opt.value = val or ''
+        opt.save()
+
+
+class Contact(UserOwnedModel):
+    """
+    联系人
+    """
+    user = models.ForeignKey(
+        verbose_name='目标用户',
+        to=User,
+        related_name='contacts_related',
+    )
+
+    message = models.CharField(
+        verbose_name='附带信息',
+        max_length=255,
+        blank=True,
+        default='',
+    )
+
+    TYPE_OPEN = 'OPEN'  # 接受对方为联系人
+    TYPE_SILENT = 'SILENT'  # 接受对方为联系人，但不提示消息
+    TYPE_BLACKLISTED = 'BLACKLISTED'  # 将对方加入黑名单
+    TYPE_CHOICES = (
+        (TYPE_OPEN, '开放'),
+        (TYPE_SILENT, '不提示信息'),
+        (TYPE_BLACKLISTED, '黑名单'),
+    )
+
+    type = models.CharField(
+        verbose_name='联系人状态',
+        max_length=20,
+        choices=TYPE_CHOICES,
+    )
+
+    class Meta:
+        verbose_name = '联系人'
+        verbose_name_plural = '联系人'
+        db_table = 'base_contact'
+        unique_together = [['author', 'user']]
+
+
+# class UserMark(UserOwnedModel):
+#     """ 用于让用户对某类对象产生标记的
+#     """
+#
+#     type =
+#
+#     class Meta:
+#         verbose_name = '用户标记'
+#         verbose_name_plural = '用户标记'
+#         db_table = 'base_user_mark'
+#
+#
+# class UserMarkableModel():
+#
