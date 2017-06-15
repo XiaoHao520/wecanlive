@@ -1,3 +1,15 @@
 from django.test import TestCase
 
-# Create your tests here.
+
+class MemberTestCase(TestCase):
+    def setUp(self):
+        pass
+
+
+class ActivityTestCase(TestCase):
+    def setUp(self):
+        pass
+
+    def test_activity_settle(self):
+        """ 活动结算测试 """
+        pass

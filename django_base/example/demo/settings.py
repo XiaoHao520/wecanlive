@@ -1,7 +1,7 @@
+from django_base.example.demo import settings_params as params
 from django_base.settings import *
-from . import settings_params as params
 
-SECRET_KEY = '034a6j^$%7^5qq%m=p2rqo_stevf6ndlx8_ff6%p=zl(#w2l5t'
+SECRET_KEY = 'o_stevf4a6j^$6n03%7dl%mqx8_ff6%p=p2rq^5q=zl(#w2l5t'
 
 DEBUG = True
 
@@ -11,7 +11,6 @@ ALLOWED_HOSTS = [
 ]
 
 INSTALLED_APPS += [
-    'django_member',
 ]
 
 MIDDLEWARE += [

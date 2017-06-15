@@ -494,51 +494,6 @@ class UserShieldModel(models.Model):
         abstract = True
 
 
-class Feedback(AbstractMessageModel,
-               UserOwnedModel,
-               EntityModel):
-    """ 用户反馈
-    """
-
-    # STATUS_PENDING = 'PENDING'
-    # STATUS_SUCCESS = 'SUCCESS'
-    # STATUS_FAIL = 'FAIL'
-    # STATUS_CHOICES = (
-    #     (STATUS_PENDING, '等待处理'),
-    #     (STATUS_SUCCESS, '举报成功'),
-    #     (STATUS_FAIL, '举报失败'),
-    # )
-
-    TYPE_SUGGESTION = 'SUGGESTION'
-    TYPE_COMPLAINT = 'COMPLAINT'
-    TYPE_CHOICES = (
-        (TYPE_SUGGESTION, '建议'),
-        (TYPE_COMPLAINT, '投诉'),
-    )
-
-    type = models.CharField(
-        verbose_name='反馈类型',
-        choices=TYPE_CHOICES,
-        max_length=20,
-    )
-
-    excerpt = models.CharField(
-        verbose_name='摘要',
-        max_length=150,
-        blank=True,
-        default='',
-    )
-
-    is_done = models.BooleanField(
-        verbose_name='是否处理',
-        default=False,
-    )
-
-    class Meta:
-        verbose_name = '反馈'
-        verbose_name_plural = '反馈'
-        db_table = 'base_feedback'
-
 
 class UserVotableModel(models.Model):
     """ 可投票的模型

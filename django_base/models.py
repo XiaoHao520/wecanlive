@@ -1,4 +1,5 @@
 import json
+import re
 import os
 import os.path
 import random
@@ -9,6 +10,8 @@ from django.db import models
 from django.conf import settings
 from django.contrib.staticfiles.templatetags.staticfiles import static
 from django.contrib.auth.models import User, Group, Permission
+from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
+from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 
 from . import utils as u
@@ -446,7 +449,7 @@ class ImageModel(UserOwnedModel, EntityModel):
         :return:
         """
         return self.image.url if self.is_active \
-            else static('core/images/image-pending.png')
+            else static('django_base/images/image-pending.png')
 
 
 class GalleryModel(models.Model):
@@ -1160,24 +1163,319 @@ class Contact(UserOwnedModel):
         choices=TYPE_CHOICES,
     )
 
+    timestamp = models.DateTimeField(
+        verbose_name='时间',
+        auto_now_add=True,
+    )
+
     class Meta:
         verbose_name = '联系人'
         verbose_name_plural = '联系人'
         db_table = 'base_contact'
         unique_together = [['author', 'user']]
 
+    @staticmethod
+    def apply(user_from, user_to, message='', action=TYPE_OPEN):
+        """ 申请添加为联系人或者同意添加对方为联系人
+        :param user_from:
+        :param user_to:
+        :param message: 附带信息
+        :param action: OPEN: 添加对方为联系人或者同意添加，SILENT: 拒绝添加，BLACKLISTED: 加入黑名单
+        :return:
+        """
+        contact = Contact.objects.filter(author=user_from, user=user_to).first() \
+                  or Contact(author=user_from, user=user_to)
+        contact.message = message
+        contact.type = action
+        contact.save()
+        return contact
 
-# class UserMark(UserOwnedModel):
-#     """ 用于让用户对某类对象产生标记的
-#     """
-#
-#     type =
-#
-#     class Meta:
-#         verbose_name = '用户标记'
-#         verbose_name_plural = '用户标记'
-#         db_table = 'base_user_mark'
-#
-#
-# class UserMarkableModel():
-#
+
+class ContactSetting(models.Model):
+    contact = models.ForeignKey(
+        verbose_name='联系人',
+        to='Contact',
+        related_name='settings',
+    )
+
+    key = models.CharField(
+        verbose_name='选项名称',
+        max_length=100,
+    )
+
+    value = models.TextField(
+        verbose_name='选项值',
+        blank=True,
+        default='',
+    )
+
+    class Meta:
+        verbose_name = '联系人设置'
+        verbose_name_plural = '联系人设置'
+        db_table = 'base_contact_setting'
+        unique_together = [('contact', 'key')]
+
+
+class UserMark(UserOwnedModel):
+    """ 用于让用户对某类对象产生标记的
+    例如：用户收藏商品
+    UserMark.objects.create(author=user, object=goods, subject='collect')
+    """
+
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    object_id = models.PositiveIntegerField()
+    object = GenericForeignKey('content_type', 'object_id')
+
+    subject = models.CharField(
+        verbose_name='标记类型',
+        max_length=20,
+    )
+
+    class Meta:
+        verbose_name = '用户标记'
+        verbose_name_plural = '用户标记'
+        db_table = 'base_user_mark'
+        unique_together = [['author', 'content_type', 'object_id', 'subject']]
+
+
+class UserMarkableModel(models.Model):
+    marks = GenericRelation(UserMark)
+
+    class Meta:
+        abstract = True
+
+    def get_users_marked_with(self, subject):
+        return User.objects.filter(
+            usermarks_owned__object=self,
+            subject=subject,
+        )
+
+    @classmethod
+    def get_objects_marked_by(cls, user, subject):
+        return cls.objects.filter(marks__author=user,
+                                  subject=subject)
+
+
+class UserPreferenceField(models.Model):
+    key = models.CharField(
+        max_length=128,
+        verbose_name='选项关键字',
+    )
+
+    label = models.CharField(
+        max_length=255,
+        verbose_name='选项标签',
+    )
+
+    CONTROL_TEXT = 'TEXT'
+    CONTROL_TEXTAREA = 'TEXTAREA'
+    CONTROL_RICHTEXT = 'RICHTEXT'
+    CONTROL_DIGIT = 'DIGIT'
+    CONTROL_NUMBER = 'NUMBER'
+    CONTROL_PERCENT = 'PERCENT'
+    CONTROL_CURRENCY = 'CURRENCY'
+    CONTROL_IMAGE = 'IMAGE'
+    CONTROL_FILE = 'FILE'
+    CONTROL_CHECKBOX = 'CHECKBOX'
+    CONTROL_RADIOBOX = 'RADIOBOX'
+    CONTROL_SELECT = 'SELECT'
+    CONTROL_CHOICES = (
+        (CONTROL_TEXT, '单行文本'),
+        (CONTROL_TEXTAREA, '多行文本'),
+        (CONTROL_RICHTEXT, '富文本编辑'),
+        (CONTROL_DIGIT, '数字（整数）'),
+        (CONTROL_NUMBER, '数字（小数）'),
+        (CONTROL_PERCENT, '百分比'),
+        (CONTROL_CURRENCY, '货币'),
+        (CONTROL_IMAGE, '图片'),
+        (CONTROL_FILE, '文件'),
+        (CONTROL_CHECKBOX, '多选按钮'),
+        (CONTROL_RADIOBOX, '单选按钮'),
+        (CONTROL_SELECT, '下拉选项'),
+    )
+
+    control = models.CharField(
+        verbose_name='控件类型',
+        max_length=20,
+        choices=CONTROL_CHOICES,
+        default=CONTROL_TEXT,
+    )
+
+    help_text = models.TextField(
+        verbose_name='字段说明',
+    )
+
+    default = models.TextField(
+        verbose_name='默认值',
+    )
+
+    # TODO: 规格待定
+    meta = models.TextField(
+        verbose_name='元数据',
+        help_text='用于存储可用选项等信息',
+    )
+
+    class Meta:
+        verbose_name = '用户首选项字段'
+
+
+class UserPreference(models.Model):
+    """ 用户首选项
+    """
+
+    user = models.ForeignKey(
+        verbose_name='用户',
+        to=User,
+        related_name='preferences',
+    )
+
+    key = models.CharField(
+        verbose_name='选项名',
+        max_length=128,
+    )
+
+    value = models.TextField(
+        verbose_name='选项值',
+        blank=True,
+        default='',
+    )
+
+    date_updated = models.DateTimeField(
+        verbose_name='设置时间',
+        blank=True,
+        null=True,
+        auto_now=True,
+    )
+
+    class Meta:
+        verbose_name = '用户首选项'
+        verbose_name_plural = '用户首选项'
+        unique_together = [('user', 'key')]
+        db_table = 'base_user_preference'
+
+    @staticmethod
+    def get_user_preferences(user):
+        return dict([(item.key, item.value) for item in user.preferences.all()])
+
+    @staticmethod
+    def hash_payment_password(password):
+        from hashlib import sha1
+        hasher = sha1(password.encode())
+        return hasher.hexdigest()
+
+    @staticmethod
+    def payment_password_authenticate(user, password):
+        preference = user.preferences.filter(key='payment_password').first()
+        if preference and preference.value != UserPreference.hash_payment_password(password):
+            return False
+        return True
+
+    @staticmethod
+    def set(user, key, value):
+        pref, created = user.preferences.get_or_create(key=key)
+        pref.value = value
+        pref.set_time = datetime.now()
+        pref.save()
+
+
+class PlannedTask(models.Model):
+    method = models.CharField(
+        verbose_name='任务',
+        max_length=100,
+    )
+
+    args = models.TextField(
+        verbose_name='参数',
+        blank=True,
+        default='',
+        help_text='JSON 表示的参数列表',
+    )
+
+    kwargs = models.TextField(
+        verbose_name='字典参数',
+        blank=True,
+        default='',
+        help_text='JSON 表示的参数字典',
+    )
+
+    date_planned = models.DateTimeField(
+        verbose_name='计划时间'
+    )
+
+    date_execute = models.DateTimeField(
+        verbose_name='执行时间',
+        blank=True,
+        null=True,
+    )
+
+    traceback = models.TextField(
+        verbose_name='错误信息',
+        blank=True,
+        default='',
+    )
+
+    STATUS_PLANNED = 'PLANNED'
+    STATUS_DONE = 'DONE'
+    STATUS_FAIL = 'FAIL'
+    STATUS_CHOICES = (
+        (STATUS_PLANNED, '计划中'),
+        (STATUS_DONE, '执行成功'),
+        (STATUS_FAIL, '失败'),
+    )
+
+    status = models.CharField(
+        verbose_name='状态',
+        max_length=20,
+        default=STATUS_PLANNED,
+    )
+
+    class Meta:
+        verbose_name = '计划任务'
+        verbose_name_plural = '计划任务'
+        db_table = 'base_cron_planned_task'
+
+    @staticmethod
+    def make(method, date_planned, *args, **kwargs):
+        PlannedTask.objects.create(
+            method=method,
+            date_planned=date_planned,
+            args=json.dumps(args),
+            kwargs=json.dumps(kwargs),
+        )
+
+    @staticmethod
+    def trigger_all():
+        tasks = PlannedTask.objects.filter(
+            status=PlannedTask.STATUS_PLANNED,
+            date_planned__lte=datetime.now(),
+        )
+        for task in tasks:
+            task.exec()
+
+    def exec(self):
+        if self.status == self.STATUS_DONE or self.date_planned > datetime.now():
+            return False
+        try:
+            args = json.loads(self.args or '[]')
+            kwargs = json.loads(self.kwargs or '{}')
+            method = getattr(self, self.method)
+            method(*args, **kwargs)
+            self.status = self.STATUS_DONE
+        except Exception as e:
+            import traceback
+            self.status = self.STATUS_FAIL
+            self.traceback = traceback.format_exc()
+        self.date_execute = datetime.now()
+        self.save()
+
+    # 具体注册的方法
+    # ↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+
+    @staticmethod
+    def update_user_payment_password(user_id, hashed_password):
+        """ 更新用户的支付密码
+        :param user_id: 对应的用户
+        :param hashed_password: 加密的密码
+        :return:
+        """
+        UserPreference.set(User.objects.get(id=user_id), 'payment_password', hashed_password)
