@@ -1479,3 +1479,43 @@ class PlannedTask(models.Model):
         :return:
         """
         UserPreference.set(User.objects.get(id=user_id), 'payment_password', hashed_password)
+
+
+class AdminLog(UserOwnedModel):
+
+    date_created = models.DateTimeField(
+        verbose_name='记录时间',
+        auto_now_add=True,
+    )
+
+    LEVEL_DEBUG = 0
+    LEVEL_INFO = 1
+    LEVEL_WARN = 2
+    LEVEL_ERROR = 3
+    LEVEL_FATAL = 4
+    LEVEL_CHOICES = (
+        (LEVEL_DEBUG, '调试'),
+        (LEVEL_INFO, '信息'),
+        (LEVEL_WARN, '警告'),
+        (LEVEL_ERROR, '错误'),
+        (LEVEL_FATAL, '致命'),
+    )
+
+    level = models.IntegerField(
+        verbose_name='日志级别',
+        choices=LEVEL_CHOICES,
+    )
+
+    target_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    target_id = models.PositiveIntegerField()
+    target = GenericForeignKey('target_type', 'target_id')
+
+    content = models.TextField(
+        verbose_name='日志内容',
+        help_text='JSON格式的日志数据内容，具体使用可以根据应用实际情况而定'
+    )
+
+    class Meta:
+        verbose_name = '管理日志'
+        verbose_name_plural = '管理日志'
+        db_table = 'base_admin_log'

@@ -64,6 +64,12 @@ class AbstractMember(TaggedModel,
         blank=True,
     )
 
+    age = models.IntegerField(
+        verbose_name='年龄',
+        default=0,
+        help_text='如果为0则根据birthday判定年龄，否则使用此数字作为年龄'
+    )
+
     avatar = models.OneToOneField(
         verbose_name='头像',
         to=ImageModel,
@@ -156,6 +162,35 @@ class AbstractMember(TaggedModel,
         # 将用户名和 is_active 同步到 User
         # self.user.username = self.mobile
         self.user.is_active = self.is_active
+        # 如果输入了生日日期，直接确定星座
+        if self.birthday:
+            date_str = self.birthday.strftime('%m%d')
+            if date_str < '0120':  # 摩羯座
+                self.constellation = self.CONSTELLATION_CAPRICORN
+            elif date_str < '0219':  # 水瓶座
+                self.constellation = self.CONSTELLATION_AQUARIUS
+            elif date_str < '0321':  # 双鱼座
+                self.constellation = self.CONSTELLATION_PISCES
+            elif date_str < '0420':  # 白羊座
+                self.constellation = self.CONSTELLATION_ARIES
+            elif date_str < '0521':  # 金牛座
+                self.constellation = self.CONSTELLATION_TAURUS
+            elif date_str < '0622':  # 双子座
+                self.constellation = self.CONSTELLATION_GEMINI
+            elif date_str < '0723':  # 巨蟹座
+                self.constellation = self.CONSTELLATION_CANCER
+            elif date_str < '0823':  # 狮子座
+                self.constellation = self.CONSTELLATION_LEO
+            elif date_str < '0923':  # 处女座
+                self.constellation = self.CONSTELLATION_VIRGO
+            elif date_str < '1024':  # 天秤座
+                self.constellation = self.CONSTELLATION_LIBRA
+            elif date_str < '1123':  # 天蝎座
+                self.constellation = self.CONSTELLATION_SCORPIO
+            elif date_str < '1222':  # 射手座
+                self.constellation = self.CONSTELLATION_SAGITTARIUS
+            else:  # 摩羯座
+                self.constellation = self.CONSTELLATION_CAPRICORN
         self.user.save()
 
 
