@@ -16,6 +16,53 @@ class Member(AbstractMember,
         verbose_name_plural = '会员'
         db_table = 'core_member'
 
+    def is_robot(self):
+        return hasattr(self.user, 'robot') and self.user.robot
+
+
+class Robot(models.Model):
+    """ 机器人
+    创建一个机器人会强制需要对应一个用户，这个用户对应一个 Member
+    通过修改 Robot 模型的信息会影响该虚拟会员在系统中的显示
+    默认情况下机器人不显示在外部用户列表中
+    """
+    user = models.OneToOneField(
+        verbose_name='用户',
+        to=User,
+        related_name='robot',
+        primary_key=True,
+    )
+
+    count_friend = models.IntegerField(
+        verbose_name='好友数',
+        default=0,
+    )
+
+    count_follow = models.IntegerField(
+        verbose_name='追踪数',
+        default=0,
+    )
+
+    count_live = models.IntegerField(
+        verbose_name='发起直播数',
+        default=0,
+    )
+
+    count_diamond = models.IntegerField(
+        verbose_name='钻石数',
+        default=0,
+    )
+
+    count_prize_sent = models.IntegerField(
+        verbose_name='送出礼物数',
+        default=0,
+    )
+
+    class Meta:
+        verbose_name = '机器人'
+        verbose_name_plural = '机器人'
+        db_table = 'core_robot'
+
 
 class CreditStarTransaction(AbstractTransactionModel):
     class Meta:
@@ -32,6 +79,33 @@ class CreditStarIndexTransaction(AbstractTransactionModel):
 
 
 class CreditDiamondTransaction(AbstractTransactionModel):
+    TYPE_LIVE_GIFT = 'LIVE_GIFT'
+    TYPE_CHOICES = (
+        (TYPE_LIVE_GIFT, '直播赠送'),
+    )
+
+    type = models.CharField(
+        verbose_name='流水类型',
+        max_length=20,
+        choices=TYPE_CHOICES,
+    )
+
+    live = models.ForeignKey(
+        verbose_name='直播',
+        to='Live',
+        related_name='diamond_transactions',
+        null=True,
+        blank=True,
+    )
+
+    live_watch_log = models.ForeignKey(
+        verbose_name='直播参与记录',
+        to='LiveWatchLog',
+        related_name='diamond_transactions',
+        null=True,
+        blank=True,
+    )
+
     class Meta:
         verbose_name = '钻石流水',
         verbose_name_plural = '钻石流水',
@@ -266,10 +340,45 @@ class LiveCategory(EntityModel):
 
 class Live(UserOwnedModel,
            EntityModel,
+           GeoPositionedModel,
            CommentableModel):
+    category = models.ForeignKey(
+        verbose_name='直播分类',
+        to='LiveCategory',
+        blank=True,
+        null=True,
+    )
+
+    quota = models.IntegerField(
+        verbose_name='上限观众人数',
+        default=0,
+        help_text='上限观众人数，0为不做限制',
+    )
+
     password = models.CharField(
         verbose_name='房间密码',
         max_length=45,
+    )
+
+    date_end = models.DateTimeField(
+        verbose_name='结束时间',
+        null=True,
+        blank=True,
+    )
+
+    push_url = models.URLField(
+        verbose_name='推流地址',
+    )
+
+    is_private = models.BooleanField(
+        verbose_name='是否隐藏',
+        default=False,
+        help_text='如果设置隐藏，将不能在外部列表查询到此直播',
+    )
+
+    is_free = models.BooleanField(
+        verbose_name='是否免费',
+        default=True,
     )
 
     class Meta:
@@ -280,11 +389,10 @@ class Live(UserOwnedModel,
 
 class LiveBarrage(UserOwnedModel,
                   AbstractMessageModel):
-
     TYPE_BARRAGE = 'BARRAGE'
     TYPE_SMALL_EFFECT = 'SMALL_EFFECT'
     TYPE_LARGE_EFFECT = 'LARGE_EFFECT'
-    TYPE_CHOICES =(
+    TYPE_CHOICES = (
         (TYPE_BARRAGE, '弹幕'),
         (TYPE_SMALL_EFFECT, '小型特效'),
         (TYPE_LARGE_EFFECT, '大型特效'),
@@ -307,7 +415,13 @@ class LiveBarrage(UserOwnedModel,
         db_table = 'core_live_barrage'
 
 
-class LiveWatchLog(UserOwnedModel):
+class LiveWatchLog(UserOwnedModel,
+                   CommentableModel):
+    """ 直播观看记录
+    每次进入房间到退出房间是一次记录
+    然后评论是与直播共享的
+    """
+
     live = models.ForeignKey(
         verbose_name='直播',
         to='Live',
@@ -320,6 +434,15 @@ class LiveWatchLog(UserOwnedModel):
 
     date_leave = models.DateTimeField(
         verbose_name='退出时间',
+    )
+
+    STATUS_NORMAL = 'NORMAL'
+    STATUS_SILENT = 'SILENT'
+    STATUS_SPEAK = 'SPEAK'
+    STATUS_CHOICES = (
+        (STATUS_NORMAL, '正常'),
+        (STATUS_SILENT, '禁言'),
+        (STATUS_SPEAK, '连麦'),
     )
 
     class Meta:
@@ -539,9 +662,49 @@ class VisitLog(UserOwnedModel,
 
 
 class Movie(UserOwnedModel,
+            UserMarkableModel,
             EntityModel):
+    """ 影片节目
+    可以通过 UserMark subject=like/visit 等进行用户标记
+    """
+    thumbnail = models.OneToOneField(
+        verbose_name='封面图片',
+        to=ImageModel,
+        related_name='movie',
+        null=True,
+        blank=True,
+    )
+
     embed_link = models.URLField(
         verbose_name='嵌入链接',
+    )
+
+    tag_name = models.CharField(
+        verbose_name='标签名称',
+        max_length=100,
+        blank=True,
+        default='',
+    )
+
+    tag_color = models.CharField(
+        verbose_name='标签颜色',
+        max_length=20,
+        default='#FF0000',
+    )
+
+    CATEGORY_HOT = 'HOT'
+    CATEGORY_SPECIAL = 'SPECIAL'
+    CATEGORY_CHOICES = (
+        (CATEGORY_HOT, '热门视频'),
+        (CATEGORY_SPECIAL, '特辑视频'),
+    )
+
+    category = models.CharField(
+        verbose_name='影片分类',
+        max_length=20,
+        choices=CATEGORY_CHOICES,
+        blank=True,
+        default='',
     )
 
     class Meta:
@@ -689,3 +852,36 @@ class Feedback(AbstractMessageModel,
         verbose_name = '反馈'
         verbose_name_plural = '反馈'
         db_table = 'core_feedback'
+
+
+class Banner(models.Model):
+    image = models.OneToOneField(
+        verbose_name='图片',
+        to=ImageModel,
+        related_name='banner',
+    )
+
+    url = models.CharField(
+        verbose_name='跳转链接',
+        max_length=255,
+        blank=True,
+        default='',
+        help_text='可以是直接链接或者JSON类型的路由描述'
+    )
+
+    remark = models.TextField(
+        verbose_name='备注',
+        blank=True,
+        default='',
+    )
+
+    sorting = models.SmallIntegerField(
+        verbose_name='轮播次序',
+        default=0,
+        help_text='数字越小越靠前',
+    )
+
+    class Meta:
+        verbose_name = '节目Banner'
+        verbose_name_plural = '节目Banner'
+        db_table = 'core_banner'
