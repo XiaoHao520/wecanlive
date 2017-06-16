@@ -67,7 +67,7 @@ class AbstractMember(TaggedModel,
     avatar = models.OneToOneField(
         verbose_name='头像',
         to=ImageModel,
-        related_name='customer',
+        related_name='%(class)s',
         null=True,
         blank=True,
     )
@@ -85,12 +85,12 @@ class AbstractMember(TaggedModel,
         blank=True,
     )
 
-    district = models.ForeignKey(
-        verbose_name='所在地区',
-        to='AddressDistrict',
-        null=True,
-        blank=True,
-    )
+    # district = models.ForeignKey(
+    #     verbose_name='所在地区',
+    #     to='AddressDistrict',
+    #     null=True,
+    #     blank=True,
+    # )
 
     address = models.TextField(
         verbose_name='详细地址',
@@ -163,12 +163,12 @@ class MemberAddress(UserOwnedModel,
                     EntityModel):
     """ 会员地址，可以用于收货地址等用途
     """
-    district = models.ForeignKey(
-        verbose_name='地区',
-        to='AddressDistrict',
-        on_delete=models.PROTECT,
-        related_name='customer_addresses',
-    )
+    # district = models.ForeignKey(
+    #     verbose_name='地区',
+    #     to='AddressDistrict',
+    #     on_delete=models.PROTECT,
+    #     related_name='addresses',
+    # )
 
     content = models.CharField(
         verbose_name='详细地址',
@@ -227,7 +227,7 @@ class OAuthEntry(UserOwnedModel):
 
     openid = models.CharField(
         verbose_name='用户OpenID',
-        max_length=255,
+        max_length=128,
     )
 
     nickname = models.CharField(

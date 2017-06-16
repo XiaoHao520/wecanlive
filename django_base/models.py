@@ -617,21 +617,21 @@ class AbstractMessageModel(models.Model):
 
     images = models.ManyToManyField(
         verbose_name='图片',
-        to='ImageModel',
+        to=ImageModel,
         related_name='%(class)ss',
         blank=True,
     )
 
     videos = models.ManyToManyField(
         verbose_name='视频',
-        to='VideoModel',
+        to=VideoModel,
         related_name='%(class)ss',
         blank=True,
     )
 
     audios = models.ManyToManyField(
         verbose_name='音频',
-        to='AudioModel',
+        to=AudioModel,
         related_name='%(class)ss',
         blank=True,
     )
@@ -664,7 +664,7 @@ class Comment(HierarchicalModel,
 class CommentableModel(models.Model):
     comments = models.ManyToManyField(
         verbose_name='评论',
-        to='Comment',
+        to=Comment,
         related_name='%(class)ss',
         blank=True,
     )

@@ -12,6 +12,7 @@ ALLOWED_HOSTS = [
 
 INSTALLED_APPS += [
     'django_member',
+    'core',
 ]
 
 MIDDLEWARE += [
