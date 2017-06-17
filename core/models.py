@@ -466,7 +466,67 @@ class ActiveEvent(UserOwnedModel,
         db_table = 'core_active_event'
 
 
+class PrizeCategory(EntityModel):
+    class Meta:
+        verbose_name = '礼物分类'
+        verbose_name_plural = '礼物分类'
+        db_table = 'core_prize_category'
+
+
 class Prize(EntityModel):
+    icon = models.OneToOneField(
+        verbose_name='图标',
+        to=ImageModel,
+        related_name='prize_as_icon',
+        null=True,
+        blank=True,
+    )
+
+    stickers = models.ManyToManyField(
+        verbose_name='表情包',
+        to=ImageModel,
+        related_name='prizes_as_stickers',
+        blank=True,
+    )
+
+    date_sticker_begin = models.DateTimeField(
+        verbose_name='表情包有效期开始',
+        blank=True,
+        null=True,
+    )
+
+    date_sticker_end = models.DateTimeField(
+        verbose_name='表情包有效期结束',
+        blank=True,
+        null=True,
+    )
+
+    price = models.IntegerField(
+        verbose_name='价格（金币）',
+        default=0,
+    )
+
+    MARQUEE_BIG = 'BIG'
+    MARQUEE_SMALL = 'SMALL'
+    MARQUEE_CHOICES = (
+        (MARQUEE_BIG, '大'),
+        (MARQUEE_SMALL, '小'),
+    )
+    marquee_size = models.CharField(
+        verbose_name='跑马灯大小',
+        max_length=20,
+        choices=MARQUEE_CHOICES,
+        default=MARQUEE_SMALL,
+    )
+
+    category = models.ForeignKey(
+        verbose_name='礼物分类',
+        to='PrizeCategory',
+        related_name='prizes',
+        blank=True,
+        null=True,
+    )
+
     class Meta:
         verbose_name = '礼物'
         verbose_name_plural = '礼物'
@@ -484,6 +544,68 @@ class PrizeTransition(AbstractTransactionModel):
         verbose_name = '礼物记录'
         verbose_name_plural = '礼物记录'
         db_table = 'core_prize_transition'
+
+
+class PrizeOrder(UserOwnedModel):
+    """ 礼物订单，关联到用户在哪个直播里面购买了礼物，需要关联到对应的礼物转移记录
+    """
+    prize = models.ForeignKey(
+        verbose_name='礼物',
+        to='Prize',
+        related_name='orders',
+    )
+
+    live_watch_log = models.ForeignKey(
+        verbose_name='观看记录',
+        to='LiveWatchLog',
+        related_name='prize_orders',
+    )
+
+    prize_transition = models.ForeignKey(
+        verbose_name='礼物记录',
+        to='PrizeTransition',
+        related_name='orders',
+    )
+
+    date_created = models.DateTimeField(
+        verbose_name='创建时间',
+        auto_now_add=True,
+    )
+
+    class Meta:
+        verbose_name = '礼物订单'
+        verbose_name_plural = '礼物订单'
+        db_table = 'core_prize'
+
+
+class ExtraPrize(EntityModel):
+    """ 赠送礼物
+    购买礼物包超过N个金币，赠送给对应的用户一张壁纸
+    不需要实际产生赠送记录，根据用户消费额筛选以获得可以下载的壁纸列表
+    """
+
+    prize = models.ForeignKey(
+        verbose_name='礼物',
+        to='Prize',
+        related_name='extra_prizes',
+    )
+
+    required_amount = models.IntegerField(
+        verbose_name='需要的单日金币消费额',
+    )
+
+    wallpaper = models.OneToOneField(
+        verbose_name='壁纸',
+        to=ImageModel,
+        related_name='extra_prize_as_wallpaper',
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        verbose_name = '附赠礼物'
+        verbose_name_plural = '附赠礼物'
+        db_table = 'core_extra_prize'
 
 
 class StatisticRule(EntityModel):
@@ -513,6 +635,73 @@ class StatisticRule(EntityModel):
 
 
 class Activity(EntityModel):
+    """ 活动
+    具体的规则JSON存放在rules字段中，具体规则如下
+
+    [VOTE 票选活动]
+    {
+        prize: <Prize.id>, // 得票方式（统计获得的物品编号）
+        awards: [{
+            from: 1,  // 奖励的名次区间
+            to: 3,
+            award: {
+                type: '', // experience:经验值/icoin:i币/coin:金币/star:星星/prize:礼物/contribution:贡献值/badge:勋章
+                value: , // 奖励值，如果是点数类即为奖励的点数，礼物或勋章则对应编号
+            },
+        }, {
+            ...
+        }], # 奖励方式
+    }
+
+    [WATCH 观看直播活动]
+    {
+        min_watch: 最小观看数
+        min_duration: 每次观看需要的时长
+        award: {
+            type: '', // experience:经验值/icoin:i币/coin:金币/star:星星/prize:礼物/contribution:贡献值/badge:勋章
+            value: , // 奖励值，如果是点数类即为奖励的点数，礼物或勋章则对应编号
+        },
+    }
+
+    [DRAW 抽奖活动]
+    {
+        condition_code: '000001', // 抽奖资格编号
+        condition_value: 1, // 需要达到的数量
+        awards: [{ // 数组共 8 个区间，下面按顺序描述八个区间的内容
+            weight: 0.125, // 概率权重
+            award: {
+                type: '', // experience:经验值/icoin:i币/coin:金币/star:星星/prize:礼物/contribution:贡献值/badge:勋章
+                value: , // 奖励值，如果是点数类即为奖励的点数，礼物或勋章则对应编号
+            },
+        }]
+    }
+    * 所有 condition：
+    000001 - 送礼物额度
+    000002 - 观看直播时长
+    000003 - 累计观看数
+    000004 - 追踪数
+    000005 - 好友数
+    000006 - 粉丝数
+    000007 - 分享直播间数
+    000008 - 邀请好友注册数
+    000009 - 连续登入X天
+    000010 - 连续开播X天
+    000011 - 收到钻石额度
+
+    [DIAMOND 累计钻石活动]
+    {
+        awards: [{
+            from: 10000,  // 钻石要求数区间
+            to: 30000,
+            award: {
+                type: '', // experience:经验值/icoin:i币/coin:金币/star:星星/prize:礼物/contribution:贡献值/badge:勋章
+                value: , // 奖励值，如果是点数类即为奖励的点数，礼物或勋章则对应编号
+            },
+        }, {
+            ...
+        }], # 奖励方式
+    }
+    """
     TYPE_VOTE = 'VOTE'
     TYPE_WATCH = 'WATCH'
     TYPE_DRAW = 'DRAW'
@@ -522,6 +711,27 @@ class Activity(EntityModel):
         (TYPE_WATCH, '观看直播'),
         (TYPE_DRAW, '抽奖'),
         (TYPE_DIAMOND, '累计钻石'),
+    )
+
+    thumbnail = models.OneToOneField(
+        verbose_name='活动海报',
+        to=ImageModel,
+        related_name='activity',
+        null=True,
+        blank=True,
+    )
+
+    content = models.TextField(
+        verbose_name='内容',
+        blank=True,
+        default='',
+    )
+
+    rules = models.TextField(
+        verbose_name='规则参数',
+        blank=True,
+        default='',
+        help_text='存放规则的JSON',
     )
 
     # vote_prize = models.ForeignKey(
