@@ -2,7 +2,23 @@ from django_base.models import *
 from django_member.models import *
 
 
-# TODO: 充值和提现尚未实现
+class InformableModel(models.Model):
+    """ 抽象的可举报模型
+    """
+
+    informs = models.ManyToManyField(
+        verbose_name='举报信息',
+        to='Inform',
+        related_name='%(class)ss',
+        blank=True,
+    )
+
+    class Meta:
+        abstract = True
+
+    def is_protected(self):
+        return self.protect_until and self.protect_from \
+               and self.protect_from < datetime.now() < self.protect_until
 
 
 class Member(AbstractMember,
@@ -11,6 +27,29 @@ class Member(AbstractMember,
     注意：用户的追踪状态通过 UserMark 的 subject=follow 类型实现
     """
 
+    referrer = models.OneToOneField(
+        verbose_name='推荐人',
+        to=User,
+        related_name='referrals',
+        blank=True,
+        null=True,
+    )
+
+    is_withdraw_blacklisted = models.BooleanField(
+        verbose_name='是否已列入提现黑名单',
+        default=False,
+    )
+
+    is_new_recommended = models.BooleanField(
+        verbose_name='是否为首次登陆推荐名单',
+        default=False,
+    )
+
+    is_follow_recommended = models.BooleanField(
+        verbose_name='是否为首页追踪推荐名单',
+        default=False,
+    )
+
     class Meta:
         verbose_name = '会员'
         verbose_name_plural = '会员'
@@ -18,6 +57,12 @@ class Member(AbstractMember,
 
     def is_robot(self):
         return hasattr(self.user, 'robot') and self.user.robot
+
+    def is_info_complete(self):
+        """ TODO: 判断用户个人资料是否完善
+        :return: 返回个人资料是否完善，用于星光任务统计
+        """
+        raise NotImplemented()
 
 
 class Robot(models.Model):
@@ -62,6 +107,21 @@ class Robot(models.Model):
         verbose_name = '机器人'
         verbose_name_plural = '机器人'
         db_table = 'core_robot'
+
+
+class CelebrityCategory(EntityModel):
+    leader = models.ForeignKey(
+        verbose_name='当前获得者',
+        to=User,
+        related_name='celebrity_categories',
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        verbose_name = '众星云集分类'
+        verbose_name_plural = '众星云集分类'
+        db_table = 'core_celebrity_category'
 
 
 class CreditStarTransaction(AbstractTransactionModel):
@@ -121,9 +181,50 @@ class CreditCoinTransaction(AbstractTransactionModel):
 
 class Badge(UserOwnedModel,
             EntityModel):
+    """ 徽章
+    """
+    icon = models.OneToOneField(
+        verbose_name='图标',
+        to=ImageModel,
+        related_name='badge',
+        null=True,
+        blank=True,
+    )
+
+    validity = models.IntegerField(
+        verbose_name='有效期天数',
+        default=0,
+    )
+
+    date_from = models.DateTimeField(
+        verbose_name='起始可用时间',
+        null=True,
+        blank=True,
+    )
+
+    date_to = models.DateTimeField(
+        verbose_name='结束可用时间',
+        null=True,
+        blank=True,
+    )
+
+    item_key = models.CharField(
+        verbose_name='元件序号',
+        max_length=20,
+        blank=True,
+        default='根据后台指定的几种任务元件的编号',
+    )
+
+    item_value = models.IntegerField(
+        verbose_name='元件数值',
+        blank=True,
+        default=0,
+        help_text='指定条件达到所需的数值'
+    )
+
     class Meta:
-        verbose_name = '奖章'
-        verbose_name_plural = '奖章'
+        verbose_name = '徽章'
+        verbose_name_plural = '徽章'
         db_table = 'core_badge'
 
 
@@ -341,7 +442,8 @@ class LiveCategory(EntityModel):
 class Live(UserOwnedModel,
            EntityModel,
            GeoPositionedModel,
-           CommentableModel):
+           CommentableModel,
+           InformableModel):
     category = models.ForeignKey(
         verbose_name='直播分类',
         to='LiveCategory',
@@ -379,6 +481,11 @@ class Live(UserOwnedModel,
     is_free = models.BooleanField(
         verbose_name='是否免费',
         default=True,
+    )
+
+    hot_rating = models.IntegerField(
+        verbose_name='热门指数',
+        default=0,
     )
 
     class Meta:
@@ -575,7 +682,7 @@ class PrizeOrder(UserOwnedModel):
     class Meta:
         verbose_name = '礼物订单'
         verbose_name_plural = '礼物订单'
-        db_table = 'core_prize'
+        db_table = 'core_prize_order'
 
 
 class ExtraPrize(EntityModel):
@@ -970,19 +1077,46 @@ class RedBagRecord(UserOwnedModel):
         db_table = 'core_red_bag_record'
 
 
-class StarMission(EntityModel):
-    # TODO: 实现规则的数据化
-    class Meta:
-        verbose_name = '星光任务'
-        verbose_name_plural = '星光任务'
-        db_table = 'core_star_mission'
+# class StarMission(EntityModel):
+#     # TODO: 实现规则的数据化
+#     class Meta:
+#         verbose_name = '星光任务'
+#         verbose_name_plural = '星光任务'
+#         db_table = 'core_star_mission'
 
 
 class StarMissionAchievement(UserOwnedModel):
-    mission = models.ForeignKey(
-        verbose_name='任务',
-        to='StarMission',
-        related_name='achievements',
+    # mission = models.ForeignKey(
+    #     verbose_name='任务',
+    #     to='StarMission',
+    #     related_name='achievements',
+    # )
+
+    TYPE_WATCH = 'WATCH'
+    TYPE_SHARE = 'SHARE'
+    TYPE_INVITE = 'INVITE'
+    TYPE_INFORMATION = 'INFORMATION'
+    TYPE_CHOICES = (
+        (TYPE_WATCH, '观看直播30分钟'),
+        (TYPE_SHARE, '分享直播间'),
+        (TYPE_INVITE, '邀请好友'),
+        (TYPE_INFORMATION, '完善个人资料'),
+    )
+
+    type = models.CharField(
+        verbose_name='任务类型',
+        max_length=20,
+        choices=TYPE_CHOICES,
+    )
+
+    points = models.IntegerField(
+        verbose_name='获得星光点数',
+        default=0,
+    )
+
+    date_created = models.DateTimeField(
+        verbose_name='创建时间',
+        auto_now_add=True,
     )
 
     # TODO: 领取之后的关联流水
@@ -1033,6 +1167,19 @@ class Inform(UserOwnedModel,
         to=ImageModel,
         related_name='informs',
         blank=True,
+    )
+
+    inform_type = models.CharField(
+        verbose_name='举报类型',
+        max_length=50,
+        blank=True,
+        default='',
+    )
+
+    reason = models.TextField(
+        verbose_name='举报内容',
+        blank=True,
+        default='',
     )
 
     class Meta:
@@ -1091,7 +1238,68 @@ class Banner(models.Model):
         help_text='数字越小越靠前',
     )
 
+    SUBJECT_HOT = 'HOT'
+    SUBJECT_VIDEO = 'VIDEO'
+    SUBJECT_ACTIVITY = 'ACTIVITY'
+    SUBJECT_CHOICES = (
+        (SUBJECT_HOT, '热门页面'),
+        (SUBJECT_VIDEO, '节目页面'),
+        (SUBJECT_ACTIVITY, '活动页面'),
+    )
+
+    subject = models.CharField(
+        verbose_name='主题',
+        max_length=20,
+        blank=True,
+        default='',
+    )
+
     class Meta:
         verbose_name = '节目Banner'
         verbose_name_plural = '节目Banner'
         db_table = 'core_banner'
+
+
+class SensitiveWord(models.Model):
+    text = models.CharField(
+        verbose_name='文本',
+        max_length=255,
+    )
+
+    class Meta:
+        verbose_name = '敏感词'
+        verbose_name_plural = '敏感词'
+        db_table = 'core_sensitive_word'
+
+
+class DiamondExchangeRecord(UserOwnedModel):
+    date_created = models.DateTimeField(
+        verbose_name='兑换时间',
+        auto_now_add=True,
+    )
+
+    diamond_count = models.IntegerField(
+        verbose_name='兑换的钻石数量',
+    )
+
+    coins_count = models.IntegerField(
+        verbose_name='兑换的金币数量',
+    )
+
+    diamond_transaction = models.OneToOneField(
+        verbose_name='钻石交易流水',
+        to='CreditDiamondTransaction',
+        related_name='diamond_exchange_record',
+    )
+
+    coin_transaction = models.OneToOneField(
+        verbose_name='金币交易流水',
+        to='CreditCoinTransaction',
+        related_name='diamond_exchange_record',
+    )
+
+    class Meta:
+        verbose_name = '钻石兑换记录'
+        verbose_name_plural = '钻石兑换记录'
+        db_table = 'core_diamond_exchange_record'
+
