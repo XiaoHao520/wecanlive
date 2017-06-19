@@ -126,15 +126,15 @@ class CelebrityCategory(EntityModel):
 
 class CreditStarTransaction(AbstractTransactionModel):
     class Meta:
-        verbose_name = '星星流水',
-        verbose_name_plural = '星星流水',
+        verbose_name = '星星流水'
+        verbose_name_plural = '星星流水'
         db_table = 'core_credit_star_transaction'
 
 
 class CreditStarIndexTransaction(AbstractTransactionModel):
     class Meta:
-        verbose_name = '星光指数流水',
-        verbose_name_plural = '星光指数流水',
+        verbose_name = '星光指数流水'
+        verbose_name_plural = '星光指数流水'
         db_table = 'core_credit_star_index_transaction'
 
 
@@ -167,15 +167,15 @@ class CreditDiamondTransaction(AbstractTransactionModel):
     )
 
     class Meta:
-        verbose_name = '钻石流水',
-        verbose_name_plural = '钻石流水',
+        verbose_name = '钻石流水'
+        verbose_name_plural = '钻石流水'
         db_table = 'core_credit_diamond_transaction'
 
 
 class CreditCoinTransaction(AbstractTransactionModel):
     class Meta:
-        verbose_name = '金币流水',
-        verbose_name_plural = '金币流水',
+        verbose_name = '金币流水'
+        verbose_name_plural = '金币流水'
         db_table = 'core_credit_coin_transaction'
 
 
@@ -242,8 +242,8 @@ class DailyCheckInLog(UserOwnedModel):
     )
 
     class Meta:
-        verbose_name = '每日签到',
-        verbose_name_plural = '每日签到',
+        verbose_name = '每日签到'
+        verbose_name_plural = '每日签到'
         db_table = 'core_daily_check_in_log'
 
     @staticmethod
@@ -1129,8 +1129,8 @@ class StarMissionAchievement(UserOwnedModel):
 
 class LevelOption(models.Model):
     class Meta:
-        verbose_name = '等级设定',
-        verbose_name_plural = '等级设定',
+        verbose_name = '等级设定'
+        verbose_name_plural = '等级设定'
         db_table = 'core_level_option'
 
 
