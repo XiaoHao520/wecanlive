@@ -96,3 +96,6 @@ ENV/
 
 
 /.idea
+/wecanlive/settings.py
+/wecanlive/settings_params.py
+将删除 admin/

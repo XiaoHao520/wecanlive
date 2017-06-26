@@ -8,6 +8,7 @@ DEBUG = True
 ALLOWED_HOSTS = [
     'app.local',
     'app.local.easecloud.cn',
+    '127.0.0.1',
 ]
 
 INSTALLED_APPS += [
