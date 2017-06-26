@@ -1,5 +1,6 @@
 from django_base.models import *
 from django_member.models import *
+from django_finance.models import *
 
 
 class InformableModel(models.Model):

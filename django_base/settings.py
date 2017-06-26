@@ -24,6 +24,12 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    # Included third-party apps
+    'corsheaders',
+    'django_fullclean',
+    'rest_framework',
+    'django_filters',
+    # Project app
     'django_base',
 ]
 
@@ -140,14 +146,14 @@ REST_FRAMEWORK = {
     'DEFAULT_FILTER_BACKENDS': (
         # 'rest_framework_filters.backends.DjangoFilterBackend',
         'rest_framework.filters.SearchFilter',
-        # 'rest_framework.filters.OrderingFilter',
-        'core.filters.RelatedOrderingFilter',
+        'rest_framework.filters.OrderingFilter',
+        # 'core.filters.RelatedOrderingFilter',
         'django_filters.rest_framework.DjangoFilterBackend',
     ),
-    'DEFAULT_RENDERER_CLASSES': (
-        'rest_framework.renderers.JSONRenderer',
-        #'rest_framework.renderers.BrowsableAPIRenderer',
-    ),
+    # 'DEFAULT_RENDERER_CLASSES': (
+    #     # 'rest_framework.renderers.JSONRenderer',
+    #     'rest_framework.renderers.BrowsableAPIRenderer',
+    # ),
     'DATE_FORMAT': '%Y-%m-%d',
     'DATETIME_FORMAT': '%Y-%m-%d %H:%M:%S',
     'COERCE_DECIMAL_TO_STRING': False,
