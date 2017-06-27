@@ -73,22 +73,20 @@ class Member(AbstractMember,
         return Member.get_objects_marked_by(self.user, 'follow')
 
     def get_followed(self):
-        # return self.get_users_marked_with('follow')
-        users = self.get_users_marked_with('follow')
-        members = []
-        for user in users:
-            members.append(
-                Member.objects.filter(
-                    user=user.id,
-                )
-            )
-        return members
+        return Member.objects.filter(
+            user__usermarks_owned__content_type=ContentType.objects.get(
+                app_label=type(self)._meta.app_label,
+                model=type(self)._meta.model_name,
+            ),
+            user__usermarks_owned__object_id=self.pk,
+            user__usermarks_owned__subject='follow',
+        )
 
     def get_follow_count(self):
         return self.get_follow().count().__str__()
 
     def get_followed_count(self):
-        return self.get_users_marked_with('follow').count().__str__()
+        return self.get_followed().count().__str__()
 
 
 class Robot(models.Model):
@@ -592,11 +590,25 @@ class ActiveEvent(UserOwnedModel,
     理论上只发图文，但是支持完整的消息格式
     用户可以点赞，使用 UserMark 的 subject=like
     """
+    date_created = models.DateTimeField(
+        verbose_name='創建時間',
+        auto_now_add=True,
+    )
 
     class Meta:
         verbose_name = '个人动态'
         verbose_name_plural = '个人动态'
         db_table = 'core_active_event'
+
+    # 標記一個點贊
+    def set_like_by(self, user, is_like=True):
+        self.set_marked_by(user, 'like', is_like)
+
+    def get_comment_count(self):
+        return self.comments.count()
+
+    def get_like_count(self):
+        return self.get_users_marked_with('like').count()
 
 
 class PrizeCategory(EntityModel):

@@ -711,47 +711,6 @@ class MemberViewSet(viewsets.ModelViewSet):
         return qs
 
     @list_route(methods=['post'])
-    @u.require_mobile_vcode
-    def register(self, request):
-
-        # 获取参数
-        try:
-            mobile = u.sanitize_mobile(request.data.get('mobile'))
-            password = request.data.get('password', '')
-        except ValidationError as ex:
-            return response_fail(ex.message, 40030)
-
-        # 校验手机号是否已被注册
-        user = m.User.objects.filter(
-            models.Q(username=mobile)
-        ).first()
-
-        if user:
-            return response_fail('註冊失敗，該手機號碼已被註冊！', 40031)
-
-        # 执行创建
-        user = m.User.objects.create_user(
-            username=mobile,
-            password=password,
-        )
-
-        try:
-            member = m.Member.objects.create(
-                user=user,
-                mobile=mobile,
-            )
-        except ValidationError as ex:
-            # 如果在创建客户这一步挂了，要把刚才创建的用户擦掉
-            user.delete()
-            return response_fail(ex.message, 40032)
-
-        # 创建完之后登录之
-        from django.contrib.auth import login
-        user.backend = 'django.contrib.auth.backends.ModelBackend'
-        login(request, user)
-        return Response(data=s.MemberSerializer(member).data)
-
-    @list_route(methods=['post'])
     def updateMemberInfo(self, request):
         avatar = request.data.get('avatar')
         nickname = request.data.get('nickname')
@@ -859,11 +818,17 @@ class LiveCategoryViewSet(viewsets.ModelViewSet):
     queryset = m.LiveCategory.objects.all()
     serializer_class = s.LiveCategorySerializer
 
+    def get_queryset(self):
+        return interceptor_get_queryset_kw_field(self)
+
 
 class LiveViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.Live.objects.all()
     serializer_class = s.LiveSerializer
+
+    def get_queryset(self):
+        return interceptor_get_queryset_kw_field(self)
 
 
 class LiveBarrageViewSet(viewsets.ModelViewSet):
@@ -871,11 +836,17 @@ class LiveBarrageViewSet(viewsets.ModelViewSet):
     queryset = m.LiveBarrage.objects.all()
     serializer_class = s.LiveBarrageSerializer
 
+    def get_queryset(self):
+        return interceptor_get_queryset_kw_field(self)
+
 
 class LiveWatchLogViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.LiveWatchLog.objects.all()
     serializer_class = s.LiveWatchLogSerializer
+
+    def get_queryset(self):
+        return interceptor_get_queryset_kw_field(self)
 
 
 class ActiveEventViewSet(viewsets.ModelViewSet):
@@ -883,11 +854,17 @@ class ActiveEventViewSet(viewsets.ModelViewSet):
     queryset = m.ActiveEvent.objects.all()
     serializer_class = s.ActiveEventSerializer
 
+    def get_queryset(self):
+        return interceptor_get_queryset_kw_field(self)
+
 
 class PrizeCategoryViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.PrizeCategory.objects.all()
     serializer_class = s.PrizeCategorySerializer
+
+    def get_queryset(self):
+        return interceptor_get_queryset_kw_field(self)
 
 
 class PrizeViewSet(viewsets.ModelViewSet):
@@ -895,11 +872,17 @@ class PrizeViewSet(viewsets.ModelViewSet):
     queryset = m.Prize.objects.all()
     serializer_class = s.PrizeSerializer
 
+    def get_queryset(self):
+        return interceptor_get_queryset_kw_field(self)
+
 
 class PrizeTransitionViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.PrizeTransition.objects.all()
     serializer_class = s.PrizeTransitionSerializer
+
+    def get_queryset(self):
+        return interceptor_get_queryset_kw_field(self)
 
 
 class PrizeOrderViewSet(viewsets.ModelViewSet):
@@ -907,11 +890,17 @@ class PrizeOrderViewSet(viewsets.ModelViewSet):
     queryset = m.PrizeOrder.objects.all()
     serializer_class = s.PrizeOrderSerializer
 
+    def get_queryset(self):
+        return interceptor_get_queryset_kw_field(self)
+
 
 class ExtraPrizeViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.ExtraPrize.objects.all()
     serializer_class = s.ExtraPrizeSerializer
+
+    def get_queryset(self):
+        return interceptor_get_queryset_kw_field(self)
 
 
 class StatisticRuleViewSet(viewsets.ModelViewSet):
