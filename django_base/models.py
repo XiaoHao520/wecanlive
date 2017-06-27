@@ -192,6 +192,7 @@ class GeoPositionedModel(models.Model):
         abstract = True
 
     def save(self, *args, **kwargs):
+        print('save geo positioned model')
         # 自动解析地理位置
         if settings.AUTO_GEO_DECODE:
             try:
@@ -1237,6 +1238,9 @@ class UserMark(UserOwnedModel):
         db_table = 'base_user_mark'
         unique_together = [['author', 'content_type', 'object_id', 'subject']]
 
+    def __str__(self):
+        return '{} - Content type:{}- id:{} - 类型:{}'.format(self.author, self.content_type, self.object_id, self.subject)
+
 
 class UserMarkableModel(models.Model):
     marks = GenericRelation(UserMark)
@@ -1246,14 +1250,37 @@ class UserMarkableModel(models.Model):
 
     def get_users_marked_with(self, subject):
         return User.objects.filter(
-            usermarks_owned__object=self,
+            usermarks_owned__content_type=ContentType.objects.get(
+                app_label=type(self)._meta.app_label,
+                model=type(self)._meta.model_name,
+            ),
+            usermarks_owned__object_id=self.pk,
+            usermarks_owned__subject=subject,
+        )
+
+    def set_marked_by(self, user, subject, is_marked=True, model=None):
+        model = model or type(self)
+        content_type = ContentType.objects.get(
+            app_label=model._meta.app_label,
+            model=model._meta.model_name,
+        )
+        fields = dict(
+            author=user,
+            content_type=content_type,
+            object_id=self.pk,
             subject=subject,
         )
+        mark = UserMark.objects.filter(**fields).first()
+        if is_marked:
+            if not mark:
+                UserMark.objects.create(**fields)
+        else:
+            mark.delete()
 
     @classmethod
     def get_objects_marked_by(cls, user, subject):
         return cls.objects.filter(marks__author=user,
-                                  subject=subject)
+                                  marks__subject=subject)
 
 
 class UserPreferenceField(models.Model):
@@ -1482,7 +1509,6 @@ class PlannedTask(models.Model):
 
 
 class AdminLog(UserOwnedModel):
-
     date_created = models.DateTimeField(
         verbose_name='记录时间',
         auto_now_add=True,

@@ -65,6 +65,31 @@ class Member(AbstractMember,
         """
         raise NotImplemented()
 
+    # 标记一个跟踪
+    def set_followed_by(self, user, is_follow=True):
+        self.set_marked_by(user, 'follow', is_follow)
+
+    def get_follow(self):
+        return Member.get_objects_marked_by(self.user, 'follow')
+
+    def get_followed(self):
+        # return self.get_users_marked_with('follow')
+        users = self.get_users_marked_with('follow')
+        members = []
+        for user in users:
+            members.append(
+                Member.objects.filter(
+                    user=user.id,
+                )
+            )
+        return members
+
+    def get_follow_count(self):
+        return self.get_follow().count().__str__()
+
+    def get_followed_count(self):
+        return self.get_users_marked_with('follow').count().__str__()
+
 
 class Robot(models.Model):
     """ 机器人
@@ -1303,4 +1328,3 @@ class DiamondExchangeRecord(UserOwnedModel):
         verbose_name = '钻石兑换记录'
         verbose_name_plural = '钻石兑换记录'
         db_table = 'core_diamond_exchange_record'
-

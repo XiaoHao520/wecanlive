@@ -85,7 +85,11 @@ DATABASES = {
             SET default_storage_engine=INNODB;
             SET sql_mode='STRICT_TRANS_TABLES';
             ''',
-        }
+        },
+        'TEST': {
+            'CHARSET': 'utf8mb4',
+            'COLLATION': 'utf8mb4_general_ci',
+        },
     },
     # 'default': {
     #     'ENGINE': 'django.db.backends.sqlite3',

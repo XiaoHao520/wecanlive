@@ -335,6 +335,27 @@ class InfomableSerializer(serializers.ModelSerializer):
 
 
 class MemberSerializer(serializers.ModelSerializer):
+    avatar_url = serializers.ReadOnlyField(
+        source='avatar.image.url',
+    )
+
+    avatar_item = ImageSerializer(
+        source='avatar',
+        read_only=True,
+    )
+
+    member_age = serializers.ReadOnlyField(
+        source='get_age',
+    )
+
+    count_follow = serializers.ReadOnlyField(
+        source='get_follow_count',
+    )
+
+    count_followed = serializers.ReadOnlyField(
+        source='get_followed_count',
+    )
+
     class Meta:
         model = m.Member
         fields = '__all__'
