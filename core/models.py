@@ -69,8 +69,23 @@ class Member(AbstractMember,
     def set_followed_by(self, user, is_follow=True):
         self.set_marked_by(user, 'follow', is_follow)
 
+    def get_follow(self):
+        return Member.get_objects_marked_by(self.user, 'follow')
+
+    def get_followed(self):
+        # return self.get_users_marked_with('follow')
+        users = self.get_users_marked_with('follow')
+        members = []
+        for user in users:
+            members.append(
+                Member.objects.filter(
+                    user=user.id,
+                )
+            )
+        return members
+
     def get_follow_count(self):
-        return Member.get_objects_marked_by(self.user, 'follow').count().__str__()
+        return self.get_follow().count().__str__()
 
     def get_followed_count(self):
         return self.get_users_marked_with('follow').count().__str__()

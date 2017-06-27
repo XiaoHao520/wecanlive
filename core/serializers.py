@@ -348,11 +348,11 @@ class MemberSerializer(serializers.ModelSerializer):
         source='get_age',
     )
 
-    follow_count = serializers.ReadOnlyField(
+    count_follow = serializers.ReadOnlyField(
         source='get_follow_count',
     )
 
-    followed_count = serializers.ReadOnlyField(
+    count_followed = serializers.ReadOnlyField(
         source='get_followed_count',
     )
 
