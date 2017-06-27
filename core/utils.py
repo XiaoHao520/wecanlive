@@ -117,7 +117,7 @@ def require_mobile_vcode(view_func):
         if not vcode_sent \
                 or not vcode_info \
                 or vcode_sent != vcode_info.get('vcode'):
-            return response_fail('验证码不正确', 50001)
+            return response_fail('驗證碼不正確！', 50001)
 
         resp = view_func(self, request, *args, **kwargs)
 
@@ -168,7 +168,6 @@ def request_mobile_vcode(request, mobile):
 
     # 上次请求验证码的时间
     last_sms_request_time = int(request.session.get('mobile_vcode_time', 0))
-
     # 一分钟内不允许重发
     if time() < last_sms_request_time + settings.SMS_SEND_INTERVAL:
         raise ValidationError(
@@ -176,7 +175,6 @@ def request_mobile_vcode(request, mobile):
             % (last_sms_request_time + settings.SMS_SEND_INTERVAL - time()))
 
     vcode = '%06d' % (random.randint(0, 1000000))
-
     # 如果开启了调试选项，不真正发送短信
     if not settings.SMS_DEBUG:
         sms_send(
@@ -184,7 +182,6 @@ def request_mobile_vcode(request, mobile):
             settings.SMS_TEMPLATE_CODE.get('validate'),
             dict(code=vcode, product='注册'),
         )
-
     set_vcode_info(request, mobile, vcode)
     return vcode
 

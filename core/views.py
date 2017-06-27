@@ -94,7 +94,7 @@ class ImageViewSet(viewsets.ModelViewSet):
     serializer_class = s.ImageSerializer
 
     def perform_create(self, serializer):
-        serializer.save(author=self.request.user)
+        serializer.save(author=not self.request.user.is_anonymous and self.request.user or None)
 
     def get_queryset(self):
         qs = self.queryset
@@ -281,11 +281,9 @@ class UserViewSet(viewsets.ModelViewSet):
             return response_fail(ex.message, 40032)
 
         msg = '验证码已发送成功'
-
         # 调试方便直接显示验证码
         if settings.SMS_DEBUG:
             msg = vcode
-
         return response_success(msg)
 
     @list_route(methods=['GET'])
@@ -605,6 +603,71 @@ class MemberViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.Member.objects.all()
     serializer_class = s.MemberSerializer
+
+    @list_route(methods=['post'])
+    @u.require_mobile_vcode
+    def register(self, request):
+
+        # 获取参数
+        try:
+            mobile = u.sanitize_mobile(request.data.get('mobile'))
+            password = request.data.get('password', '')
+        except ValidationError as ex:
+            return response_fail(ex.message, 40030)
+
+        # 校验手机号是否已被注册
+        user = m.User.objects.filter(
+            models.Q(username=mobile)
+        ).first()
+
+        if user:
+            return response_fail('註冊失敗，該手機號碼已被註冊！', 40031)
+
+        # 执行创建
+        user = m.User.objects.create_user(
+            username=mobile,
+            password=password,
+        )
+
+        try:
+            member = m.Member.objects.create(
+                user=user,
+                mobile=mobile,
+            )
+        except ValidationError as ex:
+            # 如果在创建客户这一步挂了，要把刚才创建的用户擦掉
+            user.delete()
+            return response_fail(ex.message, 40032)
+
+        # 创建完之后登录之
+        from django.contrib.auth import login
+        user.backend = 'django.contrib.auth.backends.ModelBackend'
+        login(request, user)
+        return Response(data=s.MemberSerializer(member).data)
+
+    @list_route(methods=['post'])
+    def updateMemberInfo(self, request):
+        avatar = request.data.get('avatar')
+        nickname = request.data.get('nickname')
+        gender = request.data.get('gender')
+        age = request.data.get('age')
+        constellation = request.data.get('constellation')
+        try:
+            if avatar:
+                avatarObj = m.ImageModel.objects.filter(id=avatar).first()
+                request.user.member.avatar = avatarObj
+            request.user.member.nickname = nickname
+            request.user.member.gender = gender
+            request.user.member.age = age
+            request.user.member.constellation = constellation
+            print(nickname)
+            print(gender)
+            print(age)
+            print(constellation)
+            request.user.member.save()
+        except ValidationError as ex:
+            return Response(data=False)
+        return Response(data=True)
 
 
 class RobotViewSet(viewsets.ModelViewSet):
