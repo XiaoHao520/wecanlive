@@ -700,7 +700,17 @@ class MemberViewSet(viewsets.ModelViewSet):
         return Response('换绑成功')
 
     def get_queryset(self):
-        return interceptor_get_queryset_kw_field(self)
+        qs = interceptor_get_queryset_kw_field(self)
+        member_id = self.request.query_params.get('member')
+        is_follow = self.request.query_params.get('is_follow')
+        is_followed = self.request.query_params.get('is_followed')
+        if member_id:
+            member = m.Member.objects.filter(user_id=member_id).first()
+            if member and is_follow:
+                qs = member.get_follow()
+            elif member and is_followed:
+                qs = member.get_followed()
+        return qs
 
 
 class RobotViewSet(viewsets.ModelViewSet):
