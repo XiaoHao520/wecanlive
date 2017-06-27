@@ -158,10 +158,6 @@ class AbstractMember(TaggedModel,
         # 生成昵称的拼音
         from uuslug import slugify
         self.nickname_pinyin = slugify(self.nickname)
-        super().save()
-        # 将用户名和 is_active 同步到 User
-        # self.user.username = self.mobile
-        self.user.is_active = self.is_active
         # 如果输入了生日日期，直接确定星座
         if self.birthday:
             date_str = self.birthday.strftime('%m%d')
@@ -191,7 +187,32 @@ class AbstractMember(TaggedModel,
                 self.constellation = self.CONSTELLATION_SAGITTARIUS
             else:  # 摩羯座
                 self.constellation = self.CONSTELLATION_CAPRICORN
+        super(EntityModel, self).save(*args, **kwargs)
+        # 将用户名和 is_active 同步到 User
+        # self.user.username = self.mobile
+        self.user.is_active = self.is_active
         self.user.save()
+
+    def get_age(self):
+        import time
+        today = time.gmtime()
+        dy = 0
+        if not self.age:
+            birthday = self.birthday
+            dd = today[2] - birthday.day
+            dm = today[1] - birthday.month
+            dy = today[0] - birthday.year
+            if dd < 0:
+                dd = dd + 30
+                dm = dm - 1
+                if dm < 0:
+                    dm = dm + 12
+                    dy = dy - 1
+            if dm < 0:
+                dm = dm + 12
+                dy = dy - 1
+            return dy.__str__()
+        return self.age
 
 
 class MemberAddress(UserOwnedModel,
