@@ -182,7 +182,6 @@ class BankAccountSerializer(serializers.ModelSerializer):
 
 
 class UserDetailedSerializer(serializers.ModelSerializer):
-
     institution_validation_status = serializers.ReadOnlyField()
 
     # institution_validations = InstitutionValidationSerializer(
@@ -358,7 +357,8 @@ class MemberSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = m.Member
-        fields = '__all__'
+        # fields = '__all__'
+        exclude = ['session_key', 'ilive_sig', 'date_ilive_sig_expire']
 
 
 class RobotSerializer(serializers.ModelSerializer):
@@ -599,16 +599,3 @@ class DiamondExchangeRecordSerializer(serializers.ModelSerializer):
     class Meta:
         model = m.DiamondExchangeRecord
         fields = '__all__'
-
-
-
-
-
-
-
-
-
-
-
-
-

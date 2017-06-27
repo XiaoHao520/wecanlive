@@ -197,7 +197,9 @@ class AbstractMember(TaggedModel,
         import time
         today = time.gmtime()
         dy = 0
-        if not self.age:
+        if self.age:
+            return self.age
+        if self.birthday:
             birthday = self.birthday
             dd = today[2] - birthday.day
             dm = today[1] - birthday.month
@@ -212,7 +214,7 @@ class AbstractMember(TaggedModel,
                 dm = dm + 12
                 dy = dy - 1
             return dy.__str__()
-        return self.age
+        return None
 
 
 class MemberAddress(UserOwnedModel,
