@@ -55,7 +55,7 @@ class Member(AbstractMember,
         verbose_name='iLive鉴权密钥',
         blank=True,
         default='',
-        help_text='长度320位，由ilive模块封装的腾讯云SDK产生'
+        help_text='由ilive模块封装的腾讯云SDK产生'
     )
 
     date_ilive_sig_expire = models.DateTimeField(
