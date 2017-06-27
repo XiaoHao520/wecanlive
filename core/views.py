@@ -278,14 +278,13 @@ class UserViewSet(viewsets.ModelViewSet):
         try:
             vcode = u.request_mobile_vcode(request, mobile)
         except ValidationError as ex:
+
             return response_fail(ex.message, 40032)
 
         msg = '验证码已发送成功'
-
         # 调试方便直接显示验证码
         if settings.SMS_DEBUG:
             msg = vcode
-
         return response_success(msg)
 
     @list_route(methods=['GET'])

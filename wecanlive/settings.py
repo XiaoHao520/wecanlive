@@ -9,6 +9,7 @@ ALLOWED_HOSTS = [
     'app.local',
     'app.local.easecloud.cn',
     '127.0.0.1',
+    'wecanlive.localhost',
 ]
 
 INSTALLED_APPS += [
@@ -42,7 +43,7 @@ SMS_TEMPLATE_CODE = {'validate': 'SMS_12225993'}
 SMS_SEND_INTERVAL = 10  # 短信发送时间间隔限制
 SMS_EXPIRE_INTERVAL = 1800
 SMS_SIGN_NAME = '注册验证'
-SMS_DEBUG = False  # 不真正发送短信，将验证码直接返回
+SMS_DEBUG = True  # 不真正发送短信，将验证码直接返回
 
 # ============== Payment ===============
 
