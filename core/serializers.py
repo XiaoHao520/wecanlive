@@ -335,6 +335,10 @@ class InfomableSerializer(serializers.ModelSerializer):
 
 
 class MemberSerializer(serializers.ModelSerializer):
+    user = serializers.PrimaryKeyRelatedField(
+        queryset=m.User.objects.all(),
+    )
+
     avatar_url = serializers.ReadOnlyField(
         source='avatar.image.url',
     )
@@ -452,6 +456,31 @@ class LiveCategorySerializer(serializers.ModelSerializer):
 
 
 class LiveSerializer(serializers.ModelSerializer):
+
+    category = serializers.ReadOnlyField(
+        source='category.name',
+    )
+
+    count_comment = serializers.ReadOnlyField(
+        source='get_comment_count',
+    )
+
+    count_view = serializers.ReadOnlyField(
+        source='get_view_count',
+    )
+
+    count_prize = serializers.ReadOnlyField(
+        source='get_prize_count',
+    )
+
+    duration = serializers.ReadOnlyField(
+        source='get_duration',
+    )
+
+    live_status = serializers.ReadOnlyField(
+        source='get_live_status',
+    )
+
     class Meta:
         model = m.Live
         fields = '__all__'

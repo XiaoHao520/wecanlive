@@ -828,7 +828,15 @@ class LiveViewSet(viewsets.ModelViewSet):
     serializer_class = s.LiveSerializer
 
     def get_queryset(self):
-        return interceptor_get_queryset_kw_field(self)
+        qs = interceptor_get_queryset_kw_field(self)
+        member_id = self.request.query_params.get('member')
+        if member_id:
+            member = m.Member.objects.filter(
+                user_id=member_id
+            ).first()
+            if member:
+                qs = qs.filter(author=member.user)
+        return qs
 
 
 class LiveBarrageViewSet(viewsets.ModelViewSet):
@@ -855,7 +863,15 @@ class ActiveEventViewSet(viewsets.ModelViewSet):
     serializer_class = s.ActiveEventSerializer
 
     def get_queryset(self):
-        return interceptor_get_queryset_kw_field(self)
+        qs = interceptor_get_queryset_kw_field(self)
+        member_id = self.request.query_params.get('member')
+        if member_id:
+            member = m.Member.objects.filter(
+                user_id=member_id
+            ).first()
+            if member:
+                qs = qs.filter(author=member.user)
+        return qs
 
 
 class PrizeCategoryViewSet(viewsets.ModelViewSet):
@@ -891,7 +907,13 @@ class PrizeOrderViewSet(viewsets.ModelViewSet):
     serializer_class = s.PrizeOrderSerializer
 
     def get_queryset(self):
-        return interceptor_get_queryset_kw_field(self)
+        qs = interceptor_get_queryset_kw_field(self)
+        member_id = self.request.query_params.get('member')
+        if member_id:
+            member = m.Member.objects.filter(user=member_id).first()
+            if member:
+                qs = qs.filter(author=member.user)
+        return qs
 
 
 class ExtraPrizeViewSet(viewsets.ModelViewSet):

@@ -517,6 +517,31 @@ class Live(UserOwnedModel,
         verbose_name_plural = '直播'
         db_table = 'core_live'
 
+    def get_comment_count(self):
+        return self.comments.count()
+
+    def get_view_count(self):
+        return LiveWatchLog.objects.filter(
+            live=self.id
+        ).count()
+
+    def get_prize_count(self):
+        return PrizeOrder.objects.filter(
+            live_watch_log__live=self.id
+        ).count()
+
+    def get_duration(self):
+        """
+        直播持續時間（單位：分鐘）
+        :return:
+        """
+        return int((self.date_end - self.date_created).seconds / 60)
+
+    def get_live_status(self):
+        if self.date_end:
+            return 'OVER'
+        return 'ACTION'
+
 
 class LiveBarrage(UserOwnedModel,
                   AbstractMessageModel):
