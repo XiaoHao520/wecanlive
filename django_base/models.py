@@ -657,7 +657,11 @@ class Comment(HierarchicalModel,
     )
 
     def get_author_avatar(self):
-        return self.author.member.avatar
+        print(self.author.member.avatar.image.url)
+        return self.author.member.avatar.image.url
+
+    def get_author_nickname(self):
+        return self.author.member.nickname
 
     class Meta:
         verbose_name = '评论'
@@ -1242,7 +1246,8 @@ class UserMark(UserOwnedModel):
         unique_together = [['author', 'content_type', 'object_id', 'subject']]
 
     def __str__(self):
-        return '{} - Content type:{}- id:{} - 类型:{}'.format(self.author, self.content_type, self.object_id, self.subject)
+        return '{} - Content type:{}- id:{} - 类型:{}'.format(self.author, self.content_type, self.object_id,
+                                                            self.subject)
 
 
 class UserMarkableModel(models.Model):

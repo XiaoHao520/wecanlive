@@ -602,9 +602,13 @@ class DiamondExchangeRecordSerializer(serializers.ModelSerializer):
 
 
 class CommentSerializer(serializers.ModelSerializer):
-    # author_avatar = serializers.ReadOnlyField(
-    #     source='get_author_avatar',
-    # )
+    author_avatar = serializers.ReadOnlyField(
+        source='get_author_avatar',
+    )
+
+    author_nickname = serializers.ReadOnlyField(
+        source='get_author_nickname'
+    )
 
     class Meta:
         model = m.Comment
