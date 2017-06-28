@@ -653,7 +653,7 @@ class MemberViewSet(viewsets.ModelViewSet):
         ).first()
 
         if user:
-            return response_fail('注册失败，手机号已被抢注', 40031)
+            return response_fail('註冊失敗，手機號碼已被註冊！', 40031)
 
         # 执行创建
         user = m.User.objects.create_user(
@@ -711,47 +711,6 @@ class MemberViewSet(viewsets.ModelViewSet):
         return qs
 
     @list_route(methods=['post'])
-    @u.require_mobile_vcode
-    def register(self, request):
-
-        # 获取参数
-        try:
-            mobile = u.sanitize_mobile(request.data.get('mobile'))
-            password = request.data.get('password', '')
-        except ValidationError as ex:
-            return response_fail(ex.message, 40030)
-
-        # 校验手机号是否已被注册
-        user = m.User.objects.filter(
-            models.Q(username=mobile)
-        ).first()
-
-        if user:
-            return response_fail('註冊失敗，該手機號碼已被註冊！', 40031)
-
-        # 执行创建
-        user = m.User.objects.create_user(
-            username=mobile,
-            password=password,
-        )
-
-        try:
-            member = m.Member.objects.create(
-                user=user,
-                mobile=mobile,
-            )
-        except ValidationError as ex:
-            # 如果在创建客户这一步挂了，要把刚才创建的用户擦掉
-            user.delete()
-            return response_fail(ex.message, 40032)
-
-        # 创建完之后登录之
-        from django.contrib.auth import login
-        user.backend = 'django.contrib.auth.backends.ModelBackend'
-        login(request, user)
-        return Response(data=s.MemberSerializer(member).data)
-
-    @list_route(methods=['post'])
     def updateMemberInfo(self, request):
         avatar = request.data.get('avatar')
         nickname = request.data.get('nickname')
@@ -766,10 +725,6 @@ class MemberViewSet(viewsets.ModelViewSet):
             request.user.member.gender = gender
             request.user.member.age = age
             request.user.member.constellation = constellation
-            print(nickname)
-            print(gender)
-            print(age)
-            print(constellation)
             request.user.member.save()
         except ValidationError as ex:
             return Response(data=False)
