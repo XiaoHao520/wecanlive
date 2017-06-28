@@ -159,7 +159,8 @@ class AbstractMember(TaggedModel,
         from uuslug import slugify
         self.nickname_pinyin = slugify(self.nickname)
         # 如果输入了生日日期，直接确定星座
-        self.birthday = datetime.now()
+        if not self.birthday:
+            self.birthday = datetime.now()
         if self.birthday:
             date_str = self.birthday.strftime('%m%d')
             if date_str < '0120':  # 摩羯座
