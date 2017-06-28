@@ -945,3 +945,16 @@ class DiamondExchangeRecordViewSet(viewsets.ModelViewSet):
     queryset = m.DiamondExchangeRecord.objects.all()
     serializer_class = s.DiamondExchangeRecordSerializer
 
+
+class CommentViewSet(viewsets.ModelViewSet):
+    filter_fields = '__all__'
+    queryset = m.Comment.objects.all()
+    serializer_class = s.CommentSerializer
+
+    def get_queryset(self):
+        qs = interceptor_get_queryset_kw_field(self)
+        activeevent_id = self.request.query_params.get('activeevent')
+        if activeevent_id:
+            qs = qs.filter(activeevents__id=activeevent_id,
+                           is_active=True, ).order_by('-date_created')
+        return qs

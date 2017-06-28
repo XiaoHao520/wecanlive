@@ -656,6 +656,9 @@ class Comment(HierarchicalModel,
         verbose_name='内容',
     )
 
+    def get_author_avatar(self):
+        return self.author.member.avatar
+
     class Meta:
         verbose_name = '评论'
         verbose_name_plural = '评论'

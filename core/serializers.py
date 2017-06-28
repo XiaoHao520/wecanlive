@@ -599,3 +599,13 @@ class DiamondExchangeRecordSerializer(serializers.ModelSerializer):
     class Meta:
         model = m.DiamondExchangeRecord
         fields = '__all__'
+
+
+class CommentSerializer(serializers.ModelSerializer):
+    # author_avatar = serializers.ReadOnlyField(
+    #     source='get_author_avatar',
+    # )
+
+    class Meta:
+        model = m.Comment
+        fields = '__all__'
