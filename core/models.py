@@ -51,10 +51,38 @@ class Member(AbstractMember,
         default=False,
     )
 
+    ilive_sig = models.TextField(
+        verbose_name='iLive鉴权密钥',
+        blank=True,
+        default='',
+        help_text='由ilive模块封装的腾讯云SDK产生'
+    )
+
+    date_ilive_sig_expire = models.DateTimeField(
+        verbose_name='iLive鉴权密钥过期时间',
+        null=True,
+        blank=True,
+        help_text='默认过期时间为180天'
+    )
+
     class Meta:
         verbose_name = '会员'
         verbose_name_plural = '会员'
         db_table = 'core_member'
+
+    def save(self, *args, **kwargs):
+        if self.user:
+            self.load_ilive_sig()
+        super().save(*args, **kwargs)
+
+    def load_ilive_sig(self, force=False):
+        import ilive
+        # 还没有超期的话忽略操作
+        if not force and self.date_ilive_sig_expire and self.date_ilive_sig_expire > datetime.now():
+            return
+        self.ilive_sig = ilive.generate_sig(self.user.username)
+        # 内部保留一定裕度，160天内不自动刷新
+        self.date_ilive_sig_expire = datetime.now() + timedelta(days=160)
 
     def is_robot(self):
         return hasattr(self.user, 'robot') and self.user.robot
@@ -64,6 +92,31 @@ class Member(AbstractMember,
         :return: 返回个人资料是否完善，用于星光任务统计
         """
         raise NotImplemented()
+
+    # 标记一个跟踪
+    def set_followed_by(self, user, is_follow=True):
+        self.set_marked_by(user, 'follow', is_follow)
+
+    def get_follow(self):
+        return Member.get_objects_marked_by(self.user, 'follow')
+
+    def get_followed(self):
+        # return self.get_users_marked_with('follow')
+        users = self.get_users_marked_with('follow')
+        members = []
+        for user in users:
+            members.append(
+                Member.objects.filter(
+                    user=user.id,
+                )
+            )
+        return members
+
+    def get_follow_count(self):
+        return self.get_follow().count().__str__()
+
+    def get_followed_count(self):
+        return self.get_users_marked_with('follow').count().__str__()
 
 
 class Robot(models.Model):
@@ -1303,4 +1356,3 @@ class DiamondExchangeRecord(UserOwnedModel):
         verbose_name = '钻石兑换记录'
         verbose_name_plural = '钻石兑换记录'
         db_table = 'core_diamond_exchange_record'
-

@@ -182,7 +182,6 @@ class BankAccountSerializer(serializers.ModelSerializer):
 
 
 class UserDetailedSerializer(serializers.ModelSerializer):
-
     institution_validation_status = serializers.ReadOnlyField()
 
     # institution_validations = InstitutionValidationSerializer(
@@ -335,9 +334,31 @@ class InfomableSerializer(serializers.ModelSerializer):
 
 
 class MemberSerializer(serializers.ModelSerializer):
+    avatar_url = serializers.ReadOnlyField(
+        source='avatar.image.url',
+    )
+
+    avatar_item = ImageSerializer(
+        source='avatar',
+        read_only=True,
+    )
+
+    member_age = serializers.ReadOnlyField(
+        source='get_age',
+    )
+
+    count_follow = serializers.ReadOnlyField(
+        source='get_follow_count',
+    )
+
+    count_followed = serializers.ReadOnlyField(
+        source='get_followed_count',
+    )
+
     class Meta:
         model = m.Member
-        fields = '__all__'
+        # fields = '__all__'
+        exclude = ['session_key', 'ilive_sig', 'date_ilive_sig_expire']
 
 
 class RobotSerializer(serializers.ModelSerializer):
@@ -578,16 +599,3 @@ class DiamondExchangeRecordSerializer(serializers.ModelSerializer):
     class Meta:
         model = m.DiamondExchangeRecord
         fields = '__all__'
-
-
-
-
-
-
-
-
-
-
-
-
-

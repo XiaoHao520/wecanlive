@@ -115,6 +115,148 @@ class AudioViewSet(viewsets.ModelViewSet):
         serializer.save(author=self.request.user)
 
 
+class MessageViewSet(viewsets.ModelViewSet):
+    class Filter(FilterSet):
+        # 系统消息
+        is_from_system = filters.BooleanFilter(
+            name='author',
+            lookup_expr='isnull',
+        )
+        # 客服消息
+        is_from_service = filters.BooleanFilter(
+            name='author__is_staff',
+        )
+        last_id = filters.Filter(
+            name='id',
+            lookup_expr='gt',
+        )
+
+        class Meta:
+            model = m.Message
+            fields = '__all__'
+
+    filter_class = Filter
+    queryset = m.Message.objects.all()
+    serializer_class = s.MessageSerializer
+
+    def perform_create(self, serializer):
+        serializer.save(author=self.request.user)
+
+    def get_queryset(self):
+        qs = interceptor_get_queryset_kw_field(self)
+        qs = super().get_queryset()
+        # users_related = self.request.query_params.get('users_related', '0').split(',')
+        # print(users_related)
+        # if users_related:
+        qs = qs.filter(m.models.Q(
+            # author__id__in=users_related,
+            receiver=self.request.user,
+        ) | m.models.Q(
+            # receiver__id__in=users_related,
+            author=self.request.user,
+        ))
+        return qs
+
+    @list_route(methods=['POST'])
+    def create_message(self, request):
+        is_approved = request.data.get('is_approved')
+        message_type = request.data.get('message_type')
+        object = request.data.get('object')
+        if is_approved:
+            m.Message.create_message(object, message_type)
+        else:
+            m.Message.create_message(object, message_type)
+        return Response(data=True)
+
+
+class MenuViewSet(viewsets.ModelViewSet):
+    filter_fields = '__all__'
+    queryset = m.Menu.objects.all()
+    serializer_class = s.MenuSerializer
+
+    @list_route(methods=['POST'], permission_classes=[p.IsAdminUser])
+    def sync(self, request):
+        project = request.data.get('project') or ''
+        menus = []
+        index = 0
+        for menu in request.data.get('menus'):
+            index += 1
+            link = menu.get('link')
+            menu_name = link and link.get('name')
+            if not menu_name:
+                menu_name = 'menu_{}'.format(index)
+            menus.append(dict(
+                title=menu.get('title'),
+                name=menu_name,
+                parent=None,
+            ))
+            sub_index = 0
+            for sub_menu in menu.get('sub_menus'):
+                sub_index += 1
+                link = sub_menu.get('link')
+                sub_menu_name = link and link.get('name')
+                if not sub_menu_name:
+                    sub_menu_name = 'menu_{}_{}'.format(index, sub_index)
+                menus.append(dict(
+                    title=sub_menu.get('title'),
+                    name=sub_menu_name,
+                    parent=menu_name,
+                ))
+        # 删除多余的菜单
+        m.Menu.objects.filter(project=project).exclude(
+            name__in=[menu.get('name') for menu in menus],
+        ).delete()
+        # 逐项更新菜单
+        seq = 1
+        for item in menus:
+            menu = m.Menu.objects.filter(name=item.get('name'),
+                                         project=project).first() or m.Menu()
+            menu.project = project
+            menu.name = item.get('name')
+            menu.title = item.get('title')
+            menu.parent = m.Menu.objects.filter(
+                name=item.get('parent', ''),
+                project=project,
+            ).first()
+            menu.seq = seq
+            seq += 1
+            menu.save()
+        return u.response_success('菜单更新成功')
+
+    @list_route(methods=['GET'], permission_classes=[p.IsAuthenticated])
+    def get_user_menu(self, request):
+        data = []
+        project = request.query_params.get('project') or ''
+        if not request.user.is_anonymous():
+            for menu in m.Menu.objects.filter(
+                    project=project,
+                    children__groups__user=request.user,
+                    parent=None).distinct():
+                data.append(dict(
+                    id=menu.id,
+                    title=menu.title,
+                    expanded=False,
+                    sub_menus=[dict(
+                        parent=submenu.parent.id,
+                        title=submenu.title,
+                        link=dict(
+                            name=submenu.name,
+                        )) for submenu in menu.children.filter(groups__user=request.user)],
+                ))
+        return Response(data=data)
+
+
+class BroadcastViewSet(viewsets.ModelViewSet):
+    filter_fields = '__all__'
+    queryset = m.Broadcast.objects.all()
+    serializer_class = s.BroadcastSerializer
+
+    def perform_create(self, serializer):
+        # 保存的时候自动发送
+        broadcast = serializer.save()
+        broadcast.send()
+
+
 class UserViewSet(viewsets.ModelViewSet):
     """ User
     """
@@ -458,152 +600,116 @@ class UserViewSet(viewsets.ModelViewSet):
         return Response(1)
 
 
-class MessageViewSet(viewsets.ModelViewSet):
+class MemberViewSet(viewsets.ModelViewSet):
     class Filter(FilterSet):
-        # 系统消息
-        is_from_system = filters.BooleanFilter(
-            name='author',
-            lookup_expr='isnull',
-        )
-        # 客服消息
-        is_from_service = filters.BooleanFilter(
-            name='author__is_staff',
-        )
-        last_id = filters.Filter(
-            name='id',
-            lookup_expr='gt',
+        is_active = filters.BooleanFilter(
+            name='user__is_active',
         )
 
         class Meta:
-            model = m.Message
+            model = m.Member
             fields = '__all__'
 
+    queryset = m.Member.objects.all()
+    serializer_class = s.MemberSerializer
     filter_class = Filter
-    queryset = m.Message.objects.all()
-    serializer_class = s.MessageSerializer
+    search_fields = ['nickname', 'mobile']
+    ordering = ['-pk']
+    filter_fields = '__all__'
 
-    def perform_create(self, serializer):
-        serializer.save(author=self.request.user)
+    # def perform_update(self, serializer):
+    #     # 级联更新 user 的 username 为手机号
+    #     member = self.get_object()
+    #     user = member.user
+    #     user.username = member.mobile
+    #     user.save()
+    #     serializer.save()
+
+    def perform_destroy(self, instance):
+        deleted_username = 'deleted_' \
+                           + datetime.now().strftime('%Y%m%d%H%M%S') \
+                           + '_' + instance.user.username
+        instance.mobile = deleted_username
+        instance.save()
+        # 废除用户，但也不是真的删除
+        user = instance.user
+        user.is_active = False
+        user.username = deleted_username
+        user.is_staff = False
+        user.is_superuser = False
+        user.save()
+        instance.delete()
+
+    @list_route(methods=['post'])
+    @u.require_mobile_vcode
+    def register(self, request):
+
+        # 获取参数
+        mobile = u.sanitize_mobile(request.data.get('mobile'))
+        password = u.sanitize_password(request.data.get('password'))
+
+        # 校验手机号是否已被注册
+        user = m.User.objects.filter(
+            models.Q(username=mobile)
+        ).first()
+
+        if user:
+            return response_fail('注册失败，手机号已被抢注', 40031)
+
+        # 执行创建
+        user = m.User.objects.create_user(
+            username=mobile,
+            password=password,
+        )
+
+        try:
+            member = m.Member.objects.create(
+                user=user,
+                mobile=mobile,
+            )
+        except ValidationError as ex:
+            # 如果在创建客户这一步挂了，要把刚才创建的用户擦掉
+            user.delete()
+            return response_fail(ex.message, 40032)
+
+        # 创建完之后登录之
+        from django.contrib.auth import login
+        login(request, user)
+
+        return Response(data=s.MemberSerializer(member).data)
+
+    @detail_route(methods=['POST'])
+    def change_mobile(self, request, pk):
+        # 获取参数
+        try:
+            mobile = u.sanitize_mobile(request.data.get('mobile'))
+        except ValidationError as ex:
+            return response_fail(ex.message, 40030)
+        # 校验手机号是否已被注册
+        user = m.User.objects.filter(
+            models.Q(username=mobile)
+        ).first()
+
+        if user:
+            return response_fail('换绑失败，该手机号已被注册', 40031)
+
+        member = m.Member.objects.get(pk=pk)
+        member.mobile = mobile
+        member.save()
+        return Response('换绑成功')
 
     def get_queryset(self):
         qs = interceptor_get_queryset_kw_field(self)
-        qs = super().get_queryset()
-        # users_related = self.request.query_params.get('users_related', '0').split(',')
-        # print(users_related)
-        # if users_related:
-        qs = qs.filter(m.models.Q(
-            # author__id__in=users_related,
-            receiver=self.request.user,
-        ) | m.models.Q(
-            # receiver__id__in=users_related,
-            author=self.request.user,
-        ))
+        member_id = self.request.query_params.get('member')
+        is_follow = self.request.query_params.get('is_follow')
+        is_followed = self.request.query_params.get('is_followed')
+        if member_id:
+            member = m.Member.objects.filter(user_id=member_id).first()
+            if member and is_follow:
+                qs = member.get_follow()
+            elif member and is_followed:
+                qs = member.get_followed()
         return qs
-
-    @list_route(methods=['POST'])
-    def create_message(self, request):
-        is_approved = request.data.get('is_approved')
-        message_type = request.data.get('message_type')
-        object = request.data.get('object')
-        if is_approved:
-            m.Message.create_message(object, message_type)
-        else:
-            m.Message.create_message(object, message_type)
-        return Response(data=True)
-
-
-class MenuViewSet(viewsets.ModelViewSet):
-    filter_fields = '__all__'
-    queryset = m.Menu.objects.all()
-    serializer_class = s.MenuSerializer
-
-    @list_route(methods=['POST'], permission_classes=[p.IsAdminUser])
-    def sync(self, request):
-        project = request.data.get('project') or ''
-        menus = []
-        index = 0
-        for menu in request.data.get('menus'):
-            index += 1
-            link = menu.get('link')
-            menu_name = link and link.get('name')
-            if not menu_name:
-                menu_name = 'menu_{}'.format(index)
-            menus.append(dict(
-                title=menu.get('title'),
-                name=menu_name,
-                parent=None,
-            ))
-            sub_index = 0
-            for sub_menu in menu.get('sub_menus'):
-                sub_index += 1
-                link = sub_menu.get('link')
-                sub_menu_name = link and link.get('name')
-                if not sub_menu_name:
-                    sub_menu_name = 'menu_{}_{}'.format(index, sub_index)
-                menus.append(dict(
-                    title=sub_menu.get('title'),
-                    name=sub_menu_name,
-                    parent=menu_name,
-                ))
-        # 删除多余的菜单
-        m.Menu.objects.filter(project=project).exclude(
-            name__in=[menu.get('name') for menu in menus],
-        ).delete()
-        # 逐项更新菜单
-        seq = 1
-        for item in menus:
-            menu = m.Menu.objects.filter(name=item.get('name'),
-                                         project=project).first() or m.Menu()
-            menu.project = project
-            menu.name = item.get('name')
-            menu.title = item.get('title')
-            menu.parent = m.Menu.objects.filter(
-                name=item.get('parent', ''),
-                project=project,
-            ).first()
-            menu.seq = seq
-            seq += 1
-            menu.save()
-        return u.response_success('菜单更新成功')
-
-    @list_route(methods=['GET'], permission_classes=[p.IsAuthenticated])
-    def get_user_menu(self, request):
-        data = []
-        project = request.query_params.get('project') or ''
-        if not request.user.is_anonymous():
-            for menu in m.Menu.objects.filter(
-                    project=project,
-                    children__groups__user=request.user,
-                    parent=None).distinct():
-                data.append(dict(
-                    id=menu.id,
-                    title=menu.title,
-                    expanded=False,
-                    sub_menus=[dict(
-                        parent=submenu.parent.id,
-                        title=submenu.title,
-                        link=dict(
-                            name=submenu.name,
-                        )) for submenu in menu.children.filter(groups__user=request.user)],
-                ))
-        return Response(data=data)
-
-
-class BroadcastViewSet(viewsets.ModelViewSet):
-    filter_fields = '__all__'
-    queryset = m.Broadcast.objects.all()
-    serializer_class = s.BroadcastSerializer
-
-    def perform_create(self, serializer):
-        # 保存的时候自动发送
-        broadcast = serializer.save()
-        broadcast.send()
-
-
-class MemberViewSet(viewsets.ModelViewSet):
-    filter_fields = '__all__'
-    queryset = m.Member.objects.all()
-    serializer_class = s.MemberSerializer
 
 
 class RobotViewSet(viewsets.ModelViewSet):
