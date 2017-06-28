@@ -657,7 +657,6 @@ class Comment(HierarchicalModel,
     )
 
     def get_author_avatar(self):
-        print(self.author.member.avatar.image.url)
         return self.author.member.avatar.image.url
 
     def get_author_nickname(self):

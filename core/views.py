@@ -951,10 +951,24 @@ class CommentViewSet(viewsets.ModelViewSet):
     queryset = m.Comment.objects.all()
     serializer_class = s.CommentSerializer
 
+    def perform_create(self, serializer):
+        serializer.save(author=self.request.user)
+
     def get_queryset(self):
         qs = interceptor_get_queryset_kw_field(self)
-        activeevent_id = self.request.query_params.get('activeevent')
+        activeevent_id = self.request.query_params.get('activeevents')
         if activeevent_id:
             qs = qs.filter(activeevents__id=activeevent_id,
                            is_active=True, ).order_by('-date_created')
         return qs
+
+    @list_route(methods=['POST'])
+    def add_comment(self, request):
+        activeevents_id = request.data.get('activeevents')
+        content = request.data.get('content')
+
+        if activeevents_id:
+            activeevents = m.ActiveEvent.objects.get(pk=activeevents_id)
+            activeevents.comments.create(author=self.request.user, content=content)
+
+        return Response(data=True)
