@@ -604,6 +604,12 @@ class MemberViewSet(viewsets.ModelViewSet):
         is_active = filters.BooleanFilter(
             name='user__is_active',
         )
+        is_contact_from = filters.Filter(
+            name='user__contacts_related__author',
+        )
+        is_contact_to = filters.Filter(
+            name='user__contacts_owned__author',
+        )
 
         class Meta:
             model = m.Member
@@ -830,12 +836,22 @@ class LiveViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         qs = interceptor_get_queryset_kw_field(self)
         member_id = self.request.query_params.get('member')
+        live_status = self.request.query_params.get('live_status')
         if member_id:
             member = m.Member.objects.filter(
                 user_id=member_id
             ).first()
             if member:
                 qs = qs.filter(author=member.user)
+
+        if live_status and live_status == 'ACTION':
+            qs = qs.filter(
+                date_end=None,
+            )
+        elif live_status and live_status == 'OVER':
+            qs = qs.exclude(
+                date_end=None,
+            )
         return qs
 
 
@@ -854,7 +870,11 @@ class LiveWatchLogViewSet(viewsets.ModelViewSet):
     serializer_class = s.LiveWatchLogSerializer
 
     def get_queryset(self):
-        return interceptor_get_queryset_kw_field(self)
+        qs = interceptor_get_queryset_kw_field(self)
+        live_id = self.request.query_params.get('live')
+        if live_id:
+            qs = qs.filter(live=live_id)
+        return qs
 
 
 class ActiveEventViewSet(viewsets.ModelViewSet):

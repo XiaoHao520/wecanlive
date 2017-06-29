@@ -116,6 +116,31 @@ class Member(AbstractMember,
     def get_followed_count(self):
         return self.get_followed().count().__str__()
 
+    def get_friend_count(self):
+        return Contact.objects.filter(
+            author=self.user
+        ).count()
+
+    def get_live_count(self):
+        return Live.objects.filter(author=self.user).count()
+
+    def get_last_live_end(self):
+        """
+        最后直播时间
+        :return:
+        """
+        last_live = Live.objects.filter(author=self.user).last()
+        if not last_live:
+            return None
+        return str(last_live.date_end)
+
+    def get_live_total_duration(self):
+        duration = 0
+        lives = Live.objects.filter(author=self.user)
+        for live in lives:
+            duration += live.get_duration()
+        return duration
+
 
 class Robot(models.Model):
     """ 机器人
@@ -495,6 +520,7 @@ class Live(UserOwnedModel,
            EntityModel,
            GeoPositionedModel,
            CommentableModel,
+           UserMarkableModel,
            InformableModel):
     category = models.ForeignKey(
         verbose_name='直播分类',
@@ -563,12 +589,20 @@ class Live(UserOwnedModel,
         直播持續時間（單位：分鐘）
         :return:
         """
-        return int((self.date_end - self.date_created).seconds / 60)
+        time_end = self.date_end or datetime.now()
+        return int((time_end - self.date_created).seconds / 60) or 1
 
     def get_live_status(self):
         if self.date_end:
             return 'OVER'
         return 'ACTION'
+
+    # 標記一個點贊
+    def set_like_by(self, user, is_like=True):
+        self.set_marked_by(user, 'like', is_like)
+
+    def get_like_count(self):
+        return self.get_users_marked_with('like').count()
 
 
 class LiveBarrage(UserOwnedModel,
@@ -618,6 +652,14 @@ class LiveWatchLog(UserOwnedModel,
 
     date_leave = models.DateTimeField(
         verbose_name='退出时间',
+        blank=True,
+        null=True,
+    )
+
+    duration = models.IntegerField(
+        verbose_name='停留時長',
+        default=0,
+        help_text='單位（分鐘）'
     )
 
     STATUS_NORMAL = 'NORMAL'
@@ -629,10 +671,76 @@ class LiveWatchLog(UserOwnedModel,
         (STATUS_SPEAK, '连麦'),
     )
 
+    status = models.CharField(
+        verbose_name='狀態',
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_NORMAL,
+    )
+
     class Meta:
         verbose_name = '直播观看记录'
         verbose_name_plural = '直播观看记录'
         db_table = 'core_live_watch_log'
+
+    def get_comment_count(self):
+        return self.comments.count()
+
+    # ggg
+    # def save(self, *args, **kwargs):
+    #     if self.user:
+    #         self.load_ilive_sig()
+    #     super().save(*args, **kwargs)
+
+    @staticmethod
+    def enter_live(user, live):
+        """
+        用戶進入某直播間時執行
+        :param user: 用戶
+        :param live: 直播
+        :return:
+        """
+        live_watch_log = LiveWatchLog.objects.filter(
+            author=user,
+            live=live,
+        ).first()
+        if not live_watch_log:
+            LiveWatchLog.objects.create(
+                author=user,
+                live=live,
+                date_enter=datetime.now(),
+            )
+        else:
+            live_watch_log.date_enter = datetime.now()
+            live_watch_log.save()
+
+    def leave_live(self):
+        """
+        用戶離開某直播間時執行
+        :return:
+        """
+        self.date_leave = datetime.now()
+        self.duration += int((self.date_leave - self.date_enter).seconds / 60) + \
+                         (self.date_leave - self.date_enter).days * 1440 or 1
+        self.save()
+
+    def get_duration(self):
+        if self.duration:
+            return self.duration
+        return int((datetime.now() - self.date_enter).seconds / 60) + \
+               (datetime.now() - self.date_enter).days * 1440 or 1
+
+    def get_total_prize(self):
+        """
+        獲取在當前直播間消費金幣
+        :return:
+        """
+        # TODO: 未兌換成臺幣
+        total_price = 0
+        prize_orders = PrizeOrder.objects.filter(live_watch_log=self.id)
+        for prize_order in prize_orders:
+            total_price += prize_order.prize.price
+        return total_price
 
 
 class ActiveEvent(UserOwnedModel,
