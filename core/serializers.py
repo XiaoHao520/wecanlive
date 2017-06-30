@@ -187,6 +187,7 @@ class UserDetailedSerializer(serializers.ModelSerializer):
     age = serializers.ReadOnlyField(source="member.age")
     constellation = serializers.ReadOnlyField(source="member.constellation")
     avatar_url = serializers.ReadOnlyField(source="member.avatar.image.url")
+    signature = serializers.ReadOnlyField(source="member.signature")
 
     # institution_validation_status = serializers.ReadOnlyField()
 
