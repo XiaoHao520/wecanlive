@@ -761,6 +761,28 @@ class CreditDiamondTransactionViewSet(viewsets.ModelViewSet):
     queryset = m.CreditDiamondTransaction.objects.all()
     serializer_class = s.CreditDiamondTransactionSerializer
 
+    @list_route(methods=['GET'])
+    def get_ranking_list(self, request):
+        """
+        获取钻石获得数排行榜
+        :param request:
+        :return:
+        """
+        # type   0:日榜； 1:周榜； 2：总榜
+        type = request.data.get('type')
+        data = []
+        users = []
+        transactions = m.CreditDiamondTransaction.objects.filter(user_debit=request.user)
+        for transaction in transactions:
+            if not transaction.user_credit in users:
+                users.append(transaction.user_credit)
+        for user in users:
+            amount = m.CreditDiamondTransaction.objects.filter(
+                user_debit=request.user,
+                user_credit=user).all().aggregate(amount=models.Sum('amount')).get('amount') or 0
+            print(amount)
+        return Response(data=data)
+
 
 class CreditCoinTransactionViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
