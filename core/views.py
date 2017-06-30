@@ -94,7 +94,7 @@ class ImageViewSet(viewsets.ModelViewSet):
     serializer_class = s.ImageSerializer
 
     def perform_create(self, serializer):
-        serializer.save(author=self.request.user)
+        serializer.save(author=not self.request.user.is_anonymous and self.request.user or None)
 
     def get_queryset(self):
         qs = self.queryset
@@ -654,7 +654,7 @@ class MemberViewSet(viewsets.ModelViewSet):
         ).first()
 
         if user:
-            return response_fail('注册失败，手机号已被抢注', 40031)
+            return response_fail('註冊失敗，手機號碼已被註冊！', 40031)
 
         # 执行创建
         user = m.User.objects.create_user(
@@ -710,6 +710,26 @@ class MemberViewSet(viewsets.ModelViewSet):
             elif member and is_followed:
                 qs = member.get_followed()
         return qs
+
+    @list_route(methods=['post'])
+    def updateMemberInfo(self, request):
+        avatar = request.data.get('avatar')
+        nickname = request.data.get('nickname')
+        gender = request.data.get('gender')
+        age = request.data.get('age')
+        constellation = request.data.get('constellation')
+        try:
+            if avatar:
+                avatarObj = m.ImageModel.objects.filter(id=avatar).first()
+                request.user.member.avatar = avatarObj
+            request.user.member.nickname = nickname
+            request.user.member.gender = gender
+            request.user.member.age = age
+            request.user.member.constellation = constellation
+            request.user.member.save()
+        except ValidationError as ex:
+            return Response(data=False)
+        return Response(data=True)
 
 
 class RobotViewSet(viewsets.ModelViewSet):

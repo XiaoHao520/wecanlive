@@ -6,10 +6,7 @@ SECRET_KEY = '034a6j^$%7^5qq%m=p2rqo_stevf6ndlx8_ff6%p=zl(#w2l5t'
 DEBUG = True
 
 ALLOWED_HOSTS = [
-    'app.local',
-    'app.local.easecloud.cn',
-    '127.0.0.1',
-    'wecanlive.localhost',
+    '*',
 ]
 
 INSTALLED_APPS += [
