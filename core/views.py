@@ -420,6 +420,7 @@ class UserViewSet(viewsets.ModelViewSet):
         try:
             vcode = u.request_mobile_vcode(request, mobile)
         except ValidationError as ex:
+
             return response_fail(ex.message, 40032)
 
         msg = '验证码已发送成功'
@@ -964,3 +965,47 @@ class DiamondExchangeRecordViewSet(viewsets.ModelViewSet):
     queryset = m.DiamondExchangeRecord.objects.all()
     serializer_class = s.DiamondExchangeRecordSerializer
 
+
+class CommentViewSet(viewsets.ModelViewSet):
+    filter_fields = '__all__'
+    queryset = m.Comment.objects.all()
+    serializer_class = s.CommentSerializer
+
+    def perform_create(self, serializer):
+        serializer.save(author=self.request.user)
+
+    def get_queryset(self):
+        qs = interceptor_get_queryset_kw_field(self)
+        activeevent_id = self.request.query_params.get('activeevent')
+        if activeevent_id:
+            qs = qs.filter(activeevents__id=activeevent_id,
+                           is_active=True, ).order_by('-date_created')
+        return qs
+
+    @list_route(methods=['POST'])
+    def add_comment(self, request):
+        activeevent_id = request.data.get('activeevent')
+        content = request.data.get('content')
+
+        if activeevent_id:
+            activeevent = m.ActiveEvent.objects.get(pk=activeevent_id)
+            activeevent.comments.create(author=self.request.user, content=content)
+
+        return Response(data=True)
+
+
+class UserMarkViewSet(viewsets.ModelViewSet):
+    filter_fields = '__all__'
+    queryset = m.UserMark.objects.all()
+    serializer_class = s.UserMarkSerializer
+
+    def get_queryset(self):
+        qs = interceptor_get_queryset_kw_field(self)
+        activeevent_id = self.request.query_params.get('activeevent')
+        if activeevent_id:
+            qs = qs.filter(
+                object_id=activeevent_id,
+                subject='like',
+                content_type=m.ContentType.objects.get(model='activeevent'),
+            ).order_by('-date_created')
+        return qs

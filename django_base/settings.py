@@ -74,7 +74,7 @@ TEMPLATES = [
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': '',
+        'NAME': 'django_wecanlive',
         'USER': 'root',
         'PASSWORD': 'root',
         'HOST': '127.0.0.1',
