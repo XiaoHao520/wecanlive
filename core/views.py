@@ -956,7 +956,7 @@ class CommentViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = interceptor_get_queryset_kw_field(self)
-        activeevent_id = self.request.query_params.get('activeevents')
+        activeevent_id = self.request.query_params.get('activeevent')
         if activeevent_id:
             qs = qs.filter(activeevents__id=activeevent_id,
                            is_active=True, ).order_by('-date_created')
@@ -964,11 +964,28 @@ class CommentViewSet(viewsets.ModelViewSet):
 
     @list_route(methods=['POST'])
     def add_comment(self, request):
-        activeevents_id = request.data.get('activeevents')
+        activeevent_id = request.data.get('activeevent')
         content = request.data.get('content')
 
-        if activeevents_id:
-            activeevents = m.ActiveEvent.objects.get(pk=activeevents_id)
-            activeevents.comments.create(author=self.request.user, content=content)
+        if activeevent_id:
+            activeevent = m.ActiveEvent.objects.get(pk=activeevent_id)
+            activeevent.comments.create(author=self.request.user, content=content)
 
         return Response(data=True)
+
+
+class UserMarkViewSet(viewsets.ModelViewSet):
+    filter_fields = '__all__'
+    queryset = m.UserMark.objects.all()
+    serializer_class = s.UserMarkSerializer
+
+    def get_queryset(self):
+        qs = interceptor_get_queryset_kw_field(self)
+        activeevent_id = self.request.query_params.get('activeevent')
+        if activeevent_id:
+            qs = qs.filter(
+                object_id=activeevent_id,
+                subject='like',
+                content_type=m.ContentType.objects.get(model='activeevent'),
+            ).order_by('-date_created')
+        return qs

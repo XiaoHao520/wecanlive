@@ -121,21 +121,21 @@ class UserSerializer(serializers.ModelSerializer):
 
     member_nickname = serializers.ReadOnlyField(source='member.nickname')
 
-    personal_credit_score = serializers.ReadOnlyField(
-        source='get_personal_credit_score',
-    )
+    # personal_credit_score = serializers.ReadOnlyField(
+    #     source='get_personal_credit_score',
+    # )
 
-    social_credit_score = serializers.ReadOnlyField(
-        source='get_social_credit_score',
-    )
+    # social_credit_score = serializers.ReadOnlyField(
+    #     source='get_social_credit_score',
+    # )
 
-    shop_credit_score = serializers.ReadOnlyField(
-        source='get_shop_credit_score',
-    )
+    # shop_credit_score = serializers.ReadOnlyField(
+    #     source='get_shop_credit_score',
+    # )
 
-    contact_from_me = serializers.BooleanField(read_only=True)
+    # contact_from_me = serializers.BooleanField(read_only=True)
 
-    contact_to_me = serializers.BooleanField(read_only=True)
+    # contact_to_me = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = m.User
@@ -182,7 +182,13 @@ class BankAccountSerializer(serializers.ModelSerializer):
 
 
 class UserDetailedSerializer(serializers.ModelSerializer):
-    institution_validation_status = serializers.ReadOnlyField()
+    nickname = serializers.ReadOnlyField(source='member.nickname')
+    gender = serializers.ReadOnlyField(source="member.gender")
+    age = serializers.ReadOnlyField(source="member.age")
+    constellation = serializers.ReadOnlyField(source="member.constellation")
+    avatar_url = serializers.ReadOnlyField(source="member.avatar.image.url")
+
+    # institution_validation_status = serializers.ReadOnlyField()
 
     # institution_validations = InstitutionValidationSerializer(
     #     source='institutionvalidations_owned',
@@ -190,7 +196,7 @@ class UserDetailedSerializer(serializers.ModelSerializer):
     #     many=True,
     # )
 
-    entity_store_validation_status = serializers.ReadOnlyField()
+    # entity_store_validation_status = serializers.ReadOnlyField()
 
     # entity_store_validations = EntityStoreValidationSerializer(
     #     source='entitystorevalidations_owned',
@@ -200,38 +206,27 @@ class UserDetailedSerializer(serializers.ModelSerializer):
 
     # assistant = serializers.PrimaryKeyRelatedField(read_only=True)
 
-    amount_balance = serializers.ReadOnlyField(source='get_balance')
+    # amount_balance = serializers.ReadOnlyField(source='get_balance')
 
-    amount_credit = serializers.ReadOnlyField(source='get_credit')
+    # amount_credit = serializers.ReadOnlyField(source='get_credit')
 
-    amount_advert_credit = serializers.ReadOnlyField(source='get_advert_credit')
+    # amount_advert_credit = serializers.ReadOnlyField(source='get_advert_credit')
 
-    amount_commission = serializers.ReadOnlyField(source='get_commission')
+    # amount_commission = serializers.ReadOnlyField(source='get_commission')
 
-    amount_purchase = serializers.ReadOnlyField(source='get_amount_purchase')
+    # amount_purchase = serializers.ReadOnlyField(source='get_amount_purchase')
 
-    withdraw_quota = serializers.ReadOnlyField(source='get_withdraw_quota')
+    # withdraw_quota = serializers.ReadOnlyField(source='get_withdraw_quota')
 
-    personal_validation_status_text = \
-        serializers.ReadOnlyField(source='get_personal_validation_status_text')
+    # personal_validation_status_text = \
+    #     serializers.ReadOnlyField(source='get_personal_validation_status_text')
 
-    institution_validation_status_text = \
-        serializers.ReadOnlyField(source='get_institution_validation_status_text')
+    # institution_validation_status_text = \
+    #     serializers.ReadOnlyField(source='get_institution_validation_status_text')
 
-    entity_store_validation_status_text = \
-        serializers.ReadOnlyField(source='get_entity_store_validation_status_text')
+    # entity_store_validation_status_text = \
+    #     serializers.ReadOnlyField(source='get_entity_store_validation_status_text')
 
-    personal_credit_score = serializers.ReadOnlyField(
-        source='get_personal_credit_score',
-    )
-
-    social_credit_score = serializers.ReadOnlyField(
-        source='get_social_credit_score',
-    )
-
-    shop_credit_score = serializers.ReadOnlyField(
-        source='get_shop_credit_score',
-    )
 
     class Meta:
         model = m.User
@@ -470,6 +465,12 @@ class LiveWatchLogSerializer(serializers.ModelSerializer):
 
 
 class ActiveEventSerializer(serializers.ModelSerializer):
+    images_item = ImageSerializer(
+        source='images',
+        many=True,
+        read_only=True,
+    )
+
     class Meta:
         model = m.ActiveEvent
         fields = '__all__'
@@ -603,13 +604,27 @@ class DiamondExchangeRecordSerializer(serializers.ModelSerializer):
 
 class CommentSerializer(serializers.ModelSerializer):
     author_avatar = serializers.ReadOnlyField(
-        source='get_author_avatar',
+        source='author.member.avatar.image.url',
     )
 
     author_nickname = serializers.ReadOnlyField(
-        source='get_author_nickname'
+        source='author.member.nickname'
     )
 
     class Meta:
         model = m.Comment
+        fields = '__all__'
+
+
+class UserMarkSerializer(serializers.ModelSerializer):
+    author_avatar = serializers.ReadOnlyField(
+        source='author.member.avatar.image.url',
+    )
+
+    author_nickname = serializers.ReadOnlyField(
+        source='author.member.nickname'
+    )
+
+    class Meta:
+        model = m.UserMark
         fields = '__all__'

@@ -656,12 +656,6 @@ class Comment(HierarchicalModel,
         verbose_name='内容',
     )
 
-    def get_author_avatar(self):
-        return self.author.member.avatar.image.url
-
-    def get_author_nickname(self):
-        return self.author.member.nickname
-
     class Meta:
         verbose_name = '评论'
         verbose_name_plural = '评论'
@@ -1223,7 +1217,8 @@ class ContactSetting(models.Model):
         unique_together = [('contact', 'key')]
 
 
-class UserMark(UserOwnedModel):
+class UserMark(UserOwnedModel,
+               EntityModel):
     """ 用于让用户对某类对象产生标记的
     例如：用户收藏商品
     UserMark.objects.create(author=user, object=goods, subject='collect')
