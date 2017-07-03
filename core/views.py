@@ -948,10 +948,15 @@ class PrizeOrderViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         qs = interceptor_get_queryset_kw_field(self)
         member_id = self.request.query_params.get('member')
+        live_id = self.request.query_params.get('live')
         if member_id:
             member = m.Member.objects.filter(user=member_id).first()
             if member:
                 qs = qs.filter(author=member.user)
+        if live_id:
+            live = m.Live.objects.filter(id=live_id).first()
+            if live:
+                qs = qs.filter(live_watch_log__live=live)
         return qs
 
 
