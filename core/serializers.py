@@ -369,7 +369,7 @@ class MemberSerializer(serializers.ModelSerializer):
     class Meta:
         model = m.Member
         # fields = '__all__'
-        exclude = ['session_key', 'ilive_sig', 'date_ilive_sig_expire']
+        exclude = ['session_key']
 
 
 class RobotSerializer(serializers.ModelSerializer):
