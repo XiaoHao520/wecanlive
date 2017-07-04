@@ -191,7 +191,8 @@ class AbstractMember(TaggedModel,
                 self.constellation = self.CONSTELLATION_CAPRICORN
         super(EntityModel, self).save(*args, **kwargs)
         # 将用户名和 is_active 同步到 User
-        # self.user.username = self.mobile
+        # 更换绑定手机要用到
+        self.user.username = self.mobile
         self.user.is_active = self.is_active
         self.user.save()
 

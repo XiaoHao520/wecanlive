@@ -118,6 +118,49 @@ class Member(AbstractMember,
     def get_followed_count(self):
         return self.get_users_marked_with('follow').count().__str__()
 
+    def get_diamond_balance(self):
+        # 钻石余额
+        # 支出鑽石數
+        credit_diamond = self.user.creditdiamondtransactions_credit.all().aggregate(
+            amount=models.Sum('amount')).get('amount') or 0
+        # 收入鑽石數
+        debit_diamond = self.user.creditdiamondtransactions_debit.all().aggregate(
+            amount=models.Sum('amount')).get('amount') or 0
+        # todo: 可能要考虑提现中的钻石数量，如果提现就生成一条扣除钻石的流水就不用考虑了
+        return debit_diamond - credit_diamond
+
+    def get_coin_balance(self):
+        # 金币余额
+        # 支出金币
+        credit_coin = self.user.creditcointransactions_credit.all().aggregate(
+            amount=models.Sum('amount')).get('amount') or 0
+        # 收入金币
+        debit_coin = self.user.creditcointransactions_debit.all().aggregate(
+            amount=models.Sum('amount')).get('amount') or 0
+        return debit_coin - credit_coin
+
+    def contact_from_me(self):
+        # 是否为我申请的联系人
+        me = get_request().user
+        if me.is_anonymous():
+            return False
+        return me.is_contact_from(self)
+
+    def contact_to_me(self):
+        # 是否对方申请加我为联系人
+        me = get_request().user
+        if me.is_anonymous():
+            return False
+        return self.is_contact_from(me)
+
+    def is_contact_from(self, user):
+        """ user 是否申请加 self 为联系人 """
+        return user.contacts_owned.filter(user=self).exists()
+
+    def is_contact_of(self, user):
+        """ self 和 user 是否已经建立互为联系人关系 """
+        return self.is_contact_from(user) and user.is_contact_from(self)
+
 
 class Robot(models.Model):
     """ 机器人

@@ -546,8 +546,10 @@ class UserViewSet(viewsets.ModelViewSet):
     @list_route(methods=['post'], permission_classes=[p.IsAuthenticated])
     @u.require_mobile_vcode
     def bind_new_mobile(self, request):
-        assert time() < int(request.session.get('mobile_unbind_before')), \
-            '尚未验证旧手机号'
+        # assert time() < int(request.session.get('mobile_unbind_before')), \
+        #     '尚未验证旧手机号'
+        assert not m.Member.objects.filter(mobile=request.data.get('mobile', '')).exists(), \
+            '您要變更的手機號碼已經註冊，不能綁定'
         assert hasattr(request.user, 'member'), '非客户用户无法换绑手机号'
         request.user.member.mobile = u.sanitize_mobile(
             request.data.get('mobile', '')
@@ -703,12 +705,18 @@ class MemberViewSet(viewsets.ModelViewSet):
         member_id = self.request.query_params.get('member')
         is_follow = self.request.query_params.get('is_follow')
         is_followed = self.request.query_params.get('is_followed')
+
         if member_id:
             member = m.Member.objects.filter(user_id=member_id).first()
             if member and is_follow:
                 qs = member.get_follow()
             elif member and is_followed:
                 qs = member.get_followed()
+
+        invite = self.request.query_params.get('invite')
+        if invite:
+            qs = qs.filter(user__contacts_owned__user=self.request.user
+                           ).exclude(user__contacts_related__author=self.request.user)
         return qs
 
     @list_route(methods=['post'])
@@ -730,6 +738,25 @@ class MemberViewSet(viewsets.ModelViewSet):
         except ValidationError as ex:
             return Response(data=False)
         return Response(data=True)
+
+    @list_route(methods=['GET'])
+    def get_contact_list(self, request):
+        # 当前用户所有联系人
+        contact_list = m.Member.objects.filter(m.models.Q(user__contacts_related__author=self.request.user),
+                                               m.models.Q(user__contacts_owned__user=self.request.user))
+
+        data = []
+        for contact in contact_list:
+            unread = m.Message.objects.filter(sender=contact.user,
+                                              receiver=self.request.user,
+                                              is_read=False).count()
+            data.append(dict(
+                id=contact.user.id,
+                nickname=contact.nickname,
+                avatar_url=contact.avatar.image.url,
+                unread=unread,
+            ))
+        return Response(data=data)
 
 
 class RobotViewSet(viewsets.ModelViewSet):
@@ -1009,3 +1036,9 @@ class UserMarkViewSet(viewsets.ModelViewSet):
                 content_type=m.ContentType.objects.get(model='activeevent'),
             ).order_by('-date_created')
         return qs
+
+
+class ContactViewSet(viewsets.ModelViewSet):
+    filter_fields = '__all__'
+    queryset = m.Contact.objects.all()
+    serializer_class = s.ContactSerializer

@@ -188,6 +188,16 @@ class UserDetailedSerializer(serializers.ModelSerializer):
     constellation = serializers.ReadOnlyField(source="member.constellation")
     avatar_url = serializers.ReadOnlyField(source="member.avatar.image.url")
     signature = serializers.ReadOnlyField(source="member.signature")
+    diamond_balance = serializers.ReadOnlyField(source='member.get_diamond_balance')
+    coin_balance = serializers.ReadOnlyField(source='member.get_coin_balance')
+    # 跟踪数量
+    count_follow = serializers.ReadOnlyField(
+        source='member.get_follow_count',
+    )
+    # 粉丝数量
+    count_followed = serializers.ReadOnlyField(
+        source='member.get_followed_count',
+    )
 
     # institution_validation_status = serializers.ReadOnlyField()
 
@@ -628,4 +638,10 @@ class UserMarkSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = m.UserMark
+        fields = '__all__'
+
+
+class ContactSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = m.Contact
         fields = '__all__'
