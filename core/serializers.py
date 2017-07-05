@@ -340,6 +340,10 @@ class InfomableSerializer(serializers.ModelSerializer):
 
 
 class MemberSerializer(serializers.ModelSerializer):
+    user = serializers.PrimaryKeyRelatedField(
+        queryset=m.User.objects.all(),
+    )
+
     avatar_url = serializers.ReadOnlyField(
         source='avatar.image.url',
     )
@@ -361,10 +365,22 @@ class MemberSerializer(serializers.ModelSerializer):
         source='get_followed_count',
     )
 
+    count_friend = serializers.ReadOnlyField(
+        source='get_friend_count',
+    )
+
+    count_live = serializers.ReadOnlyField(
+        source='get_live_count',
+    )
+
+    last_live_end = serializers.ReadOnlyField(
+        source='get_last_live_end',
+    )
+
     class Meta:
         model = m.Member
         # fields = '__all__'
-        exclude = ['session_key', 'ilive_sig', 'date_ilive_sig_expire']
+        exclude = ['session_key']
 
 
 class RobotSerializer(serializers.ModelSerializer):
@@ -458,6 +474,43 @@ class LiveCategorySerializer(serializers.ModelSerializer):
 
 
 class LiveSerializer(serializers.ModelSerializer):
+
+    category = serializers.ReadOnlyField(
+        source='category.name',
+    )
+
+    nickname = serializers.ReadOnlyField(
+        source='author.member.nickname',
+    )
+
+    mobile = serializers.ReadOnlyField(
+        source='author.member.mobile',
+    )
+
+    count_comment = serializers.ReadOnlyField(
+        source='get_comment_count',
+    )
+
+    count_view = serializers.ReadOnlyField(
+        source='get_view_count',
+    )
+
+    count_prize = serializers.ReadOnlyField(
+        source='get_prize_count',
+    )
+
+    count_like = serializers.ReadOnlyField(
+        source='get_like_count',
+    )
+
+    duration = serializers.ReadOnlyField(
+        source='get_duration',
+    )
+
+    live_status = serializers.ReadOnlyField(
+        source='get_live_status',
+    )
+
     class Meta:
         model = m.Live
         fields = '__all__'
@@ -470,6 +523,42 @@ class LiveBarrageSerializer(serializers.ModelSerializer):
 
 
 class LiveWatchLogSerializer(serializers.ModelSerializer):
+    user_id = serializers.ReadOnlyField(
+        source='author.id',
+    )
+
+    nickname = serializers.ReadOnlyField(
+        source='author.member.nickname',
+    )
+
+    mobile = serializers.ReadOnlyField(
+        source='author.member.mobile',
+    )
+
+    gender = serializers.ReadOnlyField(
+        source='author.member.gender',
+    )
+
+    member_age = serializers.ReadOnlyField(
+        source='author.member.get_age',
+    )
+
+    count_comment = serializers.ReadOnlyField(
+        source='get_comment_count',
+    )
+
+    live_total_duration = serializers.ReadOnlyField(
+        source='author.member.get_live_total_duration',
+    )
+
+    duration = serializers.ReadOnlyField(
+        source='get_duration',
+    )
+
+    expense = serializers.ReadOnlyField(
+        source='get_total_prize',
+    )
+
     class Meta:
         model = m.LiveWatchLog
         fields = '__all__'
@@ -480,6 +569,14 @@ class ActiveEventSerializer(serializers.ModelSerializer):
         source='images',
         many=True,
         read_only=True,
+    )
+
+    count_amount = serializers.ReadOnlyField(
+        source='get_comment_count',
+    )
+
+    count_like = serializers.ReadOnlyField(
+        source='get_like_count',
     )
 
     class Meta:
@@ -494,6 +591,11 @@ class PrizeCategorySerializer(serializers.ModelSerializer):
 
 
 class PrizeSerializer(serializers.ModelSerializer):
+    icon_item = ImageSerializer(
+        source='icon',
+        read_only=True,
+    )
+
     class Meta:
         model = m.Prize
         fields = '__all__'
@@ -506,6 +608,35 @@ class PrizeTransitionSerializer(serializers.ModelSerializer):
 
 
 class PrizeOrderSerializer(serializers.ModelSerializer):
+
+    prize_name = serializers.ReadOnlyField(
+        source='prize.name',
+    )
+
+    prize_category = serializers.ReadOnlyField(
+        source='prize.category.name',
+    )
+
+    prize_price = serializers.ReadOnlyField(
+        source='prize.price',
+    )
+
+    prize_transition_amount = serializers.ReadOnlyField(
+        source='prize_transition.amount',
+    )
+
+    user_debit = serializers.ReadOnlyField(
+        source='prize_transition.user_debit.member.mobile',
+    )
+
+    user_debit_nickname = serializers.ReadOnlyField(
+        source='prize_transition.user_debit.member.nickname',
+    )
+
+    live_id = serializers.ReadOnlyField(
+        source='live_watch_log.live.id',
+    )
+
     class Meta:
         model = m.PrizeOrder
         fields = '__all__'

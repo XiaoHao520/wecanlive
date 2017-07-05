@@ -607,6 +607,12 @@ class MemberViewSet(viewsets.ModelViewSet):
         is_active = filters.BooleanFilter(
             name='user__is_active',
         )
+        is_contact_from = filters.Filter(
+            name='user__contacts_related__author',
+        )
+        is_contact_to = filters.Filter(
+            name='user__contacts_owned__author',
+        )
 
         class Meta:
             model = m.Member
@@ -788,6 +794,28 @@ class CreditDiamondTransactionViewSet(viewsets.ModelViewSet):
     queryset = m.CreditDiamondTransaction.objects.all()
     serializer_class = s.CreditDiamondTransactionSerializer
 
+    @list_route(methods=['GET'])
+    def get_ranking_list(self, request):
+        """
+        获取钻石获得数排行榜
+        :param request:
+        :return:
+        """
+        # type   0:日榜； 1:周榜； 2：总榜
+        type = request.data.get('type')
+        data = []
+        users = []
+        transactions = m.CreditDiamondTransaction.objects.filter(user_debit=request.user)
+        for transaction in transactions:
+            if not transaction.user_credit in users:
+                users.append(transaction.user_credit)
+        for user in users:
+            amount = m.CreditDiamondTransaction.objects.filter(
+                user_debit=request.user,
+                user_credit=user).all().aggregate(amount=models.Sum('amount')).get('amount') or 0
+            print(amount)
+        return Response(data=data)
+
 
 class CreditCoinTransactionViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
@@ -842,11 +870,35 @@ class LiveCategoryViewSet(viewsets.ModelViewSet):
     queryset = m.LiveCategory.objects.all()
     serializer_class = s.LiveCategorySerializer
 
+    def get_queryset(self):
+        return interceptor_get_queryset_kw_field(self)
+
 
 class LiveViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.Live.objects.all()
     serializer_class = s.LiveSerializer
+
+    def get_queryset(self):
+        qs = interceptor_get_queryset_kw_field(self)
+        member_id = self.request.query_params.get('member')
+        live_status = self.request.query_params.get('live_status')
+        if member_id:
+            member = m.Member.objects.filter(
+                user_id=member_id
+            ).first()
+            if member:
+                qs = qs.filter(author=member.user)
+
+        if live_status and live_status == 'ACTION':
+            qs = qs.filter(
+                date_end=None,
+            )
+        elif live_status and live_status == 'OVER':
+            qs = qs.exclude(
+                date_end=None,
+            )
+        return qs
 
 
 class LiveBarrageViewSet(viewsets.ModelViewSet):
@@ -854,11 +906,21 @@ class LiveBarrageViewSet(viewsets.ModelViewSet):
     queryset = m.LiveBarrage.objects.all()
     serializer_class = s.LiveBarrageSerializer
 
+    def get_queryset(self):
+        return interceptor_get_queryset_kw_field(self)
+
 
 class LiveWatchLogViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.LiveWatchLog.objects.all()
     serializer_class = s.LiveWatchLogSerializer
+
+    def get_queryset(self):
+        qs = interceptor_get_queryset_kw_field(self)
+        live_id = self.request.query_params.get('live')
+        if live_id:
+            qs = qs.filter(live=live_id)
+        return qs
 
 
 class ActiveEventViewSet(viewsets.ModelViewSet):
@@ -866,11 +928,25 @@ class ActiveEventViewSet(viewsets.ModelViewSet):
     queryset = m.ActiveEvent.objects.all()
     serializer_class = s.ActiveEventSerializer
 
+    def get_queryset(self):
+        qs = interceptor_get_queryset_kw_field(self)
+        member_id = self.request.query_params.get('member')
+        if member_id:
+            member = m.Member.objects.filter(
+                user_id=member_id
+            ).first()
+            if member:
+                qs = qs.filter(author=member.user)
+        return qs
+
 
 class PrizeCategoryViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.PrizeCategory.objects.all()
     serializer_class = s.PrizeCategorySerializer
+
+    def get_queryset(self):
+        return interceptor_get_queryset_kw_field(self)
 
 
 class PrizeViewSet(viewsets.ModelViewSet):
@@ -878,11 +954,17 @@ class PrizeViewSet(viewsets.ModelViewSet):
     queryset = m.Prize.objects.all()
     serializer_class = s.PrizeSerializer
 
+    def get_queryset(self):
+        return interceptor_get_queryset_kw_field(self)
+
 
 class PrizeTransitionViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.PrizeTransition.objects.all()
     serializer_class = s.PrizeTransitionSerializer
+
+    def get_queryset(self):
+        return interceptor_get_queryset_kw_field(self)
 
 
 class PrizeOrderViewSet(viewsets.ModelViewSet):
@@ -890,11 +972,28 @@ class PrizeOrderViewSet(viewsets.ModelViewSet):
     queryset = m.PrizeOrder.objects.all()
     serializer_class = s.PrizeOrderSerializer
 
+    def get_queryset(self):
+        qs = interceptor_get_queryset_kw_field(self)
+        member_id = self.request.query_params.get('member')
+        live_id = self.request.query_params.get('live')
+        if member_id:
+            member = m.Member.objects.filter(user=member_id).first()
+            if member:
+                qs = qs.filter(author=member.user)
+        if live_id:
+            live = m.Live.objects.filter(id=live_id).first()
+            if live:
+                qs = qs.filter(live_watch_log__live=live)
+        return qs
+
 
 class ExtraPrizeViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.ExtraPrize.objects.all()
     serializer_class = s.ExtraPrizeSerializer
+
+    def get_queryset(self):
+        return interceptor_get_queryset_kw_field(self)
 
 
 class StatisticRuleViewSet(viewsets.ModelViewSet):
