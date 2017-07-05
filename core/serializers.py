@@ -366,6 +366,11 @@ class MemberSerializer(serializers.ModelSerializer):
         source='get_last_live_end',
     )
 
+    is_following = serializers.BooleanField(
+        source='is_followed_by_current_user',
+        read_only=True,
+    )
+
     class Meta:
         model = m.Member
         # fields = '__all__'
