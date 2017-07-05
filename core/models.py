@@ -139,28 +139,6 @@ class Member(AbstractMember,
             amount=models.Sum('amount')).get('amount') or 0
         return debit_coin - credit_coin
 
-    def contact_from_me(self):
-        # 是否为我申请的联系人
-        me = get_request().user
-        if me.is_anonymous():
-            return False
-        return me.is_contact_from(self)
-
-    def contact_to_me(self):
-        # 是否对方申请加我为联系人
-        me = get_request().user
-        if me.is_anonymous():
-            return False
-        return self.is_contact_from(me)
-
-    def is_contact_from(self, user):
-        """ user 是否申请加 self 为联系人 """
-        return user.contacts_owned.filter(user=self).exists()
-
-    def is_contact_of(self, user):
-        """ self 和 user 是否已经建立互为联系人关系 """
-        return self.is_contact_from(user) and user.is_contact_from(self)
-
 
 class Robot(models.Model):
     """ 机器人
@@ -675,6 +653,9 @@ class PrizeCategory(EntityModel):
         verbose_name = '礼物分类'
         verbose_name_plural = '礼物分类'
         db_table = 'core_prize_category'
+
+    def get_prizes(self):
+        return self.prizes
 
 
 class Prize(EntityModel):
