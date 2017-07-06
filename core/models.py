@@ -51,38 +51,10 @@ class Member(AbstractMember,
         default=False,
     )
 
-    ilive_sig = models.TextField(
-        verbose_name='iLive鉴权密钥',
-        blank=True,
-        default='',
-        help_text='由ilive模块封装的腾讯云SDK产生'
-    )
-
-    date_ilive_sig_expire = models.DateTimeField(
-        verbose_name='iLive鉴权密钥过期时间',
-        null=True,
-        blank=True,
-        help_text='默认过期时间为180天'
-    )
-
     class Meta:
         verbose_name = '会员'
         verbose_name_plural = '会员'
         db_table = 'core_member'
-
-    def save(self, *args, **kwargs):
-        if self.user:
-            self.load_ilive_sig()
-        super().save(*args, **kwargs)
-
-    def load_ilive_sig(self, force=False):
-        import ilive
-        # 还没有超期的话忽略操作
-        if not force and self.date_ilive_sig_expire and self.date_ilive_sig_expire > datetime.now():
-            return
-        self.ilive_sig = ilive.generate_sig(self.user.username)
-        # 内部保留一定裕度，160天内不自动刷新
-        self.date_ilive_sig_expire = datetime.now() + timedelta(days=160)
 
     def is_robot(self):
         return hasattr(self.user, 'robot') and self.user.robot
@@ -765,12 +737,6 @@ class LiveWatchLog(UserOwnedModel,
 
     def get_comment_count(self):
         return self.comments.count()
-
-    # ggg
-    # def save(self, *args, **kwargs):
-    #     if self.user:
-    #         self.load_ilive_sig()
-    #     super().save(*args, **kwargs)
 
     @staticmethod
     def enter_live(user, live):
