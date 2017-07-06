@@ -3,6 +3,7 @@ from rest_framework.utils import model_meta
 from rest_framework import serializers
 from rest_framework.compat import set_many
 from drf_extra_fields.fields import Base64ImageField
+from drf_queryfields import QueryFieldsMixin
 
 from . import models as m
 
@@ -94,7 +95,7 @@ class AllowNestedWriteMixin:
         return instance
 
 
-class UserOwndedMixinSerializer(serializers.Serializer):
+class UserOwndedMixinSerializer(QueryFieldsMixin, serializers.Serializer):
     member_name = serializers.ReadOnlyField(
         source='author.member.nickname')
 
@@ -102,7 +103,7 @@ class UserOwndedMixinSerializer(serializers.Serializer):
         source='author.shop.name')
 
 
-class UserVotableMixinSerializer(serializers.Serializer):
+class UserVotableMixinSerializer(QueryFieldsMixin, serializers.Serializer):
     count_upvote = serializers.ReadOnlyField()
     count_downvote = serializers.ReadOnlyField()
     myvote = serializers.ReadOnlyField()
@@ -468,7 +469,6 @@ class LiveCategorySerializer(serializers.ModelSerializer):
 
 
 class LiveSerializer(serializers.ModelSerializer):
-
     category = serializers.ReadOnlyField(
         source='category.name',
     )
@@ -602,7 +602,6 @@ class PrizeTransitionSerializer(serializers.ModelSerializer):
 
 
 class PrizeOrderSerializer(serializers.ModelSerializer):
-
     prize_name = serializers.ReadOnlyField(
         source='prize.name',
     )
