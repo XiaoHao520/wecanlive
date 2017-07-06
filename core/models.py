@@ -123,6 +123,22 @@ class Member(AbstractMember,
             duration += live.get_duration()
         return duration
 
+    def diamond_count(self):
+        """获得钻石总数
+        :return:
+        """
+        count = self.user.creditdiamondtransactions_debit.all().aggregate(
+            amount=models.Sum('amount')).get('amount') or 0
+        return int(count)
+
+    def starlight_count(self):
+        """星光指数
+        :return:
+        """
+        count = self.user.creditstarindextransactions_debit.all().aggregate(
+            amount=models.Sum('amount')).get('amount') or 0
+        return int(count)
+
 
 class Robot(models.Model):
     """ 机器人

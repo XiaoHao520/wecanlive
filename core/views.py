@@ -865,6 +865,7 @@ class LiveViewSet(viewsets.ModelViewSet):
         qs = interceptor_get_queryset_kw_field(self)
         member_id = self.request.query_params.get('member')
         live_status = self.request.query_params.get('live_status')
+        followed_by = self.request.query_params.get('followed_by')
         if member_id:
             member = m.Member.objects.filter(
                 user_id=member_id
@@ -879,6 +880,14 @@ class LiveViewSet(viewsets.ModelViewSet):
         elif live_status and live_status == 'OVER':
             qs = qs.exclude(
                 date_end=None,
+            )
+        if followed_by:
+            user = m.User.objects.filter(id=followed_by).first()
+            users_following = user.member.get_follow()
+            users_friend = m.Member.objects.filter(user__contacts_related__author=user)
+            qs = qs.filter(
+                m.models.Q(author__member__in=users_following) |
+                m.models.Q(author__member__in=users_friend)
             )
         return qs
 
@@ -908,60 +917,6 @@ class LiveViewSet(viewsets.ModelViewSet):
             author=request.user,
         )
         return Response(data=s.LiveSerializer(live).data)
-
-    @detail_route(methods=['GET'])
-    def init_live(self, request, pk):
-        live = m.Live.objects.get(id=pk)
-        view_count = live.get_view_count()
-        author_avatar = live.author.member.avatar.image.url
-        author_id = live.author.id
-        author_nickname = live.author.member.nickname
-        author_signature = live.author.member.signature
-        is_followed = live.author.member.is_followed_by(request.user)
-        author_diamond_count = live.author.creditdiamondtransactions_debit.all().aggregate(
-            amount=models.Sum('amount')).get('amount') or 0
-        author_starlight = live.author.creditstarindextransactions_debit.all().aggregate(
-            amount=models.Sum('amount')).get('amount') or 0
-        author_followed_count = live.author.member.get_followed_count()
-        push_url = live.get_push_url()
-        play_url = live.get_play_url()
-        return Response(data=dict(
-            author_id=author_id,
-            # 直播觀看人數
-            view_count=view_count,
-            # 主播頭像
-            author_avatar=author_avatar,
-            # 主播暱稱
-            author_nickname=author_nickname,
-            # 主播個性簽名
-            author_signature=author_signature,
-            # 當前用戶是否追蹤主播
-            is_followed=is_followed,
-            # 主播獲得鑽石總數
-            author_diamond_count=int(author_diamond_count),
-            # 主播星光指數
-            author_starlight=int(author_starlight),
-            # 追蹤主播的人數
-            author_followed_count=author_followed_count,
-            # 推流地址
-            push_url=push_url,
-            # 播放地址
-            play_url=play_url,
-        ))
-
-    @list_route(methods=['GET'])
-    def get_follow_lives(self, request):
-        """首页追踪 我关注的直播
-        :return:
-        """
-        if not request.user.is_anonymous:
-            users_following = request.user.member.get_follow()
-            users_friend = m.Member.objects.filter(user__contacts_related__author=request.user)
-            lives = m.Live.objects.filter(
-                m.models.Q(author__member__in=users_following) |
-                m.models.Q(author__member__in=users_friend)
-            )
-        return Response(data=s.LiveSerializer(lives, many=True).data)
 
 
 class LiveBarrageViewSet(viewsets.ModelViewSet):
