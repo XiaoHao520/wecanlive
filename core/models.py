@@ -1075,6 +1075,31 @@ class Activity(EntityModel):
         """
 
 
+class ActivityPage(models.Model):
+    banner = models.ForeignKey(
+        verbose_name='海报',
+        to=ImageModel,
+        related_name='activity_pages',
+    )
+
+    activity = models.ForeignKey(
+        verbose_name='活动',
+        to='Activity',
+        related_name='pages',
+    )
+
+    remark = models.TextField(
+        verbose_name='备注',
+        blank=True,
+        default='',
+    )
+
+    class Meta:
+        verbose_name = '活动页'
+        verbose_name_plural = '活动页'
+        db_table = 'core_activity_page'
+
+
 class ActivityParticipation(UserOwnedModel):
     activity = models.ForeignKey(
         verbose_name='活动',
@@ -1477,3 +1502,49 @@ class DiamondExchangeRecord(UserOwnedModel):
         verbose_name = '钻石兑换记录'
         verbose_name_plural = '钻石兑换记录'
         db_table = 'core_diamond_exchange_record'
+
+
+class VirboCard(UserOwnedModel,
+                EntityModel):
+    image_card = models.OneToOneField(
+        verbose_name='虚宝卡',
+        to=ImageModel,
+        related_name='virbo_cards',
+        null=True,
+        blank=True,
+    )
+
+    image_background = models.OneToOneField(
+        verbose_name='背景图',
+        to=ImageModel,
+        related_name='virbo_cards_as_background',
+        null=True,
+        blank=True,
+    )
+
+    STATUS_PENDING = 'PENDING'
+    STATUS_ACCEPTED = 'ACCEPTED'
+    STATUS_EXPIRED = 'EXPIRED'
+    STATUS_CHOICES = (
+        (STATUS_PENDING, '未领取'),
+        (STATUS_ACCEPTED, '已领取'),
+        (STATUS_EXPIRED, '已过期'),
+    )
+
+    status = models.CharField(
+        verbose_name='状态',
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_PENDING,
+    )
+
+    validity_days = models.IntegerField(
+        verbose_name='有效期',
+        default=10,
+        help_text='有效期天数',
+    )
+
+    class Meta:
+        verbose_name = '虚宝卡'
+        verbose_name_plural = '虚宝卡'
+        db_table = 'core_virbo_card'
