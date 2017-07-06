@@ -474,7 +474,6 @@ class LiveCategorySerializer(serializers.ModelSerializer):
 
 
 class LiveSerializer(serializers.ModelSerializer):
-
     category = serializers.ReadOnlyField(
         source='category.name',
     )
@@ -585,6 +584,10 @@ class ActiveEventSerializer(serializers.ModelSerializer):
 
 
 class PrizeCategorySerializer(serializers.ModelSerializer):
+    prizes_item = serializers.ReadOnlyField(
+        source='get_prizes',
+    )
+
     class Meta:
         model = m.PrizeCategory
         fields = '__all__'
@@ -608,7 +611,6 @@ class PrizeTransitionSerializer(serializers.ModelSerializer):
 
 
 class PrizeOrderSerializer(serializers.ModelSerializer):
-
     prize_name = serializers.ReadOnlyField(
         source='prize.name',
     )

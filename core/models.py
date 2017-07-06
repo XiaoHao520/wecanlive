@@ -766,7 +766,16 @@ class PrizeCategory(EntityModel):
         db_table = 'core_prize_category'
 
     def get_prizes(self):
-        return self.prizes
+        prizes = []
+        # todo 经验值
+        for prize in self.prizes.all():
+            prizes.append(dict(
+                id=prize.id,
+                name=prize.name,
+                price=prize.price,
+                icon=prize.icon.image.url,
+            ))
+        return prizes
 
 
 class Prize(EntityModel):
@@ -872,6 +881,35 @@ class PrizeOrder(UserOwnedModel):
         verbose_name = '礼物订单'
         verbose_name_plural = '礼物订单'
         db_table = 'core_prize_order'
+
+    @staticmethod
+    def buy_price(live, prize, count, user):
+        total_price = count * prize.price
+        assert user.member.get_coin_balance() > total_price, '赠送失败,余额不足'
+        log = live.watch_logs.filter(author=user).first()
+
+        # 新建礼物记录
+        # todo 新增礼物记录 要不要新建金币流水？ 如果不要，要修改get_coin_balance
+        prize_credit = user.prizetransitions_credit.create(
+            amount=total_price,
+            user_debit=live.author,
+            remark=count,
+            prize=prize,
+        )
+
+        # 新建礼物订单
+        order = prize.orders.create(
+            author=user,
+            live_watch_log=log,
+            prize_transition=prize_credit,
+        )
+
+        # todo 金币流水
+        user.creditcointransactions_credit.create(
+            user_debit=live.author,
+            amount=total_price,
+            remark='购买礼物',
+        )
 
 
 class ExtraPrize(EntityModel):

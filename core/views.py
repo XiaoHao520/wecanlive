@@ -922,6 +922,21 @@ class LiveWatchLogViewSet(viewsets.ModelViewSet):
             qs = qs.filter(live=live_id)
         return qs
 
+    @list_route(methods=['POST'])
+    def start_watch_log(self, request):
+        live_id = request.data.get('live')
+        live = m.Live.objects.get(pk=live_id)
+        m.LiveWatchLog.enter_live(request.user, live)
+        return Response(data=True)
+
+    @list_route(methods=['POST'])
+    def leave_live(self, request):
+        live_id = request.data.get('live')
+        live = m.Live.objects.get(pk=live_id)
+        log = live.watch_logs.filter(author=request.user).first()
+        log.leave_live()
+        return Response(data=True)
+
 
 class ActiveEventViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
@@ -985,6 +1000,16 @@ class PrizeOrderViewSet(viewsets.ModelViewSet):
             if live:
                 qs = qs.filter(live_watch_log__live=live)
         return qs
+
+    @list_route(methods=['POST'])
+    def buy_prize(self, request):
+        # todo
+        live = m.Live.objects.get(pk=request.data.get('live'))
+        prize = m.Prize.objects.get(pk=request.data.get('prize'))
+        count = request.data.get('count')
+        m.PrizeOrder.buy_price(live, prize, count, request.user)
+
+        return Response(data=True)
 
 
 class ExtraPrizeViewSet(viewsets.ModelViewSet):
@@ -1125,16 +1150,6 @@ class UserMarkViewSet(viewsets.ModelViewSet):
     queryset = m.UserMark.objects.all()
     serializer_class = s.UserMarkSerializer
 
-    def get_queryset(self):
-        qs = interceptor_get_queryset_kw_field(self)
-        activeevent_id = self.request.query_params.get('activeevent')
-        if activeevent_id:
-            qs = qs.filter(
-                object_id=activeevent_id,
-                subject='like',
-                content_type=m.ContentType.objects.get(model='activeevent'),
-            ).order_by('-date_created')
-        return qs
 
 
 class ContactViewSet(viewsets.ModelViewSet):
