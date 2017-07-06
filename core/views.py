@@ -718,7 +718,7 @@ class MemberViewSet(viewsets.ModelViewSet):
         return qs
 
     @list_route(methods=['post'])
-    def updateMemberInfo(self, request):
+    def update_member_info(self, request):
         avatar = request.data.get('avatar')
         nickname = request.data.get('nickname')
         gender = request.data.get('gender')
@@ -736,6 +736,15 @@ class MemberViewSet(viewsets.ModelViewSet):
         except ValidationError as ex:
             return Response(data=False)
         return Response(data=True)
+
+    @detail_route(methods=['POST'])
+    def follow(self, request, pk):
+        member = m.Member.objects.get(pk=pk)
+        # 指定目标状态或者反转当前的状态
+        is_follow = request.data.get('is_follow') == '1' if 'is_follow' in request.data \
+            else not member.is_followed_by_current_user()
+        member.set_followed_by(request.user, is_follow)
+        return u.response_success('')
 
 
 class RobotViewSet(viewsets.ModelViewSet):

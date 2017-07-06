@@ -65,6 +65,16 @@ class Member(AbstractMember,
         """
         raise NotImplemented()
 
+    def is_followed_by(self, user):
+        return self.is_marked_by(user, 'follow')
+
+    def is_followed_by_current_user(self):
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_anonymous:
+            return False
+        return self.is_followed_by(user)
+
     # 标记一个跟踪
     def set_followed_by(self, user, is_follow=True):
         self.set_marked_by(user, 'follow', is_follow)

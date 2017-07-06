@@ -1260,6 +1260,19 @@ class UserMarkableModel(models.Model):
             usermarks_owned__subject=subject,
         )
 
+    def is_marked_by(self, user, subject, model=None):
+        model = model or type(self)
+        content_type = ContentType.objects.get(
+            app_label=model._meta.app_label,
+            model=model._meta.model_name,
+        )
+        return UserMark.objects.filter(
+            author=user,
+            content_type=content_type,
+            object_id=self.pk,
+            subject=subject,
+        ).exists()
+
     def set_marked_by(self, user, subject, is_marked=True, model=None):
         model = model or type(self)
         content_type = ContentType.objects.get(
