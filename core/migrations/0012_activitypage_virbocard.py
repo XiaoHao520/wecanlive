@@ -11,7 +11,6 @@ class Migration(migrations.Migration):
 
     dependencies = [
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
-        ('django_base', '0004_merge_20170706_1429'),
         ('core', '0011_merge_20170706_1429'),
     ]
 
