@@ -956,9 +956,12 @@ class LiveViewSet(viewsets.ModelViewSet):
         """
         if not request.user.is_anonymous:
             users_following = request.user.member.get_follow()
-            print(request.user.member)
-            print(users_following)
-        return Response(data=True)
+            users_friend = m.Member.objects.filter(user__contacts_related__author=request.user)
+            lives = m.Live.objects.filter(
+                m.models.Q(author__member__in=users_following) |
+                m.models.Q(author__member__in=users_friend)
+            )
+        return Response(data=s.LiveSerializer(lives, many=True).data)
 
 
 class LiveBarrageViewSet(viewsets.ModelViewSet):
