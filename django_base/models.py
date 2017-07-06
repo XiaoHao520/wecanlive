@@ -191,17 +191,17 @@ class GeoPositionedModel(models.Model):
     class Meta:
         abstract = True
 
-    def save(self, *args, **kwargs):
-        print('save geo positioned model')
-        # 自动解析地理位置
-        if settings.AUTO_GEO_DECODE:
-            try:
-                info = self.get_geo_decode()
-                self.geo_info = json.dumps(info)
-                self.adcode = info.get('addressComponent').get('adcode')
-            except:
-                pass
-        super().save(self, *args, **kwargs)
+    # def save(self, *args, **kwargs):
+    #     print('save geo positioned model')
+    #     # 自动解析地理位置
+    #     if settings.AUTO_GEO_DECODE:
+    #         try:
+    #             info = self.get_geo_decode()
+    #             self.geo_info = json.dumps(info)
+    #             self.adcode = info.get('addressComponent').get('adcode')
+    #         except:
+    #             pass
+    #     super().save(self, *args, **kwargs)
 
     @staticmethod
     def inside_china(lat, lng):

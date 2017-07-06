@@ -477,8 +477,25 @@ class LiveSerializer(serializers.ModelSerializer):
         source='author.member.nickname',
     )
 
-    mobile = serializers.ReadOnlyField(
-        source='author.member.mobile',
+    author_avatar = serializers.ReadOnlyField(
+        source='author.member.avatar.image.url',
+    )
+
+    gender = serializers.ReadOnlyField(
+        source='author.member.gender',
+    )
+
+    constellation = serializers.ReadOnlyField(
+        source='author.member.constellation',
+    )
+
+    age = serializers.ReadOnlyField(
+        source='author.member.age',
+    )
+
+    author_is_following = serializers.ReadOnlyField(
+        source='author.member.is_followed_by_current_user',
+        read_only=True,
     )
 
     count_comment = serializers.ReadOnlyField(
@@ -505,9 +522,22 @@ class LiveSerializer(serializers.ModelSerializer):
         source='get_live_status',
     )
 
+    is_following = serializers.BooleanField(
+        source='is_followed_by_current_user',
+        read_only=True,
+    )
+
+    push_url = serializers.ReadOnlyField(
+        source='get_push_url',
+    )
+
+    play_url = serializers.ReadOnlyField(
+        source='get_play_url',
+    )
+
     class Meta:
         model = m.Live
-        fields = '__all__'
+        exclude = ['comments', 'informs']
 
 
 class LiveBarrageSerializer(serializers.ModelSerializer):

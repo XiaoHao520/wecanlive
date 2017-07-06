@@ -882,6 +882,84 @@ class LiveViewSet(viewsets.ModelViewSet):
             )
         return qs
 
+    @detail_route(methods=['POST'])
+    def follow(self, request, pk):
+        live = m.Live.objects.get(pk=pk)
+        # 指定目标状态或者反转当前的状态
+        is_follow = request.data.get('is_follow') == '1' if 'is_follow' in request.data \
+            else not live.is_followed_by_current_user()
+        live.set_followed_by(request.user, is_follow)
+        return u.response_success('')
+
+    @list_route(methods=['POST'])
+    def start_live(self, request):
+        assert not request.user.is_anonymous, '请先登录'
+        name = request.data.get('name')
+        password = request.data.get('password')
+        paid = request.data.get('paid')
+        quota = request.data.get('quota')
+        category = m.LiveCategory.objects.get(id=request.data.get('category'))
+        live = m.Live.objects.create(
+            name=name,
+            password=password,
+            paid=paid,
+            quota=quota,
+            category=category,
+            author=request.user,
+        )
+        return Response(data=s.LiveSerializer(live).data)
+
+    @detail_route(methods=['GET'])
+    def init_live(self, request, pk):
+        live = m.Live.objects.get(id=pk)
+        view_count = live.get_view_count()
+        author_avatar = live.author.member.avatar.image.url
+        author_id = live.author.id
+        author_nickname = live.author.member.nickname
+        author_signature = live.author.member.signature
+        is_followed = live.author.member.is_followed_by(request.user)
+        author_diamond_count = live.author.creditdiamondtransactions_debit.all().aggregate(
+            amount=models.Sum('amount')).get('amount') or 0
+        author_starlight = live.author.creditstarindextransactions_debit.all().aggregate(
+            amount=models.Sum('amount')).get('amount') or 0
+        author_followed_count = live.author.member.get_followed_count()
+        push_url = live.get_push_url()
+        play_url = live.get_play_url()
+        return Response(data=dict(
+            author_id=author_id,
+            # 直播觀看人數
+            view_count=view_count,
+            # 主播頭像
+            author_avatar=author_avatar,
+            # 主播暱稱
+            author_nickname=author_nickname,
+            # 主播個性簽名
+            author_signature=author_signature,
+            # 當前用戶是否追蹤主播
+            is_followed=is_followed,
+            # 主播獲得鑽石總數
+            author_diamond_count=int(author_diamond_count),
+            # 主播星光指數
+            author_starlight=int(author_starlight),
+            # 追蹤主播的人數
+            author_followed_count=author_followed_count,
+            # 推流地址
+            push_url=push_url,
+            # 播放地址
+            play_url=play_url,
+        ))
+
+    @list_route(methods=['GET'])
+    def get_follow_lives(self, request):
+        """首页追踪 我关注的直播
+        :return:
+        """
+        if not request.user.is_anonymous:
+            users_following = request.user.member.get_follow()
+            print(request.user.member)
+            print(users_following)
+        return Response(data=True)
+
 
 class LiveBarrageViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
