@@ -949,12 +949,21 @@ class ActiveEventViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         qs = interceptor_get_queryset_kw_field(self)
         member_id = self.request.query_params.get('member')
+        followed_by = self.request.query_params.get('followed_by')
         if member_id:
             member = m.Member.objects.filter(
                 user_id=member_id
             ).first()
             if member:
                 qs = qs.filter(author=member.user)
+        if followed_by:
+            user = m.User.objects.filter(id=followed_by).first()
+            users_following = user.member.get_follow()
+            users_friend = m.Member.objects.filter(user__contacts_related__author=user)
+            qs = qs.filter(
+                m.models.Q(author__member__in=users_following) |
+                m.models.Q(author__member__in=users_friend)
+            )
         return qs
 
 
