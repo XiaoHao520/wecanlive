@@ -188,6 +188,17 @@ class UserDetailedSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     age = serializers.ReadOnlyField(source="member.age")
     constellation = serializers.ReadOnlyField(source="member.constellation")
     avatar_url = serializers.ReadOnlyField(source="member.avatar.image.url")
+    signature = serializers.ReadOnlyField(source="member.signature")
+    diamond_balance = serializers.ReadOnlyField(source='member.get_diamond_balance')
+    coin_balance = serializers.ReadOnlyField(source='member.get_coin_balance')
+    # 跟踪数量
+    count_follow = serializers.ReadOnlyField(
+        source='member.get_follow_count',
+    )
+    # 粉丝数量
+    count_followed = serializers.ReadOnlyField(
+        source='member.get_followed_count',
+    )
 
     # institution_validation_status = serializers.ReadOnlyField()
 
@@ -659,6 +670,9 @@ class ActiveEventSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
 
 class PrizeCategorySerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    prizes_item = serializers.ReadOnlyField(
+        source='get_prizes',
+    )
     class Meta:
         model = m.PrizeCategory
         fields = '__all__'
@@ -842,4 +856,10 @@ class UserMarkSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
     class Meta:
         model = m.UserMark
+        fields = '__all__'
+
+
+class ContactSerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    class Meta:
+        model = m.Contact
         fields = '__all__'

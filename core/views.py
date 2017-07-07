@@ -546,8 +546,10 @@ class UserViewSet(viewsets.ModelViewSet):
     @list_route(methods=['post'], permission_classes=[p.IsAuthenticated])
     @u.require_mobile_vcode
     def bind_new_mobile(self, request):
-        assert time() < int(request.session.get('mobile_unbind_before')), \
-            '尚未验证旧手机号'
+        # assert time() < int(request.session.get('mobile_unbind_before')), \
+        #     '尚未验证旧手机号'
+        assert not m.Member.objects.filter(mobile=request.data.get('mobile', '')).exists(), \
+            '您要變更的手機號碼已經註冊，不能綁定'
         assert hasattr(request.user, 'member'), '非客户用户无法换绑手机号'
         request.user.member.mobile = u.sanitize_mobile(
             request.data.get('mobile', '')
@@ -715,6 +717,11 @@ class MemberViewSet(viewsets.ModelViewSet):
                 qs = member.get_follow()
             elif member and is_followed:
                 qs = member.get_followed()
+
+        invite = self.request.query_params.get('invite')
+        if invite:
+            qs = qs.filter(user__contacts_owned__user=self.request.user
+                           ).exclude(user__contacts_related__author=self.request.user)
         return qs
 
     @list_route(methods=['post'])
@@ -745,6 +752,25 @@ class MemberViewSet(viewsets.ModelViewSet):
             else not member.is_followed_by_current_user()
         member.set_followed_by(request.user, is_follow)
         return u.response_success('')
+
+    @list_route(methods=['GET'])
+    def get_contact_list(self, request):
+        # 当前用户所有联系人
+        contact_list = m.Member.objects.filter(m.models.Q(user__contacts_related__author=self.request.user),
+                                               m.models.Q(user__contacts_owned__user=self.request.user))
+
+        data = []
+        for contact in contact_list:
+            unread = m.Message.objects.filter(sender=contact.user,
+                                              receiver=self.request.user,
+                                              is_read=False).count()
+            data.append(dict(
+                id=contact.user.id,
+                nickname=contact.nickname,
+                avatar_url=contact.avatar.image.url,
+                unread=unread,
+            ))
+        return Response(data=data)
 
 
 class RobotViewSet(viewsets.ModelViewSet):
@@ -940,6 +966,21 @@ class LiveWatchLogViewSet(viewsets.ModelViewSet):
             qs = qs.filter(live=live_id)
         return qs
 
+    @list_route(methods=['POST'])
+    def start_watch_log(self, request):
+        live_id = request.data.get('live')
+        live = m.Live.objects.get(pk=live_id)
+        m.LiveWatchLog.enter_live(request.user, live)
+        return Response(data=True)
+
+    @list_route(methods=['POST'])
+    def leave_live(self, request):
+        live_id = request.data.get('live')
+        live = m.Live.objects.get(pk=live_id)
+        log = live.watch_logs.filter(author=request.user).first()
+        log.leave_live()
+        return Response(data=True)
+
 
 class ActiveEventViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
@@ -1012,6 +1053,16 @@ class PrizeOrderViewSet(viewsets.ModelViewSet):
             if live:
                 qs = qs.filter(live_watch_log__live=live)
         return qs
+
+    @list_route(methods=['POST'])
+    def buy_prize(self, request):
+        # todo
+        live = m.Live.objects.get(pk=request.data.get('live'))
+        prize = m.Prize.objects.get(pk=request.data.get('prize'))
+        count = request.data.get('count')
+        m.PrizeOrder.buy_price(live, prize, count, request.user)
+
+        return Response(data=True)
 
 
 class ExtraPrizeViewSet(viewsets.ModelViewSet):
@@ -1152,13 +1203,9 @@ class UserMarkViewSet(viewsets.ModelViewSet):
     queryset = m.UserMark.objects.all()
     serializer_class = s.UserMarkSerializer
 
-    def get_queryset(self):
-        qs = interceptor_get_queryset_kw_field(self)
-        activeevent_id = self.request.query_params.get('activeevent')
-        if activeevent_id:
-            qs = qs.filter(
-                object_id=activeevent_id,
-                subject='like',
-                content_type=m.ContentType.objects.get(model='activeevent'),
-            ).order_by('-date_created')
-        return qs
+
+
+class ContactViewSet(viewsets.ModelViewSet):
+    filter_fields = '__all__'
+    queryset = m.Contact.objects.all()
+    serializer_class = s.ContactSerializer

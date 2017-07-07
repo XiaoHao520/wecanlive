@@ -123,6 +123,27 @@ class Member(AbstractMember,
             duration += live.get_duration()
         return duration
 
+    def get_diamond_balance(self):
+        # 钻石余额
+        # 支出鑽石數
+        credit_diamond = self.user.creditdiamondtransactions_credit.all().aggregate(
+            amount=models.Sum('amount')).get('amount') or 0
+        # 收入鑽石數
+        debit_diamond = self.user.creditdiamondtransactions_debit.all().aggregate(
+            amount=models.Sum('amount')).get('amount') or 0
+        # todo: 可能要考虑提现中的钻石数量，如果提现就生成一条扣除钻石的流水就不用考虑了
+        return debit_diamond - credit_diamond
+
+    def get_coin_balance(self):
+        # 金币余额
+        # 支出金币
+        credit_coin = self.user.creditcointransactions_credit.all().aggregate(
+            amount=models.Sum('amount')).get('amount') or 0
+        # 收入金币
+        debit_coin = self.user.creditcointransactions_debit.all().aggregate(
+            amount=models.Sum('amount')).get('amount') or 0
+        return debit_coin - credit_coin
+
     def diamond_count(self):
         """获得钻石总数
         :return:
@@ -840,6 +861,18 @@ class PrizeCategory(EntityModel):
         verbose_name_plural = '礼物分类'
         db_table = 'core_prize_category'
 
+    def get_prizes(self):
+        prizes = []
+        # todo 经验值
+        for prize in self.prizes.all():
+            prizes.append(dict(
+                id=prize.id,
+                name=prize.name,
+                price=prize.price,
+                icon=prize.icon.image.url,
+            ))
+        return prizes
+
 
 class Prize(EntityModel):
     icon = models.OneToOneField(
@@ -944,6 +977,35 @@ class PrizeOrder(UserOwnedModel):
         verbose_name = '礼物订单'
         verbose_name_plural = '礼物订单'
         db_table = 'core_prize_order'
+
+    @staticmethod
+    def buy_price(live, prize, count, user):
+        total_price = count * prize.price
+        assert user.member.get_coin_balance() > total_price, '赠送失败,余额不足'
+        log = live.watch_logs.filter(author=user).first()
+
+        # 新建礼物记录
+        # todo 新增礼物记录 要不要新建金币流水？ 如果不要，要修改get_coin_balance
+        prize_credit = user.prizetransitions_credit.create(
+            amount=total_price,
+            user_debit=live.author,
+            remark=count,
+            prize=prize,
+        )
+
+        # 新建礼物订单
+        order = prize.orders.create(
+            author=user,
+            live_watch_log=log,
+            prize_transition=prize_credit,
+        )
+
+        # todo 金币流水
+        user.creditcointransactions_credit.create(
+            user_debit=live.author,
+            amount=total_price,
+            remark='购买礼物',
+        )
 
 
 class ExtraPrize(EntityModel):

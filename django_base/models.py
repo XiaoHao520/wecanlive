@@ -1192,6 +1192,8 @@ class Contact(UserOwnedModel):
         return contact
 
 
+
+
 class ContactSetting(models.Model):
     contact = models.ForeignKey(
         verbose_name='联系人',
