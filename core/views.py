@@ -711,7 +711,6 @@ class MemberViewSet(viewsets.ModelViewSet):
         member_id = self.request.query_params.get('member')
         is_follow = self.request.query_params.get('is_follow')
         is_followed = self.request.query_params.get('is_followed')
-
         if member_id:
             member = m.Member.objects.filter(user_id=member_id).first()
             if member and is_follow:
@@ -726,7 +725,7 @@ class MemberViewSet(viewsets.ModelViewSet):
         return qs
 
     @list_route(methods=['post'])
-    def updateMemberInfo(self, request):
+    def update_member_info(self, request):
         avatar = request.data.get('avatar')
         nickname = request.data.get('nickname')
         gender = request.data.get('gender')
@@ -744,6 +743,15 @@ class MemberViewSet(viewsets.ModelViewSet):
         except ValidationError as ex:
             return Response(data=False)
         return Response(data=True)
+
+    @detail_route(methods=['POST'])
+    def follow(self, request, pk):
+        member = m.Member.objects.get(pk=pk)
+        # 指定目标状态或者反转当前的状态
+        is_follow = request.data.get('is_follow') == '1' if 'is_follow' in request.data \
+            else not member.is_followed_by_current_user()
+        member.set_followed_by(request.user, is_follow)
+        return u.response_success('')
 
     @list_route(methods=['GET'])
     def get_contact_list(self, request):
@@ -883,6 +891,7 @@ class LiveViewSet(viewsets.ModelViewSet):
         qs = interceptor_get_queryset_kw_field(self)
         member_id = self.request.query_params.get('member')
         live_status = self.request.query_params.get('live_status')
+        followed_by = self.request.query_params.get('followed_by')
         if member_id:
             member = m.Member.objects.filter(
                 user_id=member_id
@@ -898,7 +907,42 @@ class LiveViewSet(viewsets.ModelViewSet):
             qs = qs.exclude(
                 date_end=None,
             )
+        if followed_by:
+            user = m.User.objects.filter(id=followed_by).first()
+            users_following = user.member.get_follow()
+            users_friend = m.Member.objects.filter(user__contacts_related__author=user)
+            qs = qs.filter(
+                m.models.Q(author__member__in=users_following) |
+                m.models.Q(author__member__in=users_friend)
+            )
         return qs
+
+    @detail_route(methods=['POST'])
+    def follow(self, request, pk):
+        live = m.Live.objects.get(pk=pk)
+        # 指定目标状态或者反转当前的状态
+        is_follow = request.data.get('is_follow') == '1' if 'is_follow' in request.data \
+            else not live.is_followed_by_current_user()
+        live.set_followed_by(request.user, is_follow)
+        return u.response_success('')
+
+    @list_route(methods=['POST'])
+    def start_live(self, request):
+        assert not request.user.is_anonymous, '请先登录'
+        name = request.data.get('name')
+        password = request.data.get('password')
+        paid = request.data.get('paid')
+        quota = request.data.get('quota')
+        category = m.LiveCategory.objects.get(id=request.data.get('category'))
+        live = m.Live.objects.create(
+            name=name,
+            password=password,
+            paid=paid,
+            quota=quota,
+            category=category,
+            author=request.user,
+        )
+        return Response(data=s.LiveSerializer(live).data)
 
 
 class LiveBarrageViewSet(viewsets.ModelViewSet):

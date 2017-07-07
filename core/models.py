@@ -65,6 +65,16 @@ class Member(AbstractMember,
         """
         raise NotImplemented()
 
+    def is_followed_by(self, user):
+        return self.is_marked_by(user, 'follow')
+
+    def is_followed_by_current_user(self):
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_anonymous:
+            return False
+        return self.is_followed_by(user)
+
     # 标记一个跟踪
     def set_followed_by(self, user, is_follow=True):
         self.set_marked_by(user, 'follow', is_follow)
@@ -133,6 +143,22 @@ class Member(AbstractMember,
         debit_coin = self.user.creditcointransactions_debit.all().aggregate(
             amount=models.Sum('amount')).get('amount') or 0
         return debit_coin - credit_coin
+
+    def diamond_count(self):
+        """获得钻石总数
+        :return:
+        """
+        count = self.user.creditdiamondtransactions_debit.all().aggregate(
+            amount=models.Sum('amount')).get('amount') or 0
+        return int(count)
+
+    def starlight_count(self):
+        """星光指数
+        :return:
+        """
+        count = self.user.creditstarindextransactions_debit.all().aggregate(
+            amount=models.Sum('amount')).get('amount') or 0
+        return int(count)
 
 
 class Robot(models.Model):
@@ -531,6 +557,8 @@ class Live(UserOwnedModel,
     password = models.CharField(
         verbose_name='房间密码',
         max_length=45,
+        null=True,
+        blank=True,
     )
 
     date_end = models.DateTimeField(
@@ -539,14 +567,15 @@ class Live(UserOwnedModel,
         blank=True,
     )
 
-    push_url = models.URLField(
-        verbose_name='推流地址',
-    )
-
     is_private = models.BooleanField(
         verbose_name='是否隐藏',
         default=False,
         help_text='如果设置隐藏，将不能在外部列表查询到此直播',
+    )
+
+    paid = models.IntegerField(
+        verbose_name='收費',
+        default=0,
     )
 
     is_free = models.BooleanField(
@@ -596,6 +625,73 @@ class Live(UserOwnedModel,
 
     def get_like_count(self):
         return self.get_users_marked_with('like').count()
+
+    # 标记一个关注
+    def set_followed_by(self, user, is_follow=True):
+        self.set_marked_by(user, 'follow', is_follow)
+
+    def is_followed_by(self, user):
+        return self.is_marked_by(user, 'follow')
+
+    def is_followed_by_current_user(self):
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_anonymous:
+            return False
+        return self.is_followed_by(user)
+
+    def get_followed(self):
+        return Member.objects.filter(
+            user__usermarks_owned__content_type=ContentType.objects.get(
+                app_label=type(self)._meta.app_label,
+                model=type(self)._meta.model_name,
+            ),
+            user__usermarks_owned__object_id=self.pk,
+            user__usermarks_owned__subject='follow',
+        )
+
+    def get_room_id(self):
+        from hashlib import md5
+        return md5('live_{}'.format(self.pk).encode()).hexdigest()
+
+    def get_push_url(self):
+        """ 獲取推流地址
+        :return:
+        """
+        # 只有主播和管理員用戶纔可以獲取推流地址
+        from django_base.middleware import get_request
+        user = get_request().user
+        if not user.is_staff and \
+                not user.is_superuser and \
+                not user == self.author:
+            return None
+
+        # 生成推流地址
+        from time import time
+        from hashlib import md5
+        room_id = self.get_room_id()
+        biz_id = settings.TENCENT_MLVB_BIZ_ID
+        live_code = biz_id + '_' + room_id
+        key = settings.TENCENT_MLVB_PUSH_KEY
+        # 自動有效期 1 天
+        tx_time = hex(int(time()) + 24 * 3600)[2:].upper()
+        tx_secret = md5((key + live_code + tx_time).encode()).hexdigest()
+        return 'rtmp://{biz_id}.livepush.myqcloud.com/live/' \
+               '{live_code}?bizid={biz_id}' \
+               '&txSecret={tx_secret}&txTime={tx_time}' \
+            .format(biz_id=biz_id, live_code=live_code,
+                    tx_secret=tx_secret, tx_time=tx_time)
+
+    def get_play_url(self):
+        """ 獲取播放地址（FLV)
+        :return:
+        """
+        room_id = self.get_room_id()
+        biz_id = settings.TENCENT_MLVB_BIZ_ID
+        live_code = biz_id + '_' + room_id
+        return 'rtmp://{biz_id}.livepush.myqcloud.com/live/' \
+               '{live_code}.flv' \
+            .format(biz_id=biz_id, live_code=live_code)
 
 
 class LiveBarrage(UserOwnedModel,
@@ -1127,6 +1223,31 @@ class Activity(EntityModel):
         """
 
 
+class ActivityPage(models.Model):
+    banner = models.ForeignKey(
+        verbose_name='海报',
+        to=ImageModel,
+        related_name='activity_pages',
+    )
+
+    activity = models.ForeignKey(
+        verbose_name='活动',
+        to='Activity',
+        related_name='pages',
+    )
+
+    remark = models.TextField(
+        verbose_name='备注',
+        blank=True,
+        default='',
+    )
+
+    class Meta:
+        verbose_name = '活动页'
+        verbose_name_plural = '活动页'
+        db_table = 'core_activity_page'
+
+
 class ActivityParticipation(UserOwnedModel):
     activity = models.ForeignKey(
         verbose_name='活动',
@@ -1529,3 +1650,49 @@ class DiamondExchangeRecord(UserOwnedModel):
         verbose_name = '钻石兑换记录'
         verbose_name_plural = '钻石兑换记录'
         db_table = 'core_diamond_exchange_record'
+
+
+class VirboCard(UserOwnedModel,
+                EntityModel):
+    image_card = models.OneToOneField(
+        verbose_name='虚宝卡',
+        to=ImageModel,
+        related_name='virbo_cards',
+        null=True,
+        blank=True,
+    )
+
+    image_background = models.OneToOneField(
+        verbose_name='背景图',
+        to=ImageModel,
+        related_name='virbo_cards_as_background',
+        null=True,
+        blank=True,
+    )
+
+    STATUS_PENDING = 'PENDING'
+    STATUS_ACCEPTED = 'ACCEPTED'
+    STATUS_EXPIRED = 'EXPIRED'
+    STATUS_CHOICES = (
+        (STATUS_PENDING, '未领取'),
+        (STATUS_ACCEPTED, '已领取'),
+        (STATUS_EXPIRED, '已过期'),
+    )
+
+    status = models.CharField(
+        verbose_name='状态',
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_PENDING,
+    )
+
+    validity_days = models.IntegerField(
+        verbose_name='有效期',
+        default=10,
+        help_text='有效期天数',
+    )
+
+    class Meta:
+        verbose_name = '虚宝卡'
+        verbose_name_plural = '虚宝卡'
+        db_table = 'core_virbo_card'
