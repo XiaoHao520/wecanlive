@@ -3,6 +3,7 @@ from rest_framework.utils import model_meta
 from rest_framework import serializers
 from rest_framework.compat import set_many
 from drf_extra_fields.fields import Base64ImageField
+from drf_queryfields import QueryFieldsMixin
 
 from . import models as m
 
@@ -108,7 +109,7 @@ class UserVotableMixinSerializer(serializers.Serializer):
     myvote = serializers.ReadOnlyField()
 
 
-class UserSerializer(serializers.ModelSerializer):
+class UserSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     # real_name = serializers.ReadOnlyField(source='real_name')
     # nickname = serializers.ReadOnlyField(source='nickname')
     # gender = serializers.ReadOnlyField(source='gender')
@@ -121,21 +122,21 @@ class UserSerializer(serializers.ModelSerializer):
 
     member_nickname = serializers.ReadOnlyField(source='member.nickname')
 
-    personal_credit_score = serializers.ReadOnlyField(
-        source='get_personal_credit_score',
-    )
+    # personal_credit_score = serializers.ReadOnlyField(
+    #     source='get_personal_credit_score',
+    # )
 
-    social_credit_score = serializers.ReadOnlyField(
-        source='get_social_credit_score',
-    )
+    # social_credit_score = serializers.ReadOnlyField(
+    #     source='get_social_credit_score',
+    # )
 
-    shop_credit_score = serializers.ReadOnlyField(
-        source='get_shop_credit_score',
-    )
+    # shop_credit_score = serializers.ReadOnlyField(
+    #     source='get_shop_credit_score',
+    # )
 
-    contact_from_me = serializers.BooleanField(read_only=True)
+    # contact_from_me = serializers.BooleanField(read_only=True)
 
-    contact_to_me = serializers.BooleanField(read_only=True)
+    # contact_to_me = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = m.User
@@ -146,17 +147,17 @@ class UserSerializer(serializers.ModelSerializer):
         # )
 
 
-# class TagSerializer(serializers.ModelSerializer):
+# class TagSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 #     class Meta:
 #         model = m.Tag
 #         fields = '__all__'
-class AudioSerializer(serializers.ModelSerializer):
+class AudioSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.AudioModel
         fields = '__all__'
 
 
-class ImageSerializer(serializers.ModelSerializer):
+class ImageSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     image = Base64ImageField()
 
     class Meta:
@@ -164,13 +165,13 @@ class ImageSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
-class BankSerializer(serializers.ModelSerializer):
+class BankSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.Bank
         fields = '__all__'
 
 
-class BankAccountSerializer(serializers.ModelSerializer):
+class BankAccountSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     bank_item = BankSerializer(
         source='bank',
         read_only=True,
@@ -181,8 +182,14 @@ class BankAccountSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
-class UserDetailedSerializer(serializers.ModelSerializer):
-    institution_validation_status = serializers.ReadOnlyField()
+class UserDetailedSerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    nickname = serializers.ReadOnlyField(source='member.nickname')
+    gender = serializers.ReadOnlyField(source="member.gender")
+    age = serializers.ReadOnlyField(source="member.age")
+    constellation = serializers.ReadOnlyField(source="member.constellation")
+    avatar_url = serializers.ReadOnlyField(source="member.avatar.image.url")
+
+    # institution_validation_status = serializers.ReadOnlyField()
 
     # institution_validations = InstitutionValidationSerializer(
     #     source='institutionvalidations_owned',
@@ -190,7 +197,7 @@ class UserDetailedSerializer(serializers.ModelSerializer):
     #     many=True,
     # )
 
-    entity_store_validation_status = serializers.ReadOnlyField()
+    # entity_store_validation_status = serializers.ReadOnlyField()
 
     # entity_store_validations = EntityStoreValidationSerializer(
     #     source='entitystorevalidations_owned',
@@ -200,58 +207,47 @@ class UserDetailedSerializer(serializers.ModelSerializer):
 
     # assistant = serializers.PrimaryKeyRelatedField(read_only=True)
 
-    amount_balance = serializers.ReadOnlyField(source='get_balance')
+    # amount_balance = serializers.ReadOnlyField(source='get_balance')
 
-    amount_credit = serializers.ReadOnlyField(source='get_credit')
+    # amount_credit = serializers.ReadOnlyField(source='get_credit')
 
-    amount_advert_credit = serializers.ReadOnlyField(source='get_advert_credit')
+    # amount_advert_credit = serializers.ReadOnlyField(source='get_advert_credit')
 
-    amount_commission = serializers.ReadOnlyField(source='get_commission')
+    # amount_commission = serializers.ReadOnlyField(source='get_commission')
 
-    amount_purchase = serializers.ReadOnlyField(source='get_amount_purchase')
+    # amount_purchase = serializers.ReadOnlyField(source='get_amount_purchase')
 
-    withdraw_quota = serializers.ReadOnlyField(source='get_withdraw_quota')
+    # withdraw_quota = serializers.ReadOnlyField(source='get_withdraw_quota')
 
-    personal_validation_status_text = \
-        serializers.ReadOnlyField(source='get_personal_validation_status_text')
+    # personal_validation_status_text = \
+    #     serializers.ReadOnlyField(source='get_personal_validation_status_text')
 
-    institution_validation_status_text = \
-        serializers.ReadOnlyField(source='get_institution_validation_status_text')
+    # institution_validation_status_text = \
+    #     serializers.ReadOnlyField(source='get_institution_validation_status_text')
 
-    entity_store_validation_status_text = \
-        serializers.ReadOnlyField(source='get_entity_store_validation_status_text')
+    # entity_store_validation_status_text = \
+    #     serializers.ReadOnlyField(source='get_entity_store_validation_status_text')
 
-    personal_credit_score = serializers.ReadOnlyField(
-        source='get_personal_credit_score',
-    )
-
-    social_credit_score = serializers.ReadOnlyField(
-        source='get_social_credit_score',
-    )
-
-    shop_credit_score = serializers.ReadOnlyField(
-        source='get_shop_credit_score',
-    )
 
     class Meta:
         model = m.User
         exclude = ['password', 'user_permissions']
 
 
-class MenuSerializer(serializers.ModelSerializer):
+class MenuSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.Menu
         fields = '__all__'
 
 
-class GroupInfoSerializer(serializers.ModelSerializer):
+class GroupInfoSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.GroupInfo
         fields = '__all__'
 
 
 class GroupSerializer(AllowNestedWriteMixin,
-                      serializers.ModelSerializer):
+                      QueryFieldsMixin, serializers.ModelSerializer):
     info = GroupInfoSerializer(read_only=True)
 
     menus = serializers.PrimaryKeyRelatedField(
@@ -265,7 +261,7 @@ class GroupSerializer(AllowNestedWriteMixin,
 
 
 class MessageSerializer(AllowNestedWriteMixin,
-                        serializers.ModelSerializer):
+                        QueryFieldsMixin, serializers.ModelSerializer):
     author_item = UserSerializer(
         source='author',
         read_only=True,
@@ -284,7 +280,7 @@ class MessageSerializer(AllowNestedWriteMixin,
         fields = '__all__'
 
 
-class PaymentRecordSerializer(serializers.ModelSerializer):
+class PaymentRecordSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     # payment_url = serializers.ReadOnlyField(source='get_payment_url')
 
     # recharge_record_id = serializers.PrimaryKeyRelatedField(
@@ -312,7 +308,7 @@ class PaymentRecordSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
-class BroadcastSerializer(serializers.ModelSerializer):
+class BroadcastSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     target_text = serializers.ReadOnlyField()
 
     class Meta:
@@ -320,20 +316,20 @@ class BroadcastSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
-class AddressDistrictSerializer(serializers.ModelSerializer):
+class AddressDistrictSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.AddressDistrict
         fields = '__all__'
 
 
 # core
-class InfomableSerializer(serializers.ModelSerializer):
+class InfomableSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.InformableModel
         fields = '__all__'
 
 
-class MemberSerializer(serializers.ModelSerializer):
+class MemberSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     user = serializers.PrimaryKeyRelatedField(
         queryset=m.User.objects.all(),
     )
@@ -371,114 +367,143 @@ class MemberSerializer(serializers.ModelSerializer):
         source='get_last_live_end',
     )
 
+    is_following = serializers.BooleanField(
+        source='is_followed_by_current_user',
+        read_only=True,
+    )
+
     class Meta:
         model = m.Member
         # fields = '__all__'
-        exclude = ['session_key', 'ilive_sig', 'date_ilive_sig_expire']
+        exclude = ['session_key']
 
 
-class RobotSerializer(serializers.ModelSerializer):
+class RobotSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.Robot
         fields = '__all__'
 
 
-class CelebrityCategorySerializer(serializers.ModelSerializer):
+class CelebrityCategorySerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.CelebrityCategory
         fields = '__all__'
 
 
-class CreditStarTransactionSerializer(serializers.ModelSerializer):
+class CreditStarTransactionSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.CreditStarTransaction
         fields = '__all__'
 
 
-class CreditStarIndexTransactionSerializer(serializers.ModelSerializer):
+class CreditStarIndexTransactionSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.CreditStarIndexTransaction
         fields = '__all__'
 
 
-class CreditDiamondTransactionSerializer(serializers.ModelSerializer):
+class CreditDiamondTransactionSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.CreditDiamondTransaction
         fields = '__all__'
 
 
-class CreditCoinTransactionSerializer(serializers.ModelSerializer):
+class CreditCoinTransactionSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.CreditCoinTransaction
         fields = '__all__'
 
 
-class BadgeSerializer(serializers.ModelSerializer):
+class BadgeSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.Badge
         fields = '__all__'
 
 
-class DailyCheckInLogSerializer(serializers.ModelSerializer):
+class DailyCheckInLogSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.DailyCheckInLog
         fields = '__all__'
 
 
-class Serializer(serializers.ModelSerializer):
+class Serializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.CreditDiamondTransaction
         fields = '__all__'
 
 
-class FamilySerializer(serializers.ModelSerializer):
+class FamilySerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.Family
         fields = '__all__'
 
 
-class FamilyMemberSerializer(serializers.ModelSerializer):
+class FamilyMemberSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.FamilyMember
         fields = '__all__'
 
 
-class FamilyArticleSerializer(serializers.ModelSerializer):
+class FamilyArticleSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.FamilyArticle
         fields = '__all__'
 
 
-class FamilyMissionSerializer(serializers.ModelSerializer):
+class FamilyMissionSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.FamilyMission
         fields = '__all__'
 
 
-class FamilyMissionAchievementSerializer(serializers.ModelSerializer):
+class FamilyMissionAchievementSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.FamilyMissionAchievement
         fields = '__all__'
 
 
-class LiveCategorySerializer(serializers.ModelSerializer):
+class LiveCategorySerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.LiveCategory
         fields = '__all__'
 
 
-class LiveSerializer(serializers.ModelSerializer):
-
+class LiveSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     category = serializers.ReadOnlyField(
         source='category.name',
+    )
+
+    author_id = serializers.ReadOnlyField(
+        source='author.id',
     )
 
     nickname = serializers.ReadOnlyField(
         source='author.member.nickname',
     )
 
-    mobile = serializers.ReadOnlyField(
-        source='author.member.mobile',
+    author_avatar = serializers.ReadOnlyField(
+        source='author.member.avatar.image.url',
+    )
+
+    gender = serializers.ReadOnlyField(
+        source='author.member.gender',
+    )
+
+    constellation = serializers.ReadOnlyField(
+        source='author.member.constellation',
+    )
+
+    signature = serializers.ReadOnlyField(
+        source='author.member.signature',
+    )
+
+    age = serializers.ReadOnlyField(
+        source='author.member.age',
+    )
+
+    author_is_following = serializers.ReadOnlyField(
+        source='author.member.is_followed_by_current_user',
+        read_only=True,
     )
 
     count_comment = serializers.ReadOnlyField(
@@ -497,6 +522,24 @@ class LiveSerializer(serializers.ModelSerializer):
         source='get_like_count',
     )
 
+    # 主播粉丝数
+    count_following_author = serializers.ReadOnlyField(
+        source='author.member.get_followed_count',
+    )
+
+    # 主播追踪数
+    count_author_followed = serializers.ReadOnlyField(
+        source='author.member.get_follow_count',
+    )
+
+    count_author_diamond = serializers.ReadOnlyField(
+        source='author.member.diamond_count',
+    )
+
+    count_author_starlight = serializers.ReadOnlyField(
+        source='author.member.starlight_count',
+    )
+
     duration = serializers.ReadOnlyField(
         source='get_duration',
     )
@@ -505,18 +548,31 @@ class LiveSerializer(serializers.ModelSerializer):
         source='get_live_status',
     )
 
+    is_following = serializers.BooleanField(
+        source='is_followed_by_current_user',
+        read_only=True,
+    )
+
+    push_url = serializers.ReadOnlyField(
+        source='get_push_url',
+    )
+
+    play_url = serializers.ReadOnlyField(
+        source='get_play_url',
+    )
+
     class Meta:
         model = m.Live
-        fields = '__all__'
+        exclude = ['comments', 'informs']
 
 
-class LiveBarrageSerializer(serializers.ModelSerializer):
+class LiveBarrageSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.LiveBarrage
         fields = '__all__'
 
 
-class LiveWatchLogSerializer(serializers.ModelSerializer):
+class LiveWatchLogSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     user_id = serializers.ReadOnlyField(
         source='author.id',
     )
@@ -558,7 +614,13 @@ class LiveWatchLogSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
-class ActiveEventSerializer(serializers.ModelSerializer):
+class ActiveEventSerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    images_item = ImageSerializer(
+        source='images',
+        many=True,
+        read_only=True,
+    )
+
     count_amount = serializers.ReadOnlyField(
         source='get_comment_count',
     )
@@ -572,13 +634,13 @@ class ActiveEventSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
-class PrizeCategorySerializer(serializers.ModelSerializer):
+class PrizeCategorySerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.PrizeCategory
         fields = '__all__'
 
 
-class PrizeSerializer(serializers.ModelSerializer):
+class PrizeSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     icon_item = ImageSerializer(
         source='icon',
         read_only=True,
@@ -589,14 +651,13 @@ class PrizeSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
-class PrizeTransitionSerializer(serializers.ModelSerializer):
+class PrizeTransitionSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.PrizeTransition
         fields = '__all__'
 
 
-class PrizeOrderSerializer(serializers.ModelSerializer):
-
+class PrizeOrderSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     prize_name = serializers.ReadOnlyField(
         source='prize.name',
     )
@@ -630,103 +691,131 @@ class PrizeOrderSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
-class ExtraPrizeSerializer(serializers.ModelSerializer):
+class ExtraPrizeSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.ExtraPrize
         fields = '__all__'
 
 
-class StatisticRuleSerializer(serializers.ModelSerializer):
+class StatisticRuleSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.StatisticRule
         fields = '__all__'
 
 
-class ActivitySerializer(serializers.ModelSerializer):
+class ActivitySerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.Activity
         fields = '__all__'
 
 
-class ActivityParticipationSerializer(serializers.ModelSerializer):
+class ActivityParticipationSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.ActivityParticipation
         fields = '__all__'
 
 
-class NotificationsSerializer(serializers.ModelSerializer):
+class NotificationsSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.Notifications
         fields = '__all__'
 
 
-class VisitLogSerializer(serializers.ModelSerializer):
+class VisitLogSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.VisitLog
         fields = '__all__'
 
 
-class MovieSerializer(serializers.ModelSerializer):
+class MovieSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.Movie
         fields = '__all__'
 
 
-class StarBoxSerializer(serializers.ModelSerializer):
+class StarBoxSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.StarBox
         fields = '__all__'
 
 
-class StarBoxRecordSerializer(serializers.ModelSerializer):
+class StarBoxRecordSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.CreditDiamondTransaction
         fields = '__all__'
 
 
-class RedBagRecordSerializer(serializers.ModelSerializer):
+class RedBagRecordSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.RedBagRecord
         fields = '__all__'
 
 
-class StarMissionAchievementSerializer(serializers.ModelSerializer):
+class StarMissionAchievementSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.StarMissionAchievement
         fields = '__all__'
 
 
-class LevelOptionSerializer(serializers.ModelSerializer):
+class LevelOptionSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.LevelOption
         fields = '__all__'
 
 
-class InformSerializer(serializers.ModelSerializer):
+class InformSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.Inform
         fields = '__all__'
 
 
-class FeedbackSerializer(serializers.ModelSerializer):
+class FeedbackSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.Feedback
         fields = '__all__'
 
 
-class BannerSerializer(serializers.ModelSerializer):
+class BannerSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.Banner
         fields = '__all__'
 
 
-class SensitiveWordSerializer(serializers.ModelSerializer):
+class SensitiveWordSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.SensitiveWord
         fields = '__all__'
 
 
-class DiamondExchangeRecordSerializer(serializers.ModelSerializer):
+class DiamondExchangeRecordSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.DiamondExchangeRecord
+        fields = '__all__'
+
+
+class CommentSerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    author_avatar = serializers.ReadOnlyField(
+        source='author.member.avatar.image.url',
+    )
+
+    author_nickname = serializers.ReadOnlyField(
+        source='author.member.nickname'
+    )
+
+    class Meta:
+        model = m.Comment
+        fields = '__all__'
+
+
+class UserMarkSerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    author_avatar = serializers.ReadOnlyField(
+        source='author.member.avatar.image.url',
+    )
+
+    author_nickname = serializers.ReadOnlyField(
+        source='author.member.nickname'
+    )
+
+    class Meta:
+        model = m.UserMark
         fields = '__all__'

@@ -420,6 +420,7 @@ class UserViewSet(viewsets.ModelViewSet):
         try:
             vcode = u.request_mobile_vcode(request, mobile)
         except ValidationError as ex:
+
             return response_fail(ex.message, 40032)
 
         msg = '验证码已发送成功'
@@ -659,7 +660,7 @@ class MemberViewSet(viewsets.ModelViewSet):
         ).first()
 
         if user:
-            return response_fail('注册失败，手机号已被抢注', 40031)
+            return response_fail('註冊失敗，手機號碼已被註冊！', 40031)
 
         # 执行创建
         user = m.User.objects.create_user(
@@ -717,7 +718,7 @@ class MemberViewSet(viewsets.ModelViewSet):
         return qs
 
     @list_route(methods=['post'])
-    def updateMemberInfo(self, request):
+    def update_member_info(self, request):
         avatar = request.data.get('avatar')
         nickname = request.data.get('nickname')
         gender = request.data.get('gender')
@@ -731,14 +732,19 @@ class MemberViewSet(viewsets.ModelViewSet):
             request.user.member.gender = gender
             request.user.member.age = age
             request.user.member.constellation = constellation
-            print(nickname)
-            print(gender)
-            print(age)
-            print(constellation)
             request.user.member.save()
         except ValidationError as ex:
             return Response(data=False)
         return Response(data=True)
+
+    @detail_route(methods=['POST'])
+    def follow(self, request, pk):
+        member = m.Member.objects.get(pk=pk)
+        # 指定目标状态或者反转当前的状态
+        is_follow = request.data.get('is_follow') == '1' if 'is_follow' in request.data \
+            else not member.is_followed_by_current_user()
+        member.set_followed_by(request.user, is_follow)
+        return u.response_success('')
 
 
 class RobotViewSet(viewsets.ModelViewSet):
@@ -769,6 +775,28 @@ class CreditDiamondTransactionViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.CreditDiamondTransaction.objects.all()
     serializer_class = s.CreditDiamondTransactionSerializer
+
+    @list_route(methods=['GET'])
+    def get_ranking_list(self, request):
+        """
+        获取钻石获得数排行榜
+        :param request:
+        :return:
+        """
+        # type   0:日榜； 1:周榜； 2：总榜
+        type = request.data.get('type')
+        data = []
+        users = []
+        transactions = m.CreditDiamondTransaction.objects.filter(user_debit=request.user)
+        for transaction in transactions:
+            if not transaction.user_credit in users:
+                users.append(transaction.user_credit)
+        for user in users:
+            amount = m.CreditDiamondTransaction.objects.filter(
+                user_debit=request.user,
+                user_credit=user).all().aggregate(amount=models.Sum('amount')).get('amount') or 0
+            print(amount)
+        return Response(data=data)
 
 
 class CreditCoinTransactionViewSet(viewsets.ModelViewSet):
@@ -837,6 +865,7 @@ class LiveViewSet(viewsets.ModelViewSet):
         qs = interceptor_get_queryset_kw_field(self)
         member_id = self.request.query_params.get('member')
         live_status = self.request.query_params.get('live_status')
+        followed_by = self.request.query_params.get('followed_by')
         if member_id:
             member = m.Member.objects.filter(
                 user_id=member_id
@@ -852,7 +881,42 @@ class LiveViewSet(viewsets.ModelViewSet):
             qs = qs.exclude(
                 date_end=None,
             )
+        if followed_by:
+            user = m.User.objects.filter(id=followed_by).first()
+            users_following = user.member.get_follow()
+            users_friend = m.Member.objects.filter(user__contacts_related__author=user)
+            qs = qs.filter(
+                m.models.Q(author__member__in=users_following) |
+                m.models.Q(author__member__in=users_friend)
+            )
         return qs
+
+    @detail_route(methods=['POST'])
+    def follow(self, request, pk):
+        live = m.Live.objects.get(pk=pk)
+        # 指定目标状态或者反转当前的状态
+        is_follow = request.data.get('is_follow') == '1' if 'is_follow' in request.data \
+            else not live.is_followed_by_current_user()
+        live.set_followed_by(request.user, is_follow)
+        return u.response_success('')
+
+    @list_route(methods=['POST'])
+    def start_live(self, request):
+        assert not request.user.is_anonymous, '请先登录'
+        name = request.data.get('name')
+        password = request.data.get('password')
+        paid = request.data.get('paid')
+        quota = request.data.get('quota')
+        category = m.LiveCategory.objects.get(id=request.data.get('category'))
+        live = m.Live.objects.create(
+            name=name,
+            password=password,
+            paid=paid,
+            quota=quota,
+            category=category,
+            author=request.user,
+        )
+        return Response(data=s.LiveSerializer(live).data)
 
 
 class LiveBarrageViewSet(viewsets.ModelViewSet):
@@ -1045,3 +1109,47 @@ class DiamondExchangeRecordViewSet(viewsets.ModelViewSet):
     queryset = m.DiamondExchangeRecord.objects.all()
     serializer_class = s.DiamondExchangeRecordSerializer
 
+
+class CommentViewSet(viewsets.ModelViewSet):
+    filter_fields = '__all__'
+    queryset = m.Comment.objects.all()
+    serializer_class = s.CommentSerializer
+
+    def perform_create(self, serializer):
+        serializer.save(author=self.request.user)
+
+    def get_queryset(self):
+        qs = interceptor_get_queryset_kw_field(self)
+        activeevent_id = self.request.query_params.get('activeevent')
+        if activeevent_id:
+            qs = qs.filter(activeevents__id=activeevent_id,
+                           is_active=True, ).order_by('-date_created')
+        return qs
+
+    @list_route(methods=['POST'])
+    def add_comment(self, request):
+        activeevent_id = request.data.get('activeevent')
+        content = request.data.get('content')
+
+        if activeevent_id:
+            activeevent = m.ActiveEvent.objects.get(pk=activeevent_id)
+            activeevent.comments.create(author=self.request.user, content=content)
+
+        return Response(data=True)
+
+
+class UserMarkViewSet(viewsets.ModelViewSet):
+    filter_fields = '__all__'
+    queryset = m.UserMark.objects.all()
+    serializer_class = s.UserMarkSerializer
+
+    def get_queryset(self):
+        qs = interceptor_get_queryset_kw_field(self)
+        activeevent_id = self.request.query_params.get('activeevent')
+        if activeevent_id:
+            qs = qs.filter(
+                object_id=activeevent_id,
+                subject='like',
+                content_type=m.ContentType.objects.get(model='activeevent'),
+            ).order_by('-date_created')
+        return qs

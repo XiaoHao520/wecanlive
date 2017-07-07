@@ -191,17 +191,17 @@ class GeoPositionedModel(models.Model):
     class Meta:
         abstract = True
 
-    def save(self, *args, **kwargs):
-        print('save geo positioned model')
-        # 自动解析地理位置
-        if settings.AUTO_GEO_DECODE:
-            try:
-                info = self.get_geo_decode()
-                self.geo_info = json.dumps(info)
-                self.adcode = info.get('addressComponent').get('adcode')
-            except:
-                pass
-        super().save(self, *args, **kwargs)
+    # def save(self, *args, **kwargs):
+    #     print('save geo positioned model')
+    #     # 自动解析地理位置
+    #     if settings.AUTO_GEO_DECODE:
+    #         try:
+    #             info = self.get_geo_decode()
+    #             self.geo_info = json.dumps(info)
+    #             self.adcode = info.get('addressComponent').get('adcode')
+    #         except:
+    #             pass
+    #     super().save(self, *args, **kwargs)
 
     @staticmethod
     def inside_china(lat, lng):
@@ -1217,7 +1217,8 @@ class ContactSetting(models.Model):
         unique_together = [('contact', 'key')]
 
 
-class UserMark(UserOwnedModel):
+class UserMark(UserOwnedModel,
+               EntityModel):
     """ 用于让用户对某类对象产生标记的
     例如：用户收藏商品
     UserMark.objects.create(author=user, object=goods, subject='collect')
@@ -1239,7 +1240,8 @@ class UserMark(UserOwnedModel):
         unique_together = [['author', 'content_type', 'object_id', 'subject']]
 
     def __str__(self):
-        return '{} - Content type:{}- id:{} - 类型:{}'.format(self.author, self.content_type, self.object_id, self.subject)
+        return '{} - Content type:{}- id:{} - 类型:{}'.format(self.author, self.content_type, self.object_id,
+                                                            self.subject)
 
 
 class UserMarkableModel(models.Model):
@@ -1257,6 +1259,19 @@ class UserMarkableModel(models.Model):
             usermarks_owned__object_id=self.pk,
             usermarks_owned__subject=subject,
         )
+
+    def is_marked_by(self, user, subject, model=None):
+        model = model or type(self)
+        content_type = ContentType.objects.get(
+            app_label=model._meta.app_label,
+            model=model._meta.model_name,
+        )
+        return UserMark.objects.filter(
+            author=user,
+            content_type=content_type,
+            object_id=self.pk,
+            subject=subject,
+        ).exists()
 
     def set_marked_by(self, user, subject, is_marked=True, model=None):
         model = model or type(self)
