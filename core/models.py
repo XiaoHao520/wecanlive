@@ -689,7 +689,7 @@ class Live(UserOwnedModel,
         room_id = self.get_room_id()
         biz_id = settings.TENCENT_MLVB_BIZ_ID
         live_code = biz_id + '_' + room_id
-        return 'rtmp://{biz_id}.livepush.myqcloud.com/live/' \
+        return 'http://{biz_id}.livepush.myqcloud.com/live/' \
                '{live_code}.flv' \
             .format(biz_id=biz_id, live_code=live_code)
 
