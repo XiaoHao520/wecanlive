@@ -229,8 +229,8 @@ class CreditStarTransaction(AbstractTransactionModel):
 
 class CreditStarIndexTransaction(AbstractTransactionModel):
     class Meta:
-        verbose_name = '星光指数流水'
-        verbose_name_plural = '星光指数流水'
+        verbose_name = '星光指数（元氣）流水'
+        verbose_name_plural = '星光指数（元氣）流水'
         db_table = 'core_credit_star_index_transaction'
 
 
@@ -955,14 +955,67 @@ class PrizeTransition(AbstractTransactionModel):
         related_name='transitions',
     )
 
+    # prize_count = models.IntegerField(
+    #     verbose_name='礼物数量',
+    #     default=1
+    # )
+
     class Meta:
         verbose_name = '礼物记录'
         verbose_name_plural = '礼物记录'
         db_table = 'core_prize_transition'
 
+    @staticmethod
+    def send_active_prize(live, count, prize, user_id):
+        user = User.objects.get(pk=user_id)
+        amount = prize.price * count
+        log = live.watch_logs.filter(author=user).first()
+
+        accept = user.prizetransitions_debit.filter(
+            prize=prize,
+            user_credit=None,
+        ).all().aggregate(amount=models.Sum('amount')).get('amount') or 0
+
+        send = user.prizetransitions_credit.filter(
+            prize=prize,
+        ).exclude(
+            user_debit=None
+        ).all().aggregate(amount=models.Sum('amount')).get('amount') or 0
+
+        total = int((accept - send) / prize.price)
+        assert total > count, '贈送失敗，禮物剩餘不足'
+        user.prizetransitions_credit.create(
+            user_debit=live.author,
+            amount=amount,
+            remark=count,
+            prize=prize,
+        )
+
+        # 钻石流水
+        diamond_transition = live.author.creditdiamondtransactions_debit.create(
+            amount=amount,
+            remark='禮物兌換',
+            type='LIVE_GIFT',
+            live=live,
+            live_watch_log=log,
+        )
+
 
 class PrizeOrder(UserOwnedModel):
     """ 礼物订单，关联到用户在哪个直播里面购买了礼物，需要关联到对应的礼物转移记录
+    ### 如果是在直播界面直接購買並贈送禮物
+    禮物是即時購買並贈送的，會涉及下列的動作：
+    1. 添加 PrizeTransaction，user_debit 是 主播， user_credit 是 None
+    2. 添加 CoinTransaction，user_debit 是 None，user_credit 是 送禮的觀衆用戶
+    3. 添加 DiamondTransaction，user_debit 是 主播，user_credit 是 None
+    4. 添加 PrizeOrder，關聯上述三條流水
+    ### 如果是在活動中獲得禮物獎勵
+    1. 不添加 PrizeOrder
+    2. 添加 PrizeTransaction，user_debit 是 獲得獎勵的用戶，user_credit 是 None
+    ### 如果在直播中上使用活動獎勵得到的禮物
+    1. 不添加 PrizeOrder
+    2. 添加 PrizeTransaction，user_debit 是 主播，user_credit 是 送禮的觀衆用戶
+    3. 添加 DiamondTransaction，user_debit 是 主播，user_credit 是 None
     """
     prize = models.ForeignKey(
         verbose_name='礼物',
@@ -976,10 +1029,22 @@ class PrizeOrder(UserOwnedModel):
         related_name='prize_orders',
     )
 
-    prize_transition = models.ForeignKey(
+    prize_transition = models.OneToOneField(
         verbose_name='礼物记录',
         to='PrizeTransition',
-        related_name='orders',
+        related_name='prize_orders',
+    )
+
+    coin_transition = models.OneToOneField(
+        verbose_name='金幣消費记录',
+        to='CreditCoinTransaction',
+        related_name='prize_orders',
+    )
+
+    diamond_transition = models.OneToOneField(
+        verbose_name='主播鑽石记录',
+        to='CreditDiamondTransaction',
+        related_name='prize_orders',
     )
 
     date_created = models.DateTimeField(
@@ -993,33 +1058,44 @@ class PrizeOrder(UserOwnedModel):
         db_table = 'core_prize_order'
 
     @staticmethod
-    def buy_price(live, prize, count, user):
+    def buy_prize(live, prize, count, user_id):
         total_price = count * prize.price
+        user = User.objects.get(pk=user_id)
         assert user.member.get_coin_balance() > total_price, '赠送失败,余额不足'
         log = live.watch_logs.filter(author=user).first()
-
-        # 新建礼物记录
-        # todo 新增礼物记录 要不要新建金币流水？ 如果不要，要修改get_coin_balance
-        prize_credit = user.prizetransitions_credit.create(
+        # 礼物流水
+        prize_transition = user.prizetransitions_credit.create(
             amount=total_price,
             user_debit=live.author,
             remark=count,
             prize=prize,
         )
 
-        # 新建礼物订单
-        order = prize.orders.create(
-            author=user,
-            live_watch_log=log,
-            prize_transition=prize_credit,
+        # 金币流水
+        coin_transition = user.creditcointransactions_credit.create(
+            amount=total_price,
+            remark='購買禮物',
         )
 
-        # todo 金币流水
-        user.creditcointransactions_credit.create(
-            user_debit=live.author,
+        # 钻石流水
+        diamond_transition = live.author.creditdiamondtransactions_debit.create(
             amount=total_price,
-            remark='购买礼物',
+            remark='禮物兌換',
+            type='LIVE_GIFT',
+            live=live,
+            live_watch_log=log,
         )
+
+        # 礼物订单
+        order = user.prizeorders_owned.create(
+            prize=prize,
+            live_watch_log=log,
+            prize_transition=prize_transition,
+            coin_transition=coin_transition,
+            diamond_transition=diamond_transition,
+        )
+
+        return order
 
 
 class ExtraPrize(EntityModel):
