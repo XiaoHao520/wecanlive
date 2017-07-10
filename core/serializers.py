@@ -188,6 +188,17 @@ class UserDetailedSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     age = serializers.ReadOnlyField(source="member.age")
     constellation = serializers.ReadOnlyField(source="member.constellation")
     avatar_url = serializers.ReadOnlyField(source="member.avatar.image.url")
+    signature = serializers.ReadOnlyField(source="member.signature")
+    diamond_balance = serializers.ReadOnlyField(source='member.get_diamond_balance')
+    coin_balance = serializers.ReadOnlyField(source='member.get_coin_balance')
+    # 跟踪数量
+    count_follow = serializers.ReadOnlyField(
+        source='member.get_follow_count',
+    )
+    # 粉丝数量
+    count_followed = serializers.ReadOnlyField(
+        source='member.get_followed_count',
+    )
 
     # institution_validation_status = serializers.ReadOnlyField()
 
@@ -519,10 +530,6 @@ class LiveSerializer(QueryFieldsMixin, serializers.ModelSerializer):
         source='author.member.nickname',
     )
 
-    mobile = serializers.ReadOnlyField(
-        source='author.member.mobile',
-    )
-
     author_avatar = serializers.ReadOnlyField(
         source='author.member.avatar.image.url',
     )
@@ -663,20 +670,36 @@ class ActiveEventSerializer(QueryFieldsMixin, serializers.ModelSerializer):
         read_only=True,
     )
 
-    author_nickname = serializers.ReadOnlyField(
-        source='author.member.nickname',
-    )
-
-    author_mobile = serializers.ReadOnlyField(
-        source='author.member.mobile',
-    )
-
-    count_amount = serializers.ReadOnlyField(
+    count_comment = serializers.ReadOnlyField(
         source='get_comment_count',
     )
 
     count_like = serializers.ReadOnlyField(
         source='get_like_count',
+    )
+
+    avatar_url = serializers.ReadOnlyField(
+        source='author.member.avatar.image.url',
+    )
+
+    nickname = serializers.ReadOnlyField(
+        source='author.member.nickname',
+    )
+
+    gender = serializers.ReadOnlyField(
+        source='author.gender',
+    )
+
+    age = serializers.ReadOnlyField(
+        source='author.member.age',
+    )
+
+    constellation = serializers.ReadOnlyField(
+        source='author.member.constellation',
+    )
+
+    author_is_following = serializers.ReadOnlyField(
+        source='author.member.is_followed_by_current_user',
     )
 
     class Meta:
@@ -685,6 +708,9 @@ class ActiveEventSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
 
 class PrizeCategorySerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    prizes_item = serializers.ReadOnlyField(
+        source='get_prizes',
+    )
     class Meta:
         model = m.PrizeCategory
         fields = '__all__'
@@ -849,14 +875,8 @@ class CommentSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     )
 
     author_nickname = serializers.ReadOnlyField(
-        source='author.member.nickname',
+        source='author.member.nickname'
     )
-
-    author_mobile = serializers.ReadOnlyField(
-        source='author.member.mobile',
-    )
-
-    watch_status = serializers.ReadOnlyField()
 
     class Meta:
         model = m.Comment
@@ -874,4 +894,10 @@ class UserMarkSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
     class Meta:
         model = m.UserMark
+        fields = '__all__'
+
+
+class ContactSerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    class Meta:
+        model = m.Contact
         fields = '__all__'
