@@ -138,6 +138,24 @@ class Member(AbstractMember,
             duration += live.get_duration()
         return duration
 
+    def credit_diamond(self):
+        return self.user.creditdiamondtransactions_credit.all().aggregate(
+            amount=models.Sum('amount')).get('amount') or 0
+
+    def debit_diamond(self):
+        return self.user.creditdiamondtransactions_debit.all().aggregate(
+            amount=models.Sum('amount')).get('amount') or 0
+
+    def credit_star_index(self):
+        return self.user.creditstarindextransactions_credit.all().aggregate(
+            amount=models.Sum('amount')
+        ).get('amount') or 0
+
+    def debit_star_index(self):
+        return self.user.creditstarindextransactions_debit.all().aggregate(
+            amount=models.Sum('amount')
+        ).get('amount') or 0
+
     def get_diamond_balance(self):
         # 钻石余额
         # 支出鑽石數
@@ -788,6 +806,12 @@ class LiveWatchLog(UserOwnedModel,
         verbose_name_plural = '直播观看记录'
         db_table = 'core_live_watch_log'
 
+    def __str__(self):
+        return '{} - {}'.format(
+            self.author.member.mobile,
+            self.live.name,
+        )
+
     def get_comment_count(self):
         return self.comments.count()
 
@@ -875,6 +899,10 @@ class ActiveEvent(UserOwnedModel,
     def get_like_count(self):
         return self.get_users_marked_with('like').count()
 
+    def get_preview(self):
+        if self.images.first():
+            return self.images.first()
+
 
 class PrizeCategory(EntityModel):
     class Meta:
@@ -893,6 +921,9 @@ class PrizeCategory(EntityModel):
                 icon=prize.icon.image.url,
             ))
         return prizes
+
+    def get_count_prize(self):
+        return self.prizes.all().count()
 
 
 class Prize(EntityModel):

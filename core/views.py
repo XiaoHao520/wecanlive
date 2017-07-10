@@ -722,6 +722,12 @@ class MemberViewSet(viewsets.ModelViewSet):
         if invite:
             qs = qs.filter(user__contacts_owned__user=self.request.user
                            ).exclude(user__contacts_related__author=self.request.user)
+
+        rank_type = self.request.query_params.get('rank_type')
+        if rank_type:
+            print(rank_type)
+        #     todo 根據排行榜類型進行排行 'rank_diamond'、'rank_prize'、'rank_star'
+
         return qs
 
     @list_route(methods=['post'])
