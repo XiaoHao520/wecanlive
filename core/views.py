@@ -1025,6 +1025,17 @@ class PrizeViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return interceptor_get_queryset_kw_field(self)
 
+    @list_route(methods=['GET'])
+    def get_user_prize_emoji(self, request):
+        prize = m.Prize.objects.filter(
+            date_sticker_begin__lt=datetime.now(),
+            date_sticker_end__gt=datetime.now(),
+            orders__author=request.user,
+        ).exclude(stickers=None)
+        print(prize)
+
+        return Response(data=True)
+
 
 class PrizeTransitionViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'

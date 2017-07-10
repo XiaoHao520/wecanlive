@@ -12,9 +12,9 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AlterField(
-            model_name='member',
-            name='ilive_sig',
-            field=models.TextField(blank=True, default='', help_text='由ilive模块封装的腾讯云SDK产生', verbose_name='iLive鉴权密钥'),
-        ),
+        # migrations.AlterField(
+        #     model_name='member',
+        #     name='ilive_sig',
+        #     field=models.TextField(blank=True, default='', help_text='由ilive模块封装的腾讯云SDK产生', verbose_name='iLive鉴权密钥'),
+        # ),
     ]
