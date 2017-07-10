@@ -926,6 +926,15 @@ class LiveViewSet(viewsets.ModelViewSet):
         live.set_followed_by(request.user, is_follow)
         return u.response_success('')
 
+    @detail_route(methods=['POST'])
+    def like(self, request, pk):
+        live = m.Live.objects.get(pk=pk)
+        # 指定目标状态或者反转当前的状态
+        is_like = request.data.get('is_like') == '1' if 'is_like' in request.data \
+            else not live.is_liked_by_current_user()
+        live.set_like_by(request.user, is_like)
+        return u.response_success('')
+
     @list_route(methods=['POST'])
     def start_live(self, request):
         assert not request.user.is_anonymous, '请先登录'
@@ -943,6 +952,14 @@ class LiveViewSet(viewsets.ModelViewSet):
             author=request.user,
         )
         return Response(data=s.LiveSerializer(live).data)
+
+    @detail_route(methods=['POST'])
+    def live_end(self, request, pk):
+        assert not request.user.is_anonymous, '请先登录'
+        live = m.Live.objects.get(pk=pk)
+        live.date_end = datetime.now()
+        live.save()
+        return Response(data=True)
 
 
 class LiveBarrageViewSet(viewsets.ModelViewSet):
@@ -1006,6 +1023,18 @@ class ActiveEventViewSet(viewsets.ModelViewSet):
                 m.models.Q(author__member__in=users_friend)
             )
         return qs
+
+    @detail_route(methods=['POST'])
+    def like(self, request, pk):
+        active_event = m.ActiveEvent.objects.get(pk=pk)
+        # 指定目标状态或者反转当前的状态
+        is_like = request.data.get('is_like') == '1' if 'is_like' in request.data \
+            else not active_event.is_liked_by_current_user()
+        active_event.set_like_by(request.user, is_like)
+        return Response(data=dict(
+            is_like=active_event.is_liked_by_current_user(),
+            count_like=active_event.get_like_count(),
+        ))
 
 
 class PrizeCategoryViewSet(viewsets.ModelViewSet):
@@ -1213,7 +1242,6 @@ class UserMarkViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.UserMark.objects.all()
     serializer_class = s.UserMarkSerializer
-
 
 
 class ContactViewSet(viewsets.ModelViewSet):

@@ -649,7 +649,7 @@ class ActiveEventSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     )
 
     gender = serializers.ReadOnlyField(
-        source='author.gender',
+        source='author.member.gender',
     )
 
     age = serializers.ReadOnlyField(
@@ -662,6 +662,10 @@ class ActiveEventSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
     author_is_following = serializers.ReadOnlyField(
         source='author.member.is_followed_by_current_user',
+    )
+
+    is_like = serializers.ReadOnlyField(
+        source='is_liked_by_current_user'
     )
 
     class Meta:
@@ -814,6 +818,10 @@ class FeedbackSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
 
 class BannerSerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    image_url = serializers.ReadOnlyField(
+        source='image.image.url',
+    )
+
     class Meta:
         model = m.Banner
         fields = '__all__'
