@@ -1087,6 +1087,7 @@ class PrizeViewSet(viewsets.ModelViewSet):
 
     @list_route(methods=['GET'])
     def get_user_prize_emoji(self, request):
+        # todo 获得当前用户送过的礼物没过期的表情包
         prize = m.Prize.objects.filter(
             date_sticker_begin__lt=datetime.now(),
             date_sticker_end__gt=datetime.now(),
