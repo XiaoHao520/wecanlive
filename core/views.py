@@ -1005,7 +1005,17 @@ class PrizeCategoryViewSet(viewsets.ModelViewSet):
     serializer_class = s.PrizeCategorySerializer
 
     def get_queryset(self):
-        return interceptor_get_queryset_kw_field(self)
+        qs = interceptor_get_queryset_kw_field(self)
+
+        normal = self.request.query_params.get('normal')
+        special_category = ('活动礼物', '宝盒礼物', 'VIP回馈礼物')
+        if normal:
+            qs = qs.filter(
+                is_active=True,
+            ).exclude(
+                name__in=special_category
+            )
+        return qs
 
 
 class PrizeViewSet(viewsets.ModelViewSet):
@@ -1017,13 +1027,71 @@ class PrizeViewSet(viewsets.ModelViewSet):
         return interceptor_get_queryset_kw_field(self)
 
     @list_route(methods=['GET'])
+    def get_user_active_prize(self, request):
+        # 获得当前用户的活动礼物
+        me = m.User.objects.get(pk=request.user.id)
+
+        active_category = ('活动礼物', '宝盒礼物', 'VIP回馈礼物')
+
+        prizes = m.Prize.objects.filter(
+            category__name__in=active_category,
+            transitions__user_debit=me,
+            transitions__user_credit=None,
+        )
+
+        data = dict(
+            vip_prize=[],
+            box_prize=[],
+            active_prize=[],
+        )
+        for prize in prizes:
+            accept = me.prizetransitions_debit.filter(
+                prize=prize,
+                user_credit=None,
+            ).all().aggregate(amount=models.Sum('amount')).get('amount') or 0
+
+            send = me.prizetransitions_credit.filter(
+                prize=prize,
+            ).exclude(
+                user_debit=None
+            ).all().aggregate(amount=models.Sum('amount')).get('amount') or 0
+            count = int((accept - send) / prize.price)
+            if count > 0 and prize.category.name == '活动礼物':
+                data['active_prize'].append(dict(
+                    id=prize.id,
+                    icon=prize.icon.image.url,
+                    name=prize.name,
+                    count=count,
+                    price=prize.price,
+                    categor=prize.category.name,
+                ))
+            elif count > 0 and prize.category.name == '宝盒礼物':
+                data['box_prize'].append(dict(
+                    id=prize.id,
+                    icon=prize.icon.image.url,
+                    name=prize.name,
+                    count=count,
+                    price=prize.price,
+                    categor=prize.category.name,
+                ))
+            elif count > 0 and prize.category.name == 'VIP回馈礼物':
+                data['vip_prize'].append(dict(
+                    id=prize.id,
+                    icon=prize.icon.image.url,
+                    name=prize.name,
+                    count=count,
+                    price=prize.price,
+                    categor=prize.category.name,
+                ))
+        return Response(data=data)
+
+    @list_route(methods=['GET'])
     def get_user_prize_emoji(self, request):
         prize = m.Prize.objects.filter(
             date_sticker_begin__lt=datetime.now(),
             date_sticker_end__gt=datetime.now(),
             orders__author=request.user,
         ).exclude(stickers=None)
-        print(prize)
 
         return Response(data=True)
 
@@ -1035,6 +1103,15 @@ class PrizeTransitionViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return interceptor_get_queryset_kw_field(self)
+
+    @list_route(methods=['POST'])
+    def send_active_prize(self, request):
+        count = request.data.get('count')
+        prize = m.Prize.objects.get(pk=request.data.get('prize'))
+        live = m.Live.objects.get(pk=request.data.get('live'))
+
+        m.PrizeTransition.send_active_prize(live, count, prize, request.user.id)
+        return Response(data=True)
 
 
 class PrizeOrderViewSet(viewsets.ModelViewSet):
@@ -1062,7 +1139,7 @@ class PrizeOrderViewSet(viewsets.ModelViewSet):
         live = m.Live.objects.get(pk=request.data.get('live'))
         prize = m.Prize.objects.get(pk=request.data.get('prize'))
         count = request.data.get('count')
-        m.PrizeOrder.buy_price(live, prize, count, request.user)
+        m.PrizeOrder.buy_prize(live, prize, count, request.user.id)
 
         return Response(data=True)
 
@@ -1204,7 +1281,6 @@ class UserMarkViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.UserMark.objects.all()
     serializer_class = s.UserMarkSerializer
-
 
 
 class ContactViewSet(viewsets.ModelViewSet):
