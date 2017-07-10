@@ -623,6 +623,13 @@ class Live(UserOwnedModel,
     def set_like_by(self, user, is_like=True):
         self.set_marked_by(user, 'like', is_like)
 
+    def is_liked_by_current_user(self):
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_anonymous:
+            return False
+        return self.is_marked_by(user, 'like')
+
     def get_like_count(self):
         return self.get_users_marked_with('like').count()
 
@@ -847,6 +854,13 @@ class ActiveEvent(UserOwnedModel,
     # 標記一個點贊
     def set_like_by(self, user, is_like=True):
         self.set_marked_by(user, 'like', is_like)
+
+    def is_liked_by_current_user(self):
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_anonymous:
+            return False
+        return self.is_marked_by(user, 'like')
 
     def get_comment_count(self):
         return self.comments.count()
@@ -1598,7 +1612,7 @@ class Banner(models.Model):
     subject = models.CharField(
         verbose_name='主题',
         max_length=20,
-        blank=True,
+        choices=SUBJECT_CHOICES,
         default='',
     )
 
