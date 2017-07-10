@@ -127,7 +127,6 @@ class Member(AbstractMember,
         :return:
         """
         last_live = Live.objects.filter(author=self.user).last()
-        print(1)
         if not last_live:
             return None
         return str(last_live.date_end)
