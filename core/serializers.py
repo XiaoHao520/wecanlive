@@ -391,6 +391,44 @@ class MemberSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
 
 class RobotSerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    user = serializers.PrimaryKeyRelatedField(
+        queryset=m.User.objects.all(),
+    )
+
+    member_item = MemberSerializer(
+        source='user.member',
+        read_only=True,
+    )
+
+    avatar_item = ImageSerializer(
+        source='user.member.avatar',
+        read_only=True,
+    )
+
+    user_avatar = serializers.ReadOnlyField(
+        source='user.member.avatar.image.url',
+    )
+
+    user_id = serializers.ReadOnlyField(
+        source='user.id',
+    )
+
+    user_nickname = serializers.ReadOnlyField(
+        source='user.member.nickname',
+    )
+
+    user_gender = serializers.ReadOnlyField(
+        source='user.member.gender',
+    )
+
+    age = serializers.ReadOnlyField(
+        source='user.member.get_age',
+    )
+
+    user_constellation = serializers.ReadOnlyField(
+        source='user.member.constellation',
+    )
+
     class Meta:
         model = m.Robot
         fields = '__all__'
@@ -650,7 +688,7 @@ class ActiveEventSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     )
 
     gender = serializers.ReadOnlyField(
-        source='author.gender',
+        source='author.member.gender',
     )
 
     age = serializers.ReadOnlyField(
@@ -663,6 +701,10 @@ class ActiveEventSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
     author_is_following = serializers.ReadOnlyField(
         source='author.member.is_followed_by_current_user',
+    )
+
+    is_like = serializers.ReadOnlyField(
+        source='is_liked_by_current_user'
     )
 
     class Meta:
@@ -815,6 +857,10 @@ class FeedbackSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
 
 class BannerSerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    image_url = serializers.ReadOnlyField(
+        source='image.image.url',
+    )
+
     class Meta:
         model = m.Banner
         fields = '__all__'

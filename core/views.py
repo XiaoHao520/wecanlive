@@ -350,7 +350,7 @@ class UserViewSet(viewsets.ModelViewSet):
     @list_route(methods=['GET'])
     def current(self, request):
         if request.user.is_anonymous():
-            return response_success('尚未登录')
+            return response_fail('')
         return Response(
             data=s.UserDetailedSerializer(request.user).data
         )
@@ -926,6 +926,15 @@ class LiveViewSet(viewsets.ModelViewSet):
         live.set_followed_by(request.user, is_follow)
         return u.response_success('')
 
+    @detail_route(methods=['POST'])
+    def like(self, request, pk):
+        live = m.Live.objects.get(pk=pk)
+        # 指定目标状态或者反转当前的状态
+        is_like = request.data.get('is_like') == '1' if 'is_like' in request.data \
+            else not live.is_liked_by_current_user()
+        live.set_like_by(request.user, is_like)
+        return u.response_success('')
+
     @list_route(methods=['POST'])
     def start_live(self, request):
         assert not request.user.is_anonymous, '请先登录'
@@ -943,6 +952,14 @@ class LiveViewSet(viewsets.ModelViewSet):
             author=request.user,
         )
         return Response(data=s.LiveSerializer(live).data)
+
+    @detail_route(methods=['POST'])
+    def live_end(self, request, pk):
+        assert not request.user.is_anonymous, '请先登录'
+        live = m.Live.objects.get(pk=pk)
+        live.date_end = datetime.now()
+        live.save()
+        return Response(data=True)
 
 
 class LiveBarrageViewSet(viewsets.ModelViewSet):
@@ -1006,6 +1023,18 @@ class ActiveEventViewSet(viewsets.ModelViewSet):
                 m.models.Q(author__member__in=users_friend)
             )
         return qs
+
+    @detail_route(methods=['POST'])
+    def like(self, request, pk):
+        active_event = m.ActiveEvent.objects.get(pk=pk)
+        # 指定目标状态或者反转当前的状态
+        is_like = request.data.get('is_like') == '1' if 'is_like' in request.data \
+            else not active_event.is_liked_by_current_user()
+        active_event.set_like_by(request.user, is_like)
+        return Response(data=dict(
+            is_like=active_event.is_liked_by_current_user(),
+            count_like=active_event.get_like_count(),
+        ))
 
 
 class PrizeCategoryViewSet(viewsets.ModelViewSet):
@@ -1277,8 +1306,12 @@ class CommentViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         qs = interceptor_get_queryset_kw_field(self)
         activeevent_id = self.request.query_params.get('activeevent')
+        live_id = self.request.query_params.get('live')
         if activeevent_id:
             qs = qs.filter(activeevents__id=activeevent_id,
+                           is_active=True, ).order_by('-date_created')
+        if live_id:
+            qs = qs.filter(livewatchlogs__live__id=live_id,
                            is_active=True, ).order_by('-date_created')
         return qs
 
@@ -1293,12 +1326,35 @@ class CommentViewSet(viewsets.ModelViewSet):
 
         return Response(data=True)
 
+    @list_route(methods=['POST'])
+    def change_watch_status(self, request):
+        comment_id = request.data.get('id')
+        watch_status = request.data.get('watch_status')
+
+        if comment_id and watch_status:
+            comment = m.Comment.objects.get(pk=comment_id)
+            livewatchlog = comment.livewatchlogs.first()
+            livewatchlog.status = watch_status
+            livewatchlog.save()
+
+        return Response(data=True)
+
 
 class UserMarkViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.UserMark.objects.all()
     serializer_class = s.UserMarkSerializer
 
+    def get_queryset(self):
+        qs = interceptor_get_queryset_kw_field(self)
+        activeevent_id = self.request.query_params.get('activeevent')
+        if activeevent_id:
+            qs = qs.filter(
+                object_id=activeevent_id,
+                subject='like',
+                content_type=m.ContentType.objects.get(model='activeevent'),
+            ).order_by('-date_created')
+        return qs
 
 class ContactViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'

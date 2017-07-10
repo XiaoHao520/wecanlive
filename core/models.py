@@ -3,6 +3,21 @@ from django_member.models import *
 from django_finance.models import *
 
 
+# 附加到公共類上的方法
+
+def comment_watch_status(self):
+    watch_log = self.livewatchlogs.first()
+    if not watch_log:
+        return None
+    return watch_log.status
+
+
+Comment.watch_status = comment_watch_status
+
+
+# 一般模型類
+
+
 class InformableModel(models.Model):
     """ 抽象的可举报模型
     """
@@ -621,7 +636,8 @@ class Live(UserOwnedModel,
         :return:
         """
         time_end = self.date_end or datetime.now()
-        return int((time_end - self.date_created).seconds / 60) or 1
+        return int((time_end - self.date_created).seconds / 60) + \
+               (time_end - self.date_created).days * 1440 or 1
 
     def get_live_status(self):
         if self.date_end:
@@ -631,6 +647,13 @@ class Live(UserOwnedModel,
     # 標記一個點贊
     def set_like_by(self, user, is_like=True):
         self.set_marked_by(user, 'like', is_like)
+
+    def is_liked_by_current_user(self):
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_anonymous:
+            return False
+        return self.is_marked_by(user, 'like')
 
     def get_like_count(self):
         return self.get_users_marked_with('like').count()
@@ -698,7 +721,7 @@ class Live(UserOwnedModel,
         room_id = self.get_room_id()
         biz_id = settings.TENCENT_MLVB_BIZ_ID
         live_code = biz_id + '_' + room_id
-        return 'http://{biz_id}.livepush.myqcloud.com/live/' \
+        return 'http://{biz_id}.liveplay.myqcloud.com/live/' \
                '{live_code}.flv' \
             .format(biz_id=biz_id, live_code=live_code)
 
@@ -848,6 +871,11 @@ class ActiveEvent(UserOwnedModel,
         auto_now_add=True,
     )
 
+    is_active = models.BooleanField(
+        verbose_name='是否有效',
+        default=True,
+    )
+
     class Meta:
         verbose_name = '个人动态'
         verbose_name_plural = '个人动态'
@@ -856,6 +884,13 @@ class ActiveEvent(UserOwnedModel,
     # 標記一個點贊
     def set_like_by(self, user, is_like=True):
         self.set_marked_by(user, 'like', is_like)
+
+    def is_liked_by_current_user(self):
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_anonymous:
+            return False
+        return self.is_marked_by(user, 'like')
 
     def get_comment_count(self):
         return self.comments.count()
@@ -1710,7 +1745,7 @@ class Banner(models.Model):
     subject = models.CharField(
         verbose_name='主题',
         max_length=20,
-        blank=True,
+        choices=SUBJECT_CHOICES,
         default='',
     )
 
