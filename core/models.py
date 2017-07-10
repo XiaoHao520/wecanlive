@@ -131,7 +131,6 @@ class Member(AbstractMember,
         # 收入鑽石數
         debit_diamond = self.user.creditdiamondtransactions_debit.all().aggregate(
             amount=models.Sum('amount')).get('amount') or 0
-        # todo: 可能要考虑提现中的钻石数量，如果提现就生成一条扣除钻石的流水就不用考虑了
         return debit_diamond - credit_diamond
 
     def get_coin_balance(self):
@@ -159,6 +158,16 @@ class Member(AbstractMember,
         count = self.user.creditstarindextransactions_debit.all().aggregate(
             amount=models.Sum('amount')).get('amount') or 0
         return int(count)
+
+    def get_star_balance(self):
+        """星星（元气）余额
+        """
+        credit_star = self.user.creditstartransactions_credit.all().aggregate(
+            amount=models.Sum('amount')).get('amount') or 0
+
+        debit_star = self.user.creditstartransactions_debit.all().aggregate(
+            amount=models.Sum('amount')).get('amount') or 0
+        return debit_star - credit_star
 
 
 class Robot(models.Model):
@@ -969,7 +978,7 @@ class PrizeTransition(AbstractTransactionModel):
         ).all().aggregate(amount=models.Sum('amount')).get('amount') or 0
 
         total = int((accept - send) / prize.price)
-        assert total > count, '贈送失敗，禮物剩餘不足'
+        assert total >= count, '贈送失敗，禮物剩餘不足'
         user.prizetransitions_credit.create(
             user_debit=live.author,
             amount=amount,
@@ -984,6 +993,27 @@ class PrizeTransition(AbstractTransactionModel):
             type='LIVE_GIFT',
             live=live,
             live_watch_log=log,
+        )
+
+    @staticmethod
+    def viewer_open_starbox(user_id):
+        me = User.objects.get(pk=user_id)
+        assert me.member.get_star_balance() >= 500, '你的元氣不足，不能打開寶盒'
+        prize = Prize.objects.filter(
+            category__name='宝盒礼物',
+            is_active=True,
+        ).order_by('?').first()
+        assert prize, '暫無禮物可選'
+        # todo: 数量
+        # 礼物记录
+        me.prizetransitions_debit.create(
+            prize=prize,
+            amount=prize.price,
+            remark='打開星光寶盒獲得禮物',
+        )
+        # 元气流水
+        me.creditstartransactions_credit.create(
+            amount=500,
         )
 
 
@@ -1002,6 +1032,12 @@ class PrizeOrder(UserOwnedModel):
     1. 不添加 PrizeOrder
     2. 添加 PrizeTransaction，user_debit 是 主播，user_credit 是 送禮的觀衆用戶
     3. 添加 DiamondTransaction，user_debit 是 主播，user_credit 是 None
+
+    ### 如果在直播中使用宝盒礼物
+    1. 不添加 PrizeOrder
+    2. 添加 PrizeTransaction，user_debit 是 主播，user_credit 是 送禮的觀衆用戶
+    3. 添加星光指数流水CreditStarIndexTransaction user_debit 是主播 , user_credit 是none
+    4. 添加星光流水CreditStarTransaction user_debit 是none ，user_credit 是送礼的观众用户
     """
     prize = models.ForeignKey(
         verbose_name='礼物',
@@ -1047,7 +1083,7 @@ class PrizeOrder(UserOwnedModel):
     def buy_prize(live, prize, count, user_id):
         total_price = count * prize.price
         user = User.objects.get(pk=user_id)
-        assert user.member.get_coin_balance() > total_price, '赠送失败,余额不足'
+        assert user.member.get_coin_balance() >= total_price, '赠送失败,余额不足'
         log = live.watch_logs.filter(author=user).first()
         # 礼物流水
         prize_transition = user.prizetransitions_credit.create(
