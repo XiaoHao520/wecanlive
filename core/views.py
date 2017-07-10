@@ -350,7 +350,7 @@ class UserViewSet(viewsets.ModelViewSet):
     @list_route(methods=['GET'])
     def current(self, request):
         if request.user.is_anonymous():
-            return response_success('尚未登录')
+            return response_fail('')
         return Response(
             data=s.UserDetailedSerializer(request.user).data
         )
