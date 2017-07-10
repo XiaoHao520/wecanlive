@@ -3,6 +3,21 @@ from django_member.models import *
 from django_finance.models import *
 
 
+# 附加到公共類上的方法
+
+def comment_watch_status(self):
+    watch_log = self.livewatchlogs.first()
+    if not watch_log:
+        return None
+    return watch_log.status
+
+
+Comment.watch_status = comment_watch_status
+
+
+# 一般模型類
+
+
 class InformableModel(models.Model):
     """ 抽象的可举报模型
     """
@@ -591,7 +606,8 @@ class Live(UserOwnedModel,
         :return:
         """
         time_end = self.date_end or datetime.now()
-        return int((time_end - self.date_created).seconds / 60) or 1
+        return int((time_end - self.date_created).seconds / 60) + \
+               (time_end - self.date_created).days * 1440 or 1
 
     def get_live_status(self):
         if self.date_end:
@@ -816,6 +832,11 @@ class ActiveEvent(UserOwnedModel,
     date_created = models.DateTimeField(
         verbose_name='創建時間',
         auto_now_add=True,
+    )
+
+    is_active = models.BooleanField(
+        verbose_name='是否有效',
+        default=True,
     )
 
     class Meta:

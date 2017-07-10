@@ -379,6 +379,44 @@ class MemberSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
 
 class RobotSerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    user = serializers.PrimaryKeyRelatedField(
+        queryset=m.User.objects.all(),
+    )
+
+    member_item = MemberSerializer(
+        source='user.member',
+        read_only=True,
+    )
+
+    avatar_item = ImageSerializer(
+        source='user.member.avatar',
+        read_only=True,
+    )
+
+    user_avatar = serializers.ReadOnlyField(
+        source='user.member.avatar.image.url',
+    )
+
+    user_id = serializers.ReadOnlyField(
+        source='user.id',
+    )
+
+    user_nickname = serializers.ReadOnlyField(
+        source='user.member.nickname',
+    )
+
+    user_gender = serializers.ReadOnlyField(
+        source='user.member.gender',
+    )
+
+    age = serializers.ReadOnlyField(
+        source='user.member.get_age',
+    )
+
+    user_constellation = serializers.ReadOnlyField(
+        source='user.member.constellation',
+    )
+
     class Meta:
         model = m.Robot
         fields = '__all__'
@@ -479,6 +517,10 @@ class LiveSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
     nickname = serializers.ReadOnlyField(
         source='author.member.nickname',
+    )
+
+    mobile = serializers.ReadOnlyField(
+        source='author.member.mobile',
     )
 
     author_avatar = serializers.ReadOnlyField(
@@ -619,6 +661,14 @@ class ActiveEventSerializer(QueryFieldsMixin, serializers.ModelSerializer):
         source='images',
         many=True,
         read_only=True,
+    )
+
+    author_nickname = serializers.ReadOnlyField(
+        source='author.member.nickname',
+    )
+
+    author_mobile = serializers.ReadOnlyField(
+        source='author.member.mobile',
     )
 
     count_amount = serializers.ReadOnlyField(
@@ -799,8 +849,14 @@ class CommentSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     )
 
     author_nickname = serializers.ReadOnlyField(
-        source='author.member.nickname'
+        source='author.member.nickname',
     )
+
+    author_mobile = serializers.ReadOnlyField(
+        source='author.member.mobile',
+    )
+
+    watch_status = serializers.ReadOnlyField()
 
     class Meta:
         model = m.Comment

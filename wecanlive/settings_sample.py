@@ -62,8 +62,13 @@ WXPAY_API_KEY = '65467qewrtg2e3v62v26cc8v26cvnmnj'
 WXPAY_APICLIENT_CERT = ''
 WXPAY_APICLIENT_KEY = ''
 
-# =============== Tencent ILVB ==============
+# =============== Tencent MLVB ==============
 
-TENCENT_ILVB_APPID = '1400033878'
-TENCENT_ILVB_SECRET = 'df37805114cec3a7'
-TENCENT_ILVB_ACCOUNT_TYPE = '13638'
+# 騰訊移動直播
+# bizId 編號（4位數字）
+TENCENT_MLVB_BIZ_ID = '9857'
+TENCENT_MLVB_APPID = '1253850554'
+# 推流防盜鏈 Key
+TENCENT_MLVB_PUSH_KEY = 'd2f7f1ba70d87e6f58751fbc17427cb8'
+# API鑑權 Key
+TENCENT_MLVB_API_AUTH_KEY = '90c0bc75580a4e91b767e216de99bfbc'

@@ -1121,8 +1121,12 @@ class CommentViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         qs = interceptor_get_queryset_kw_field(self)
         activeevent_id = self.request.query_params.get('activeevent')
+        live_id = self.request.query_params.get('live')
         if activeevent_id:
             qs = qs.filter(activeevents__id=activeevent_id,
+                           is_active=True, ).order_by('-date_created')
+        if live_id:
+            qs = qs.filter(livewatchlogs__live__id=live_id,
                            is_active=True, ).order_by('-date_created')
         return qs
 
@@ -1134,6 +1138,19 @@ class CommentViewSet(viewsets.ModelViewSet):
         if activeevent_id:
             activeevent = m.ActiveEvent.objects.get(pk=activeevent_id)
             activeevent.comments.create(author=self.request.user, content=content)
+
+        return Response(data=True)
+
+    @list_route(methods=['POST'])
+    def change_watch_status(self, request):
+        comment_id = request.data.get('id')
+        watch_status = request.data.get('watch_status')
+
+        if comment_id and watch_status:
+            comment = m.Comment.objects.get(pk=comment_id)
+            livewatchlog = comment.livewatchlogs.first()
+            livewatchlog.status = watch_status
+            livewatchlog.save()
 
         return Response(data=True)
 
