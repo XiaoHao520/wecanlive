@@ -632,12 +632,36 @@ class ActiveEventSerializer(QueryFieldsMixin, serializers.ModelSerializer):
         read_only=True,
     )
 
-    count_amount = serializers.ReadOnlyField(
+    count_comment = serializers.ReadOnlyField(
         source='get_comment_count',
     )
 
     count_like = serializers.ReadOnlyField(
         source='get_like_count',
+    )
+
+    avatar_url = serializers.ReadOnlyField(
+        source='author.member.avatar.image.url',
+    )
+
+    nickname = serializers.ReadOnlyField(
+        source='author.member.nickname',
+    )
+
+    gender = serializers.ReadOnlyField(
+        source='author.gender',
+    )
+
+    age = serializers.ReadOnlyField(
+        source='author.member.age',
+    )
+
+    constellation = serializers.ReadOnlyField(
+        source='author.member.constellation',
+    )
+
+    author_is_following = serializers.ReadOnlyField(
+        source='author.member.is_followed_by_current_user',
     )
 
     class Meta:
