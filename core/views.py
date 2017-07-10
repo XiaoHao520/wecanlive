@@ -1299,8 +1299,12 @@ class CommentViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         qs = interceptor_get_queryset_kw_field(self)
         activeevent_id = self.request.query_params.get('activeevent')
+        live_id = self.request.query_params.get('live')
         if activeevent_id:
             qs = qs.filter(activeevents__id=activeevent_id,
+                           is_active=True, ).order_by('-date_created')
+        if live_id:
+            qs = qs.filter(livewatchlogs__live__id=live_id,
                            is_active=True, ).order_by('-date_created')
         return qs
 
@@ -1315,12 +1319,35 @@ class CommentViewSet(viewsets.ModelViewSet):
 
         return Response(data=True)
 
+    @list_route(methods=['POST'])
+    def change_watch_status(self, request):
+        comment_id = request.data.get('id')
+        watch_status = request.data.get('watch_status')
+
+        if comment_id and watch_status:
+            comment = m.Comment.objects.get(pk=comment_id)
+            livewatchlog = comment.livewatchlogs.first()
+            livewatchlog.status = watch_status
+            livewatchlog.save()
+
+        return Response(data=True)
+
 
 class UserMarkViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.UserMark.objects.all()
     serializer_class = s.UserMarkSerializer
 
+    def get_queryset(self):
+        qs = interceptor_get_queryset_kw_field(self)
+        activeevent_id = self.request.query_params.get('activeevent')
+        if activeevent_id:
+            qs = qs.filter(
+                object_id=activeevent_id,
+                subject='like',
+                content_type=m.ContentType.objects.get(model='activeevent'),
+            ).order_by('-date_created')
+        return qs
 
 class ContactViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'

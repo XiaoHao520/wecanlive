@@ -390,6 +390,44 @@ class MemberSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
 
 class RobotSerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    user = serializers.PrimaryKeyRelatedField(
+        queryset=m.User.objects.all(),
+    )
+
+    member_item = MemberSerializer(
+        source='user.member',
+        read_only=True,
+    )
+
+    avatar_item = ImageSerializer(
+        source='user.member.avatar',
+        read_only=True,
+    )
+
+    user_avatar = serializers.ReadOnlyField(
+        source='user.member.avatar.image.url',
+    )
+
+    user_id = serializers.ReadOnlyField(
+        source='user.id',
+    )
+
+    user_nickname = serializers.ReadOnlyField(
+        source='user.member.nickname',
+    )
+
+    user_gender = serializers.ReadOnlyField(
+        source='user.member.gender',
+    )
+
+    age = serializers.ReadOnlyField(
+        source='user.member.get_age',
+    )
+
+    user_constellation = serializers.ReadOnlyField(
+        source='user.member.constellation',
+    )
+
     class Meta:
         model = m.Robot
         fields = '__all__'
