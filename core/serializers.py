@@ -171,6 +171,44 @@ class BankSerializer(QueryFieldsMixin, serializers.ModelSerializer):
         fields = '__all__'
 
 
+class AccountTransactionSerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    user_credit_nickname = serializers.ReadOnlyField(
+        source='user_credit.member.nickname',
+    )
+
+    user_credit_mobile = serializers.ReadOnlyField(
+        source='user_credit.member.mobile',
+    )
+
+    user_debit_nickname = serializers.ReadOnlyField(
+        source='user_debit.member.nickname',
+    )
+
+    user_debit_mobile = serializers.ReadOnlyField(
+        source='user_debit.member.mobile',
+    )
+
+    nickname = serializers.ReadOnlyField(
+        source='member.nickname',
+    )
+
+    mobile = serializers.ReadOnlyField(
+        source='member.mobile',
+    )
+
+    platform = serializers.ReadOnlyField(
+        source='payment_platform',
+    )
+
+    out_trade_no = serializers.ReadOnlyField(
+        source='payment_out_trade_no',
+    )
+
+    class Meta:
+        model = m.AccountTransaction
+        fields = '__all__'
+
+
 class BankAccountSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     bank_item = BankSerializer(
         source='bank',

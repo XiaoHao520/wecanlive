@@ -15,6 +15,53 @@ def comment_watch_status(self):
 Comment.watch_status = comment_watch_status
 
 
+def account_transaction_member(self):
+    if self.user_debit and not self.user_credit:
+        return dict(
+            nickname=self.user_debit.member.nickname,
+            mobile=self.user_debit.member.mobile,
+        )
+    elif self.user_credit and not self.user_debit:
+        return dict(
+            nickname=self.user_credit.member.nickname,
+            mobile=self.user_credit.member.mobile,
+        )
+    return dict(
+        nickname=None,
+        mobile=None,
+    )
+
+AccountTransaction.member = account_transaction_member
+
+
+def account_transaction_payment_platform(self):
+    if not self.type == AccountTransaction.TYPE_RECHARGE:
+        return None
+    return self.recharge_record.payment_record.platform
+
+AccountTransaction.payment_platform = account_transaction_payment_platform
+
+
+def account_transaction_payment_out_trade_no(self):
+    if not self.type == AccountTransaction.TYPE_RECHARGE:
+        return None
+    return self.recharge_record.payment_record.out_trade_no
+
+AccountTransaction.payment_out_trade_no = account_transaction_payment_out_trade_no
+
+
+# def total_recharge():
+#     return AccountTransaction.objects.filter(type=AccountTransaction.TYPE_RECHARGE).aggregate(
+#         amount=models.Sum('amount')).get('amount') or 0
+#
+#
+# def total_withdraw():
+#     return AccountTransaction.objects.filter(
+#         type=AccountTransaction.TYPE_WITHDRAW,
+#         withdraw_record__status=WithdrawRecord.STATUS_PENDING
+#     ).aggregate(amount=models.Sum('amount')).get('amount') or 0
+
+
 # 一般模型類
 
 
