@@ -975,6 +975,11 @@ class ActiveEvent(UserOwnedModel,
 
 
 class PrizeCategory(EntityModel):
+    is_vip_only = models.BooleanField(
+        verbose_name='是否VIP专属',
+        default=False,
+    )
+
     class Meta:
         verbose_name = '礼物分类'
         verbose_name_plural = '礼物分类'

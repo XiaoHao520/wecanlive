@@ -1005,7 +1005,11 @@ class PrizeViewSet(viewsets.ModelViewSet):
     serializer_class = s.PrizeSerializer
 
     def get_queryset(self):
-        return interceptor_get_queryset_kw_field(self)
+        qs = interceptor_get_queryset_kw_field(self)
+        prize_category_id = self.request.query_params.get('prize_category')
+        if prize_category_id:
+            qs = qs.filter(category__id=prize_category_id)
+        return qs
 
     @list_route(methods=['GET'])
     def get_user_prize_emoji(self, request):
