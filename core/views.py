@@ -351,9 +351,10 @@ class UserViewSet(viewsets.ModelViewSet):
     def current(self, request):
         if request.user.is_anonymous():
             return response_fail('')
-        return Response(
-            data=s.UserDetailedSerializer(request.user).data
-        )
+        data = s.UserDetailedSerializer(request.user).data
+        if hasattr(request.user, 'member'):
+            data['tencent_sig'] = request.user.member.tencent_sig
+        return Response(data=data)
 
     @list_route(methods=['GET'])
     def logout(self, request):
@@ -722,6 +723,12 @@ class MemberViewSet(viewsets.ModelViewSet):
         if invite:
             qs = qs.filter(user__contacts_owned__user=self.request.user
                            ).exclude(user__contacts_related__author=self.request.user)
+
+        rank_type = self.request.query_params.get('rank_type')
+        if rank_type:
+            print(rank_type)
+        # todo 根據排行榜類型進行排行 'rank_diamond'、'rank_prize'、'rank_star'
+
         return qs
 
     @list_route(methods=['post'])
@@ -886,6 +893,7 @@ class LiveViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.Live.objects.all()
     serializer_class = s.LiveSerializer
+    ordering = ['-pk']
 
     def get_queryset(self):
         qs = interceptor_get_queryset_kw_field(self)
@@ -1003,6 +1011,7 @@ class ActiveEventViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.ActiveEvent.objects.all()
     serializer_class = s.ActiveEventSerializer
+    ordering = ['-pk']
 
     def get_queryset(self):
         qs = interceptor_get_queryset_kw_field(self)
@@ -1360,3 +1369,40 @@ class ContactViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.Contact.objects.all()
     serializer_class = s.ContactSerializer
+
+
+class AccountTransactionViewSet(viewsets.ModelViewSet):
+    filter_fields = '__all__'
+    queryset = m.AccountTransaction.objects.all()
+    serializer_class = s.AccountTransactionSerializer
+
+    def get_queryset(self):
+        qs = interceptor_get_queryset_kw_field(self)
+        nickname = self.request.query_params.get('nickname')
+        mobile = self.request.query_params.get('mobile')
+        if nickname:
+            qs = qs.filter(
+                m.models.Q(user_debit__member__nickname__contains=nickname) |
+                m.models.Q(user_credit__member__nickname__contains=nickname)
+            )
+        if mobile:
+            qs = qs.filter(
+                m.models.Q(user_debit__member__mobile__contains=mobile) |
+                m.models.Q(user_credit__member__mobile__contains=mobile)
+            )
+        return qs
+
+    @list_route(methods=['GET'])
+    def get_total_recharge(self, request):
+        data = m.AccountTransaction.objects.filter(type=m.AccountTransaction.TYPE_RECHARGE).aggregate(
+            amount=models.Sum('amount')).get('amount') or 0
+        return Response(data=data)
+
+    @list_route(methods=['GET'])
+    def get_total_withdraw(self, request):
+        # todo 未进行对美元折算
+        data = m.AccountTransaction.objects.filter(
+            type=m.AccountTransaction.TYPE_WITHDRAW,
+            withdraw_record__status=m.WithdrawRecord.STATUS_PENDING
+        ).aggregate(amount=models.Sum('amount')).get('amount') or 0
+        return Response(data=data)

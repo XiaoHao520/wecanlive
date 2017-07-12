@@ -1,6 +1,6 @@
 from django_base.models import *
-from django_member.models import *
 from django_finance.models import *
+from django_member.models import *
 
 
 # 附加到公共類上的方法
@@ -13,6 +13,53 @@ def comment_watch_status(self):
 
 
 Comment.watch_status = comment_watch_status
+
+
+def account_transaction_member(self):
+    if self.user_debit and not self.user_credit:
+        return dict(
+            nickname=self.user_debit.member.nickname,
+            mobile=self.user_debit.member.mobile,
+        )
+    elif self.user_credit and not self.user_debit:
+        return dict(
+            nickname=self.user_credit.member.nickname,
+            mobile=self.user_credit.member.mobile,
+        )
+    return dict(
+        nickname=None,
+        mobile=None,
+    )
+
+AccountTransaction.member = account_transaction_member
+
+
+def account_transaction_payment_platform(self):
+    if not self.type == AccountTransaction.TYPE_RECHARGE:
+        return None
+    return self.recharge_record.payment_record.platform
+
+AccountTransaction.payment_platform = account_transaction_payment_platform
+
+
+def account_transaction_payment_out_trade_no(self):
+    if not self.type == AccountTransaction.TYPE_RECHARGE:
+        return None
+    return self.recharge_record.payment_record.out_trade_no
+
+AccountTransaction.payment_out_trade_no = account_transaction_payment_out_trade_no
+
+
+# def total_recharge():
+#     return AccountTransaction.objects.filter(type=AccountTransaction.TYPE_RECHARGE).aggregate(
+#         amount=models.Sum('amount')).get('amount') or 0
+#
+#
+# def total_withdraw():
+#     return AccountTransaction.objects.filter(
+#         type=AccountTransaction.TYPE_WITHDRAW,
+#         withdraw_record__status=WithdrawRecord.STATUS_PENDING
+#     ).aggregate(amount=models.Sum('amount')).get('amount') or 0
 
 
 # 一般模型類
@@ -66,10 +113,40 @@ class Member(AbstractMember,
         default=False,
     )
 
+    tencent_sig = models.TextField(
+        verbose_name='腾讯云鉴权密钥',
+        blank=True,
+        default='',
+        help_text='腾讯云SDK产生'
+    )
+
+    tencent_sig_expire = models.DateTimeField(
+        verbose_name='腾讯云鉴权密钥过期时间',
+        null=True,
+        blank=True,
+        help_text='默认过期时间为180天'
+    )
+
     class Meta:
         verbose_name = '会员'
         verbose_name_plural = '会员'
         db_table = 'core_member'
+
+    def save(self, *args, **kwargs):
+        if self.user:
+            self.load_tencent_sig()
+        super().save(*args, **kwargs)
+
+    def load_tencent_sig(self, force=False):
+        from tencent import auth
+        # 还没有超期的话忽略操作
+        if not force and self.tencent_sig \
+                and self.tencent_sig_expire and self.tencent_sig_expire > datetime.now():
+            return
+        self.tencent_sig = auth.generate_sig(
+            self.user.username, settings.TENCENT_WEBIM_APPID)
+        # 内部保留一定裕度，160天内不自动刷新
+        self.tencent_sig_expire = datetime.now() + timedelta(days=160)
 
     def is_robot(self):
         return hasattr(self.user, 'robot') and self.user.robot
@@ -137,6 +214,24 @@ class Member(AbstractMember,
         for live in lives:
             duration += live.get_duration()
         return duration
+
+    def credit_diamond(self):
+        return self.user.creditdiamondtransactions_credit.all().aggregate(
+            amount=models.Sum('amount')).get('amount') or 0
+
+    def debit_diamond(self):
+        return self.user.creditdiamondtransactions_debit.all().aggregate(
+            amount=models.Sum('amount')).get('amount') or 0
+
+    def credit_star_index(self):
+        return self.user.creditstarindextransactions_credit.all().aggregate(
+            amount=models.Sum('amount')
+        ).get('amount') or 0
+
+    def debit_star_index(self):
+        return self.user.creditstarindextransactions_debit.all().aggregate(
+            amount=models.Sum('amount')
+        ).get('amount') or 0
 
     def get_diamond_balance(self):
         # 钻石余额
@@ -627,6 +722,18 @@ class Live(UserOwnedModel,
         verbose_name_plural = '直播'
         db_table = 'core_live'
 
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        # WebIM 建群
+        from tencent.webim import WebIM
+        webim = WebIM(settings.TENCENT_WEBIM_APPID)
+        webim.create_group(
+            self.author.username,
+            'Live_{}'.format(self.id),
+            type=WebIM.GROUP_TYPE_AV_CHAT_ROOM,
+            group_id='live_{}'.format(self.id),
+        )
+
     def get_comment_count(self):
         return self.comments.count()
 
@@ -814,6 +921,28 @@ class LiveWatchLog(UserOwnedModel,
         verbose_name_plural = '直播观看记录'
         db_table = 'core_live_watch_log'
 
+    def __str__(self):
+        return '{} - {}'.format(
+            self.author.member.mobile,
+            self.live.name,
+        )
+
+    def save(self, *args, **kwargs):
+        """
+        自动将人加入到群组中
+        :param args:
+        :param kwargs:
+        :return:
+        """
+        super().save(self, *args, **kwargs)
+        from tencent.webim import WebIM
+        webim = WebIM(settings.TENCENT_WEBIM_APPID)
+        webim.add_group_member(
+            group_id='live_{}'.format(self.live_id),
+            member_list=[dict(Member_Account=self.author.username)],
+            silence=True,
+        )
+
     def get_comment_count(self):
         return self.comments.count()
 
@@ -916,6 +1045,10 @@ class ActiveEvent(UserOwnedModel,
     def get_like_count(self):
         return self.get_users_marked_with('like').count()
 
+    def get_preview(self):
+        if self.images.first():
+            return self.images.first()
+
 
 class PrizeCategory(EntityModel):
     class Meta:
@@ -934,6 +1067,9 @@ class PrizeCategory(EntityModel):
                 icon=prize.icon.image.url,
             ))
         return prizes
+
+    def get_count_prize(self):
+        return self.prizes.all().count()
 
 
 class Prize(EntityModel):
