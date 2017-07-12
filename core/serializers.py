@@ -386,7 +386,7 @@ class MemberSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.Member
         # fields = '__all__'
-        exclude = ['session_key']
+        exclude = ['session_key', 'tencent_sig', 'tencent_sig_expire']
 
 
 class RobotSerializer(QueryFieldsMixin, serializers.ModelSerializer):

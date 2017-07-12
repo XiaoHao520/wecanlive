@@ -66,10 +66,40 @@ class Member(AbstractMember,
         default=False,
     )
 
+    tencent_sig = models.TextField(
+        verbose_name='腾讯云鉴权密钥',
+        blank=True,
+        default='',
+        help_text='腾讯云SDK产生'
+    )
+
+    tencent_sig_expire = models.DateTimeField(
+        verbose_name='腾讯云鉴权密钥过期时间',
+        null=True,
+        blank=True,
+        help_text='默认过期时间为180天'
+    )
+
     class Meta:
         verbose_name = '会员'
         verbose_name_plural = '会员'
         db_table = 'core_member'
+
+    def save(self, *args, **kwargs):
+        if self.user:
+            self.load_tencent_sig()
+        super().save(*args, **kwargs)
+
+    def load_tencent_sig(self, force=False):
+        import tencent_auth
+        # 还没有超期的话忽略操作
+        if not force and self.tencent_sig \
+                and self.tencent_sig_expire and self.tencent_sig_expire > datetime.now():
+            return
+        self.tencent_sig = tencent_auth.generate_sig(
+            self.user.username, settings.TENCENT_WEBIM_APPID)
+        # 内部保留一定裕度，160天内不自动刷新
+        self.tencent_sig_expire = datetime.now() + timedelta(days=160)
 
     def is_robot(self):
         return hasattr(self.user, 'robot') and self.user.robot

@@ -351,9 +351,10 @@ class UserViewSet(viewsets.ModelViewSet):
     def current(self, request):
         if request.user.is_anonymous():
             return response_fail('')
-        return Response(
-            data=s.UserDetailedSerializer(request.user).data
-        )
+        data = s.UserDetailedSerializer(request.user).data
+        if hasattr(request.user, 'member'):
+            data['tencent_sig'] = request.user.member.tencent_sig
+        return Response(data=data)
 
     @list_route(methods=['GET'])
     def logout(self, request):
@@ -886,6 +887,7 @@ class LiveViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.Live.objects.all()
     serializer_class = s.LiveSerializer
+    ordering = ['-pk']
 
     def get_queryset(self):
         qs = interceptor_get_queryset_kw_field(self)
@@ -1003,6 +1005,7 @@ class ActiveEventViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.ActiveEvent.objects.all()
     serializer_class = s.ActiveEventSerializer
+    ordering = ['-pk']
 
     def get_queryset(self):
         qs = interceptor_get_queryset_kw_field(self)
@@ -1348,6 +1351,7 @@ class UserMarkViewSet(viewsets.ModelViewSet):
                 content_type=m.ContentType.objects.get(model='activeevent'),
             ).order_by('-date_created')
         return qs
+
 
 class ContactViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
