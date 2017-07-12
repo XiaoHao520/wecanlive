@@ -945,6 +945,7 @@ class LiveViewSet(viewsets.ModelViewSet):
 
     @detail_route(methods=['PATCH'])
     def add_like_count(self, request, pk):
+        """ 后台记录添加记心形的数量 """
         count = int(request.data.get('count', 1))
         m.Live.objects.filter(pk=pk).update(like_count=models.F('like_count') + count)
         return u.response_success()
@@ -986,6 +987,17 @@ class LiveViewSet(viewsets.ModelViewSet):
             content=request.data.get('content'),
         )
         return Response(data=s.CommentSerializer(comment).data)
+
+    @detail_route(methods=['POST'])
+    def make_barrage(self, request, pk):
+        assert not request.user.is_anonymous, '请先登录'
+        # TODO: 在这里需要扣除金币
+        live = m.Live.objects.get(pk=pk)
+        barrage = live.barrages.create(
+            author=request.user,
+            content=request.data.get('content'),
+        )
+        return Response(data=s.LiveBarrageSerializer(barrage).data)
 
 
 class LiveBarrageViewSet(viewsets.ModelViewSet):

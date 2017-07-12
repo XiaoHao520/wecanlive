@@ -1217,8 +1217,7 @@ class ContactSetting(models.Model):
         unique_together = [('contact', 'key')]
 
 
-class UserMark(UserOwnedModel,
-               EntityModel):
+class UserMark(UserOwnedModel):
     """ 用于让用户对某类对象产生标记的
     例如：用户收藏商品
     UserMark.objects.create(author=user, object=goods, subject='collect')
@@ -1277,6 +1276,9 @@ class UserMarkableModel(models.Model):
             object_id=self.pk,
             subject=subject,
         )
+        print(fields)
+        print(model)
+        print(self)
         mark = UserMark.objects.filter(**fields).first()
         if is_marked:
             if not mark:
