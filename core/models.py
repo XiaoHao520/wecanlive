@@ -1,6 +1,6 @@
 from django_base.models import *
-from django_member.models import *
 from django_finance.models import *
+from django_member.models import *
 
 
 # 附加到公共類上的方法
@@ -138,12 +138,12 @@ class Member(AbstractMember,
         super().save(*args, **kwargs)
 
     def load_tencent_sig(self, force=False):
-        import tencent_auth
+        from tencent import auth
         # 还没有超期的话忽略操作
         if not force and self.tencent_sig \
                 and self.tencent_sig_expire and self.tencent_sig_expire > datetime.now():
             return
-        self.tencent_sig = tencent_auth.generate_sig(
+        self.tencent_sig = auth.generate_sig(
             self.user.username, settings.TENCENT_WEBIM_APPID)
         # 内部保留一定裕度，160天内不自动刷新
         self.tencent_sig_expire = datetime.now() + timedelta(days=160)
@@ -712,6 +712,18 @@ class Live(UserOwnedModel,
         verbose_name_plural = '直播'
         db_table = 'core_live'
 
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        # WebIM 建群
+        from tencent.webim import WebIM
+        webim = WebIM(settings.TENCENT_WEBIM_APPID)
+        webim.create_group(
+            self.author.username,
+            'Live_{}'.format(self.id),
+            type=WebIM.GROUP_TYPE_AV_CHAT_ROOM,
+            group_id='live_{}'.format(self.id),
+        )
+
     def get_comment_count(self):
         return self.comments.count()
 
@@ -903,6 +915,22 @@ class LiveWatchLog(UserOwnedModel,
         return '{} - {}'.format(
             self.author.member.mobile,
             self.live.name,
+        )
+
+    def save(self, *args, **kwargs):
+        """
+        自动将人加入到群组中
+        :param args:
+        :param kwargs:
+        :return:
+        """
+        super().save(self, *args, **kwargs)
+        from tencent.webim import WebIM
+        webim = WebIM(settings.TENCENT_WEBIM_APPID)
+        webim.add_group_member(
+            group_id='live_{}'.format(self.live_id),
+            member_list=[dict(Member_Account=self.author.username)],
+            silence=True,
         )
 
     def get_comment_count(self):
