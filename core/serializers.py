@@ -138,6 +138,10 @@ class UserSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
     # contact_to_me = serializers.BooleanField(read_only=True)
 
+    member_level = serializers.ReadOnlyField(source='member.get_level')
+
+    member_vip_level = serializers.ReadOnlyField(source='member.get_vip_level')
+
     class Meta:
         model = m.User
         exclude = ['password', 'user_permissions']
@@ -433,6 +437,10 @@ class MemberSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     debit_diamond = serializers.ReadOnlyField()
 
     debit_star_index = serializers.ReadOnlyField()
+
+    level = serializers.ReadOnlyField(source='get_level')
+
+    vip_level = serializers.ReadOnlyField(source='get_vip_level')
 
     class Meta:
         model = m.Member

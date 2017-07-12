@@ -975,6 +975,18 @@ class LiveViewSet(viewsets.ModelViewSet):
         live.save()
         return Response(data=True)
 
+    @detail_route(methods=['POST'])
+    def make_comment(self, request, pk):
+        assert not request.user.is_anonymous, '请先登录'
+        live = m.Live.objects.get(pk=pk)
+        watch_log = live.watch_logs.filter(author=request.user).first()
+        assert watch_log, '观看记录尚未生成'
+        comment = watch_log.comments.create(
+            author=request.user,
+            content=request.data.get('content'),
+        )
+        return Response(data=s.CommentSerializer(comment).data)
+
 
 class LiveBarrageViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
@@ -989,6 +1001,7 @@ class LiveWatchLogViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.LiveWatchLog.objects.all()
     serializer_class = s.LiveWatchLogSerializer
+    ordering = ['-pk']
 
     def get_queryset(self):
         qs = interceptor_get_queryset_kw_field(self)
@@ -1075,6 +1088,7 @@ class PrizeViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.Prize.objects.all()
     serializer_class = s.PrizeSerializer
+    ordering = ['-pk']
 
     def get_queryset(self):
         return interceptor_get_queryset_kw_field(self)
@@ -1259,6 +1273,7 @@ class StarBoxRecordViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.StarBoxRecord.objects.all()
     serializer_class = s.StarBoxRecordSerializer
+    ordering = ['-pk']
 
 
 class RedBagRecordViewSet(viewsets.ModelViewSet):
