@@ -946,6 +946,12 @@ class LiveViewSet(viewsets.ModelViewSet):
         live.set_like_by(request.user, is_like)
         return u.response_success('')
 
+    @detail_route(methods=['PATCH'])
+    def add_like_count(self, request, pk):
+        count = int(request.data.get('count', 1))
+        m.Live.objects.filter(pk=pk).update(like_count=models.F('like_count') + count)
+        return u.response_success()
+
     @list_route(methods=['POST'])
     def start_live(self, request):
         assert not request.user.is_anonymous, '请先登录'
@@ -1161,7 +1167,6 @@ class PrizeTransitionViewSet(viewsets.ModelViewSet):
 
     @list_route(methods=['POST'])
     def send_active_prize(self, request):
-        # todo: 如果是礼盒礼物不加金币，加元气指数
         count = request.data.get('count')
         prize = m.Prize.objects.get(pk=request.data.get('prize'))
         live = m.Live.objects.get(pk=request.data.get('live'))
@@ -1172,7 +1177,7 @@ class PrizeTransitionViewSet(viewsets.ModelViewSet):
     @list_route(methods=['POST'])
     def open_star_box(self, request):
         # 观众开星光宝盒
-        m.PrizeTransition.viewer_open_starbox(request.user.id, live_id)
+        m.PrizeTransition.viewer_open_starbox(request.user.id)
         return Response(True)
 
 

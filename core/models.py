@@ -279,6 +279,16 @@ class Member(AbstractMember,
             amount=models.Sum('amount')).get('amount') or 0
         return debit_star - credit_star
 
+    def get_star_prize_expend(self):
+        """元气礼物赠送的元气数量，观众背包礼物宝盒礼物使用，每500开一个礼盒
+        """
+
+        transitions_amount = self.user.prizetransitions_credit.filter(
+            prize__category__name='宝盒礼物'
+        ).all().aggregate(
+            amount=models.Sum('amount')).get('amount') or 0
+        return transitions_amount - self.user.starboxrecords_owned.count() * 500
+
     def add_withdraw_blacklisted(self):
         """
         添加到提现黑名单（顺手驳回该用户其他申请中的提现）
@@ -741,6 +751,11 @@ class Live(UserOwnedModel,
         default=0,
     )
 
+    like_count = models.IntegerField(
+        verbose_name='点赞数量',
+        default=0,
+    )
+
     class Meta:
         verbose_name = '直播'
         verbose_name_plural = '直播'
@@ -754,7 +769,7 @@ class Live(UserOwnedModel,
         webim.create_group(
             self.author.username,
             'Live_{}'.format(self.id),
-            type=WebIM.GROUP_TYPE_AV_CHAT_ROOM,
+            type=WebIM.GROUP_TYPE_PRIVATE,
             group_id='live_{}'.format(self.id),
         )
 
@@ -958,7 +973,7 @@ class LiveWatchLog(UserOwnedModel,
         :param kwargs:
         :return:
         """
-        super().save(self, *args, **kwargs)
+        super().save(*args, **kwargs)
         from tencent.webim import WebIM
         webim = WebIM(settings.TENCENT_WEBIM_APPID)
         webim.add_group_member(
@@ -1019,6 +1034,14 @@ class LiveWatchLog(UserOwnedModel,
         for prize_order in prize_orders:
             total_price += prize_order.prize.price
         return total_price
+
+    def get_watch_mission_count(self):
+        """当前用户分享当前直播间次数
+        """
+        return self.live.star_mission_achievement.filter(
+            author=self.author,
+            type='WATCH',
+        ).count()
 
 
 class ActiveEvent(UserOwnedModel,
@@ -1189,25 +1212,34 @@ class PrizeTransition(AbstractTransactionModel):
 
         total = int((accept - send) / prize.price)
         assert total >= count, '贈送失敗，禮物剩餘不足'
+
         user.prizetransitions_credit.create(
             user_debit=live.author,
             amount=amount,
             remark=count,
             prize=prize,
         )
+        # 如果是礼盒礼物不加钻石，加元气指数
+        if prize.category.name == '宝盒礼物':
+            starindex_transition = live.author.creditstarindextransactions_debit.create(
+                amount=amount,
+                remark='觀衆贈送寶盒禮物',
+            )
 
-        # 钻石流水
-        diamond_transition = live.author.creditdiamondtransactions_debit.create(
-            amount=amount,
-            remark='禮物兌換',
-            type='LIVE_GIFT',
-            live=live,
-            live_watch_log=log,
-        )
+        else:
+            # 钻石流水
+            diamond_transition = live.author.creditdiamondtransactions_debit.create(
+                amount=amount,
+                remark='禮物兌換',
+                type='LIVE_GIFT',
+                live=live,
+                live_watch_log=log,
+            )
 
     @staticmethod
     def viewer_open_starbox(user_id):
         me = User.objects.get(pk=user_id)
+        # todo 这里应该用送了多少礼物的元气
         assert me.member.get_star_balance() >= 500, '你的元氣不足，不能打開寶盒'
         prize = Prize.objects.filter(
             category__name='宝盒礼物',
@@ -1221,10 +1253,11 @@ class PrizeTransition(AbstractTransactionModel):
             amount=prize.price,
             remark='打開星光寶盒獲得禮物',
         )
-        # 元气流水
-        me.creditstartransactions_credit.create(
-            amount=500,
-        )
+        # todo: -500消耗了的元气值 应该要增加一个宝盒记录
+        # # 元气流水
+        # me.creditstartransactions_credit.create(
+        #     amount=500,
+        # )
 
 
 class PrizeOrder(UserOwnedModel):
@@ -1787,6 +1820,14 @@ class StarMissionAchievement(UserOwnedModel):
     date_created = models.DateTimeField(
         verbose_name='创建时间',
         auto_now_add=True,
+    )
+
+    live = models.ForeignKey(
+        verbose_name='直播',
+        to='Live',
+        related_name='star_mission_achievement',
+        null=True,
+        blank=True,
     )
 
     # TODO: 领取之后的关联流水
