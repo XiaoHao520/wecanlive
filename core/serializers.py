@@ -192,6 +192,8 @@ class UserDetailedSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     diamond_balance = serializers.ReadOnlyField(source='member.get_diamond_balance')
     coin_balance = serializers.ReadOnlyField(source='member.get_coin_balance')
     star_balance = serializers.ReadOnlyField(source='member.get_star_balance')
+
+    star_prize_expend = serializers.ReadOnlyField(source='member.get_star_prize_expend')
     # 跟踪数量
     count_follow = serializers.ReadOnlyField(
         source='member.get_follow_count',
@@ -659,6 +661,11 @@ class LiveWatchLogSerializer(QueryFieldsMixin, serializers.ModelSerializer):
         source='get_total_prize',
     )
 
+    watch_mission_count = serializers.ReadOnlyField(
+        source='get_watch_mission_count',
+    )
+
+
     class Meta:
         model = m.LiveWatchLog
         fields = '__all__'
@@ -716,6 +723,7 @@ class PrizeCategorySerializer(QueryFieldsMixin, serializers.ModelSerializer):
     prizes_item = serializers.ReadOnlyField(
         source='get_prizes',
     )
+
     class Meta:
         model = m.PrizeCategory
         fields = '__all__'

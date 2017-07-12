@@ -1145,7 +1145,6 @@ class PrizeTransitionViewSet(viewsets.ModelViewSet):
 
     @list_route(methods=['POST'])
     def send_active_prize(self, request):
-        # todo: 如果是礼盒礼物不加金币，加元气指数
         count = request.data.get('count')
         prize = m.Prize.objects.get(pk=request.data.get('prize'))
         live = m.Live.objects.get(pk=request.data.get('live'))
@@ -1156,7 +1155,7 @@ class PrizeTransitionViewSet(viewsets.ModelViewSet):
     @list_route(methods=['POST'])
     def open_star_box(self, request):
         # 观众开星光宝盒
-        m.PrizeTransition.viewer_open_starbox(request.user.id, live_id)
+        m.PrizeTransition.viewer_open_starbox(request.user.id)
         return Response(True)
 
 
@@ -1355,6 +1354,7 @@ class UserMarkViewSet(viewsets.ModelViewSet):
                 content_type=m.ContentType.objects.get(model='activeevent'),
             ).order_by('-date_created')
         return qs
+
 
 class ContactViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
