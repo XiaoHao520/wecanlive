@@ -350,10 +350,11 @@ class UserViewSet(viewsets.ModelViewSet):
     @list_route(methods=['GET'])
     def current(self, request):
         if request.user.is_anonymous():
-            return response_success('尚未登录')
-        return Response(
-            data=s.UserDetailedSerializer(request.user).data
-        )
+            return response_fail('')
+        data = s.UserDetailedSerializer(request.user).data
+        if hasattr(request.user, 'member'):
+            data['tencent_sig'] = request.user.member.tencent_sig
+        return Response(data=data)
 
     @list_route(methods=['GET'])
     def logout(self, request):
@@ -895,6 +896,7 @@ class LiveViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.Live.objects.all()
     serializer_class = s.LiveSerializer
+    ordering = ['-pk']
 
     def get_queryset(self):
         qs = interceptor_get_queryset_kw_field(self)
@@ -925,6 +927,50 @@ class LiveViewSet(viewsets.ModelViewSet):
                 m.models.Q(author__member__in=users_friend)
             )
         return qs
+
+    @detail_route(methods=['POST'])
+    def follow(self, request, pk):
+        live = m.Live.objects.get(pk=pk)
+        # 指定目标状态或者反转当前的状态
+        is_follow = request.data.get('is_follow') == '1' if 'is_follow' in request.data \
+            else not live.is_followed_by_current_user()
+        live.set_followed_by(request.user, is_follow)
+        return u.response_success('')
+
+    @detail_route(methods=['POST'])
+    def like(self, request, pk):
+        live = m.Live.objects.get(pk=pk)
+        # 指定目标状态或者反转当前的状态
+        is_like = request.data.get('is_like') == '1' if 'is_like' in request.data \
+            else not live.is_liked_by_current_user()
+        live.set_like_by(request.user, is_like)
+        return u.response_success('')
+
+    @list_route(methods=['POST'])
+    def start_live(self, request):
+        assert not request.user.is_anonymous, '请先登录'
+        name = request.data.get('name')
+        password = request.data.get('password')
+        paid = request.data.get('paid')
+        quota = request.data.get('quota')
+        category = m.LiveCategory.objects.get(id=request.data.get('category'))
+        live = m.Live.objects.create(
+            name=name,
+            password=password,
+            paid=paid,
+            quota=quota,
+            category=category,
+            author=request.user,
+        )
+        return Response(data=s.LiveSerializer(live).data)
+
+    @detail_route(methods=['POST'])
+    def live_end(self, request, pk):
+        assert not request.user.is_anonymous, '请先登录'
+        live = m.Live.objects.get(pk=pk)
+        live.date_end = datetime.now()
+        live.save()
+        return Response(data=True)
 
 
 class LiveBarrageViewSet(viewsets.ModelViewSet):
@@ -968,6 +1014,7 @@ class ActiveEventViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.ActiveEvent.objects.all()
     serializer_class = s.ActiveEventSerializer
+    ordering = ['-pk']
 
     def get_queryset(self):
         qs = interceptor_get_queryset_kw_field(self)
@@ -989,6 +1036,18 @@ class ActiveEventViewSet(viewsets.ModelViewSet):
             )
         return qs
 
+    @detail_route(methods=['POST'])
+    def like(self, request, pk):
+        active_event = m.ActiveEvent.objects.get(pk=pk)
+        # 指定目标状态或者反转当前的状态
+        is_like = request.data.get('is_like') == '1' if 'is_like' in request.data \
+            else not active_event.is_liked_by_current_user()
+        active_event.set_like_by(request.user, is_like)
+        return Response(data=dict(
+            is_like=active_event.is_liked_by_current_user(),
+            count_like=active_event.get_like_count(),
+        ))
+
 
 class PrizeCategoryViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
@@ -996,7 +1055,17 @@ class PrizeCategoryViewSet(viewsets.ModelViewSet):
     serializer_class = s.PrizeCategorySerializer
 
     def get_queryset(self):
-        return interceptor_get_queryset_kw_field(self)
+        qs = interceptor_get_queryset_kw_field(self)
+
+        normal = self.request.query_params.get('normal')
+        special_category = ('活动礼物', '宝盒礼物', 'VIP回馈礼物')
+        if normal:
+            qs = qs.filter(
+                is_active=True,
+            ).exclude(
+                name__in=special_category
+            )
+        return qs
 
 
 class PrizeViewSet(viewsets.ModelViewSet):
@@ -1012,13 +1081,72 @@ class PrizeViewSet(viewsets.ModelViewSet):
         return qs
 
     @list_route(methods=['GET'])
+    def get_user_active_prize(self, request):
+        # 获得当前用户的活动礼物
+        me = m.User.objects.get(pk=request.user.id)
+
+        active_category = ('活动礼物', '宝盒礼物', 'VIP回馈礼物')
+
+        prizes = m.Prize.objects.filter(
+            category__name__in=active_category,
+            transitions__user_debit=me,
+            transitions__user_credit=None,
+        ).distinct()
+
+        data = dict(
+            vip_prize=[],
+            box_prize=[],
+            active_prize=[],
+        )
+        for prize in prizes:
+            accept = me.prizetransitions_debit.filter(
+                prize=prize,
+                user_credit=None,
+            ).all().aggregate(amount=models.Sum('amount')).get('amount') or 0
+
+            send = me.prizetransitions_credit.filter(
+                prize=prize,
+            ).exclude(
+                user_debit=None
+            ).all().aggregate(amount=models.Sum('amount')).get('amount') or 0
+            count = int((accept - send) / prize.price)
+            if count > 0 and prize.category.name == '活动礼物':
+                data['active_prize'].append(dict(
+                    id=prize.id,
+                    icon=prize.icon.image.url,
+                    name=prize.name,
+                    count=count,
+                    price=prize.price,
+                    categor=prize.category.name,
+                ))
+            elif count > 0 and prize.category.name == '宝盒礼物':
+                data['box_prize'].append(dict(
+                    id=prize.id,
+                    icon=prize.icon.image.url,
+                    name=prize.name,
+                    count=count,
+                    price=prize.price,
+                    categor=prize.category.name,
+                ))
+            elif count > 0 and prize.category.name == 'VIP回馈礼物':
+                data['vip_prize'].append(dict(
+                    id=prize.id,
+                    icon=prize.icon.image.url,
+                    name=prize.name,
+                    count=count,
+                    price=prize.price,
+                    categor=prize.category.name,
+                ))
+        return Response(data=data)
+
+    @list_route(methods=['GET'])
     def get_user_prize_emoji(self, request):
+        # todo 获得当前用户送过的礼物没过期的表情包
         prize = m.Prize.objects.filter(
             date_sticker_begin__lt=datetime.now(),
             date_sticker_end__gt=datetime.now(),
             orders__author=request.user,
         ).exclude(stickers=None)
-        print(prize)
 
         return Response(data=True)
 
@@ -1030,6 +1158,22 @@ class PrizeTransitionViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return interceptor_get_queryset_kw_field(self)
+
+    @list_route(methods=['POST'])
+    def send_active_prize(self, request):
+        # todo: 如果是礼盒礼物不加金币，加元气指数
+        count = request.data.get('count')
+        prize = m.Prize.objects.get(pk=request.data.get('prize'))
+        live = m.Live.objects.get(pk=request.data.get('live'))
+
+        m.PrizeTransition.send_active_prize(live, count, prize, request.user.id)
+        return Response(data=True)
+
+    @list_route(methods=['POST'])
+    def open_star_box(self, request):
+        # 观众开星光宝盒
+        m.PrizeTransition.viewer_open_starbox(request.user.id, live_id)
+        return Response(True)
 
 
 class PrizeOrderViewSet(viewsets.ModelViewSet):
@@ -1057,7 +1201,7 @@ class PrizeOrderViewSet(viewsets.ModelViewSet):
         live = m.Live.objects.get(pk=request.data.get('live'))
         prize = m.Prize.objects.get(pk=request.data.get('prize'))
         count = request.data.get('count')
-        m.PrizeOrder.buy_price(live, prize, count, request.user)
+        m.PrizeOrder.buy_prize(live, prize, count, request.user.id)
 
         return Response(data=True)
 

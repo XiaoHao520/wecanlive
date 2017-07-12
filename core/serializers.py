@@ -229,6 +229,7 @@ class UserDetailedSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     signature = serializers.ReadOnlyField(source="member.signature")
     diamond_balance = serializers.ReadOnlyField(source='member.get_diamond_balance')
     coin_balance = serializers.ReadOnlyField(source='member.get_coin_balance')
+    star_balance = serializers.ReadOnlyField(source='member.get_star_balance')
     # 跟踪数量
     count_follow = serializers.ReadOnlyField(
         source='member.get_follow_count',
@@ -434,7 +435,7 @@ class MemberSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.Member
         # fields = '__all__'
-        exclude = ['session_key']
+        exclude = ['session_key', 'tencent_sig', 'tencent_sig_expire']
 
 
 class RobotSerializer(QueryFieldsMixin, serializers.ModelSerializer):
@@ -769,7 +770,7 @@ class ActiveEventSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     )
 
     gender = serializers.ReadOnlyField(
-        source='author.gender',
+        source='author.member.gender',
     )
 
     age = serializers.ReadOnlyField(
@@ -782,6 +783,10 @@ class ActiveEventSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
     author_is_following = serializers.ReadOnlyField(
         source='author.member.is_followed_by_current_user',
+    )
+
+    is_like = serializers.ReadOnlyField(
+        source='is_liked_by_current_user'
     )
 
     class Meta:
@@ -949,6 +954,10 @@ class FeedbackSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
 
 class BannerSerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    image_url = serializers.ReadOnlyField(
+        source='image.image.url',
+    )
+
     class Meta:
         model = m.Banner
         fields = '__all__'

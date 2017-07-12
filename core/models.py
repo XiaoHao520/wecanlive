@@ -1,6 +1,6 @@
 from django_base.models import *
-from django_member.models import *
 from django_finance.models import *
+from django_member.models import *
 
 
 # 附加到公共類上的方法
@@ -113,10 +113,40 @@ class Member(AbstractMember,
         default=False,
     )
 
+    tencent_sig = models.TextField(
+        verbose_name='腾讯云鉴权密钥',
+        blank=True,
+        default='',
+        help_text='腾讯云SDK产生'
+    )
+
+    tencent_sig_expire = models.DateTimeField(
+        verbose_name='腾讯云鉴权密钥过期时间',
+        null=True,
+        blank=True,
+        help_text='默认过期时间为180天'
+    )
+
     class Meta:
         verbose_name = '会员'
         verbose_name_plural = '会员'
         db_table = 'core_member'
+
+    def save(self, *args, **kwargs):
+        if self.user:
+            self.load_tencent_sig()
+        super().save(*args, **kwargs)
+
+    def load_tencent_sig(self, force=False):
+        from tencent import auth
+        # 还没有超期的话忽略操作
+        if not force and self.tencent_sig \
+                and self.tencent_sig_expire and self.tencent_sig_expire > datetime.now():
+            return
+        self.tencent_sig = auth.generate_sig(
+            self.user.username, settings.TENCENT_WEBIM_APPID)
+        # 内部保留一定裕度，160天内不自动刷新
+        self.tencent_sig_expire = datetime.now() + timedelta(days=160)
 
     def is_robot(self):
         return hasattr(self.user, 'robot') and self.user.robot
@@ -211,7 +241,6 @@ class Member(AbstractMember,
         # 收入鑽石數
         debit_diamond = self.user.creditdiamondtransactions_debit.all().aggregate(
             amount=models.Sum('amount')).get('amount') or 0
-        # todo: 可能要考虑提现中的钻石数量，如果提现就生成一条扣除钻石的流水就不用考虑了
         return debit_diamond - credit_diamond
 
     def get_coin_balance(self):
@@ -239,6 +268,16 @@ class Member(AbstractMember,
         count = self.user.creditstarindextransactions_debit.all().aggregate(
             amount=models.Sum('amount')).get('amount') or 0
         return int(count)
+
+    def get_star_balance(self):
+        """星星（元气）余额
+        """
+        credit_star = self.user.creditstartransactions_credit.all().aggregate(
+            amount=models.Sum('amount')).get('amount') or 0
+
+        debit_star = self.user.creditstartransactions_debit.all().aggregate(
+            amount=models.Sum('amount')).get('amount') or 0
+        return debit_star - credit_star
 
 
 class Robot(models.Model):
@@ -309,8 +348,8 @@ class CreditStarTransaction(AbstractTransactionModel):
 
 class CreditStarIndexTransaction(AbstractTransactionModel):
     class Meta:
-        verbose_name = '星光指数流水'
-        verbose_name_plural = '星光指数流水'
+        verbose_name = '星光指数（元氣）流水'
+        verbose_name_plural = '星光指数（元氣）流水'
         db_table = 'core_credit_star_index_transaction'
 
 
@@ -696,6 +735,18 @@ class Live(UserOwnedModel,
         verbose_name_plural = '直播'
         db_table = 'core_live'
 
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        # WebIM 建群
+        from tencent.webim import WebIM
+        webim = WebIM(settings.TENCENT_WEBIM_APPID)
+        webim.create_group(
+            self.author.username,
+            'Live_{}'.format(self.id),
+            type=WebIM.GROUP_TYPE_AV_CHAT_ROOM,
+            group_id='live_{}'.format(self.id),
+        )
+
     def get_comment_count(self):
         return self.comments.count()
 
@@ -726,6 +777,13 @@ class Live(UserOwnedModel,
     # 標記一個點贊
     def set_like_by(self, user, is_like=True):
         self.set_marked_by(user, 'like', is_like)
+
+    def is_liked_by_current_user(self):
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_anonymous:
+            return False
+        return self.is_marked_by(user, 'like')
 
     def get_like_count(self):
         return self.get_users_marked_with('like').count()
@@ -793,7 +851,7 @@ class Live(UserOwnedModel,
         room_id = self.get_room_id()
         biz_id = settings.TENCENT_MLVB_BIZ_ID
         live_code = biz_id + '_' + room_id
-        return 'http://{biz_id}.livepush.myqcloud.com/live/' \
+        return 'http://{biz_id}.liveplay.myqcloud.com/live/' \
                '{live_code}.flv' \
             .format(biz_id=biz_id, live_code=live_code)
 
@@ -882,6 +940,22 @@ class LiveWatchLog(UserOwnedModel,
             self.live.name,
         )
 
+    def save(self, *args, **kwargs):
+        """
+        自动将人加入到群组中
+        :param args:
+        :param kwargs:
+        :return:
+        """
+        super().save(self, *args, **kwargs)
+        from tencent.webim import WebIM
+        webim = WebIM(settings.TENCENT_WEBIM_APPID)
+        webim.add_group_member(
+            group_id='live_{}'.format(self.live_id),
+            member_list=[dict(Member_Account=self.author.username)],
+            silence=True,
+        )
+
     def get_comment_count(self):
         return self.comments.count()
 
@@ -962,6 +1036,13 @@ class ActiveEvent(UserOwnedModel,
     # 標記一個點贊
     def set_like_by(self, user, is_like=True):
         self.set_marked_by(user, 'like', is_like)
+
+    def is_liked_by_current_user(self):
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_anonymous:
+            return False
+        return self.is_marked_by(user, 'like')
 
     def get_comment_count(self):
         return self.comments.count()
@@ -1068,14 +1149,94 @@ class PrizeTransition(AbstractTransactionModel):
         related_name='transitions',
     )
 
+    # prize_count = models.IntegerField(
+    #     verbose_name='礼物数量',
+    #     default=1
+    # )
+
     class Meta:
         verbose_name = '礼物记录'
         verbose_name_plural = '礼物记录'
         db_table = 'core_prize_transition'
 
+    @staticmethod
+    def send_active_prize(live, count, prize, user_id):
+        user = User.objects.get(pk=user_id)
+        amount = prize.price * count
+        log = live.watch_logs.filter(author=user).first()
+
+        accept = user.prizetransitions_debit.filter(
+            prize=prize,
+            user_credit=None,
+        ).all().aggregate(amount=models.Sum('amount')).get('amount') or 0
+
+        send = user.prizetransitions_credit.filter(
+            prize=prize,
+        ).exclude(
+            user_debit=None
+        ).all().aggregate(amount=models.Sum('amount')).get('amount') or 0
+
+        total = int((accept - send) / prize.price)
+        assert total >= count, '贈送失敗，禮物剩餘不足'
+        user.prizetransitions_credit.create(
+            user_debit=live.author,
+            amount=amount,
+            remark=count,
+            prize=prize,
+        )
+
+        # 钻石流水
+        diamond_transition = live.author.creditdiamondtransactions_debit.create(
+            amount=amount,
+            remark='禮物兌換',
+            type='LIVE_GIFT',
+            live=live,
+            live_watch_log=log,
+        )
+
+    @staticmethod
+    def viewer_open_starbox(user_id):
+        me = User.objects.get(pk=user_id)
+        assert me.member.get_star_balance() >= 500, '你的元氣不足，不能打開寶盒'
+        prize = Prize.objects.filter(
+            category__name='宝盒礼物',
+            is_active=True,
+        ).order_by('?').first()
+        assert prize, '暫無禮物可選'
+        # todo: 数量
+        # 礼物记录
+        me.prizetransitions_debit.create(
+            prize=prize,
+            amount=prize.price,
+            remark='打開星光寶盒獲得禮物',
+        )
+        # 元气流水
+        me.creditstartransactions_credit.create(
+            amount=500,
+        )
+
 
 class PrizeOrder(UserOwnedModel):
     """ 礼物订单，关联到用户在哪个直播里面购买了礼物，需要关联到对应的礼物转移记录
+    ### 如果是在直播界面直接購買並贈送禮物
+    禮物是即時購買並贈送的，會涉及下列的動作：
+    1. 添加 PrizeTransaction，user_debit 是 主播， user_credit 是 None
+    2. 添加 CoinTransaction，user_debit 是 None，user_credit 是 送禮的觀衆用戶
+    3. 添加 DiamondTransaction，user_debit 是 主播，user_credit 是 None
+    4. 添加 PrizeOrder，關聯上述三條流水
+    ### 如果是在活動中獲得禮物獎勵
+    1. 不添加 PrizeOrder
+    2. 添加 PrizeTransaction，user_debit 是 獲得獎勵的用戶，user_credit 是 None
+    ### 如果在直播中上使用活動獎勵得到的禮物
+    1. 不添加 PrizeOrder
+    2. 添加 PrizeTransaction，user_debit 是 主播，user_credit 是 送禮的觀衆用戶
+    3. 添加 DiamondTransaction，user_debit 是 主播，user_credit 是 None
+
+    ### 如果在直播中使用宝盒礼物
+    1. 不添加 PrizeOrder
+    2. 添加 PrizeTransaction，user_debit 是 主播，user_credit 是 送禮的觀衆用戶
+    3. 添加星光指数流水CreditStarIndexTransaction user_debit 是主播 , user_credit 是none
+    4. 添加星光流水CreditStarTransaction user_debit 是none ，user_credit 是送礼的观众用户
     """
     prize = models.ForeignKey(
         verbose_name='礼物',
@@ -1089,10 +1250,22 @@ class PrizeOrder(UserOwnedModel):
         related_name='prize_orders',
     )
 
-    prize_transition = models.ForeignKey(
+    prize_transition = models.OneToOneField(
         verbose_name='礼物记录',
         to='PrizeTransition',
-        related_name='orders',
+        related_name='prize_orders',
+    )
+
+    coin_transition = models.OneToOneField(
+        verbose_name='金幣消費记录',
+        to='CreditCoinTransaction',
+        related_name='prize_orders',
+    )
+
+    diamond_transition = models.OneToOneField(
+        verbose_name='主播鑽石记录',
+        to='CreditDiamondTransaction',
+        related_name='prize_orders',
     )
 
     date_created = models.DateTimeField(
@@ -1106,33 +1279,44 @@ class PrizeOrder(UserOwnedModel):
         db_table = 'core_prize_order'
 
     @staticmethod
-    def buy_price(live, prize, count, user):
+    def buy_prize(live, prize, count, user_id):
         total_price = count * prize.price
-        assert user.member.get_coin_balance() > total_price, '赠送失败,余额不足'
+        user = User.objects.get(pk=user_id)
+        assert user.member.get_coin_balance() >= total_price, '赠送失败,余额不足'
         log = live.watch_logs.filter(author=user).first()
-
-        # 新建礼物记录
-        # todo 新增礼物记录 要不要新建金币流水？ 如果不要，要修改get_coin_balance
-        prize_credit = user.prizetransitions_credit.create(
+        # 礼物流水
+        prize_transition = user.prizetransitions_credit.create(
             amount=total_price,
             user_debit=live.author,
             remark=count,
             prize=prize,
         )
 
-        # 新建礼物订单
-        order = prize.orders.create(
-            author=user,
-            live_watch_log=log,
-            prize_transition=prize_credit,
+        # 金币流水
+        coin_transition = user.creditcointransactions_credit.create(
+            amount=total_price,
+            remark='購買禮物',
         )
 
-        # todo 金币流水
-        user.creditcointransactions_credit.create(
-            user_debit=live.author,
+        # 钻石流水
+        diamond_transition = live.author.creditdiamondtransactions_debit.create(
             amount=total_price,
-            remark='购买礼物',
+            remark='禮物兌換',
+            type='LIVE_GIFT',
+            live=live,
+            live_watch_log=log,
         )
+
+        # 礼物订单
+        order = user.prizeorders_owned.create(
+            prize=prize,
+            live_watch_log=log,
+            prize_transition=prize_transition,
+            coin_transition=coin_transition,
+            diamond_transition=diamond_transition,
+        )
+
+        return order
 
 
 class ExtraPrize(EntityModel):
@@ -1725,7 +1909,7 @@ class Banner(models.Model):
     subject = models.CharField(
         verbose_name='主题',
         max_length=20,
-        blank=True,
+        choices=SUBJECT_CHOICES,
         default='',
     )
 
