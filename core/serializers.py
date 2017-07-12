@@ -229,6 +229,7 @@ class UserDetailedSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     signature = serializers.ReadOnlyField(source="member.signature")
     diamond_balance = serializers.ReadOnlyField(source='member.get_diamond_balance')
     coin_balance = serializers.ReadOnlyField(source='member.get_coin_balance')
+    star_balance = serializers.ReadOnlyField(source='member.get_star_balance')
     # 跟踪数量
     count_follow = serializers.ReadOnlyField(
         source='member.get_follow_count',
