@@ -854,6 +854,9 @@ class FamilyViewSet(viewsets.ModelViewSet):
     queryset = m.Family.objects.all()
     serializer_class = s.FamilySerializer
 
+    def get_queryset(self):
+        return interceptor_get_queryset_kw_field(self)
+
 
 class FamilyMemberViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'

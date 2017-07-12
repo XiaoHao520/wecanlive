@@ -530,6 +530,27 @@ class Serializer(QueryFieldsMixin, serializers.ModelSerializer):
 
 
 class FamilySerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    logo_item = ImageSerializer(
+        source='logo',
+        read_only=True,
+    )
+
+    nickname = serializers.ReadOnlyField(
+        source='author.member.nickname',
+    )
+
+    count_admin = serializers.ReadOnlyField(
+        source='get_count_admin',
+    )
+
+    count_family_member = serializers.ReadOnlyField(
+        source='get_count_family_member',
+    )
+
+    count_family_mission = serializers.ReadOnlyField(
+        source='get_count_family_mission',
+    )
+
     class Meta:
         model = m.Family
         fields = '__all__'

@@ -454,6 +454,7 @@ class Family(UserOwnedModel,
         verbose_name='家族消息',
         to=Message,
         related_name='families',
+        blank=True,
     )
 
     mission_unlock_duration = models.IntegerField(
@@ -508,6 +509,28 @@ class Family(UserOwnedModel,
         :return:
         """
         raise NotImplemented()
+
+    def get_count_admin(self):
+        """
+        审批通过的家族管理员数
+        :return:
+        """
+        return self.users.filter(
+            familymembers_owned__status=FamilyMember.STATUS_APPROVED,
+            familymembers_owned__role=FamilyMember.ROLE_ADMIN,
+        ).count()
+
+    def get_count_family_member(self):
+        """
+        审核通过的家族成员数
+        :return:
+        """
+        return self.users.filter(
+            familymembers_owned__status=FamilyMember.STATUS_APPROVED,
+        ).count()
+
+    def get_count_family_mission(self):
+        return FamilyMission.objects.filter(family=self).count()
 
 
 class FamilyMember(UserOwnedModel):
