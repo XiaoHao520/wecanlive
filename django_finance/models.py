@@ -84,10 +84,14 @@ class PaymentRecord(UserOwnedModel):
     PLATFORM_BALANCE = 'BALANCE'
     PLATFORM_WXPAY = 'WXPAY'
     PLATFORM_ALIPAY = 'ALIPAY'
+    PLATFORM_IN_APP = 'APP'
+    PLATFORM_PAYPAL = 'PAYPAL'
     PLATFORM_CHOICES = (
         (PLATFORM_BALANCE, '余额支付'),
         (PLATFORM_ALIPAY, '支付宝'),
         (PLATFORM_WXPAY, '微信支付'),
+        (PLATFORM_IN_APP, 'Buy in app'),
+        (PLATFORM_PAYPAL, 'Paypal'),
     )
 
     platform = models.CharField(

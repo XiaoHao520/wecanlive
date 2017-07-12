@@ -15,6 +15,53 @@ def comment_watch_status(self):
 Comment.watch_status = comment_watch_status
 
 
+def account_transaction_member(self):
+    if self.user_debit and not self.user_credit:
+        return dict(
+            nickname=self.user_debit.member.nickname,
+            mobile=self.user_debit.member.mobile,
+        )
+    elif self.user_credit and not self.user_debit:
+        return dict(
+            nickname=self.user_credit.member.nickname,
+            mobile=self.user_credit.member.mobile,
+        )
+    return dict(
+        nickname=None,
+        mobile=None,
+    )
+
+AccountTransaction.member = account_transaction_member
+
+
+def account_transaction_payment_platform(self):
+    if not self.type == AccountTransaction.TYPE_RECHARGE:
+        return None
+    return self.recharge_record.payment_record.platform
+
+AccountTransaction.payment_platform = account_transaction_payment_platform
+
+
+def account_transaction_payment_out_trade_no(self):
+    if not self.type == AccountTransaction.TYPE_RECHARGE:
+        return None
+    return self.recharge_record.payment_record.out_trade_no
+
+AccountTransaction.payment_out_trade_no = account_transaction_payment_out_trade_no
+
+
+# def total_recharge():
+#     return AccountTransaction.objects.filter(type=AccountTransaction.TYPE_RECHARGE).aggregate(
+#         amount=models.Sum('amount')).get('amount') or 0
+#
+#
+# def total_withdraw():
+#     return AccountTransaction.objects.filter(
+#         type=AccountTransaction.TYPE_WITHDRAW,
+#         withdraw_record__status=WithdrawRecord.STATUS_PENDING
+#     ).aggregate(amount=models.Sum('amount')).get('amount') or 0
+
+
 # 一般模型類
 
 
@@ -167,6 +214,24 @@ class Member(AbstractMember,
         for live in lives:
             duration += live.get_duration()
         return duration
+
+    def credit_diamond(self):
+        return self.user.creditdiamondtransactions_credit.all().aggregate(
+            amount=models.Sum('amount')).get('amount') or 0
+
+    def debit_diamond(self):
+        return self.user.creditdiamondtransactions_debit.all().aggregate(
+            amount=models.Sum('amount')).get('amount') or 0
+
+    def credit_star_index(self):
+        return self.user.creditstarindextransactions_credit.all().aggregate(
+            amount=models.Sum('amount')
+        ).get('amount') or 0
+
+    def debit_star_index(self):
+        return self.user.creditstarindextransactions_debit.all().aggregate(
+            amount=models.Sum('amount')
+        ).get('amount') or 0
 
     def get_diamond_balance(self):
         # 钻石余额
@@ -825,6 +890,12 @@ class LiveWatchLog(UserOwnedModel,
         verbose_name_plural = '直播观看记录'
         db_table = 'core_live_watch_log'
 
+    def __str__(self):
+        return '{} - {}'.format(
+            self.author.member.mobile,
+            self.live.name,
+        )
+
     def get_comment_count(self):
         return self.comments.count()
 
@@ -919,6 +990,10 @@ class ActiveEvent(UserOwnedModel,
     def get_like_count(self):
         return self.get_users_marked_with('like').count()
 
+    def get_preview(self):
+        if self.images.first():
+            return self.images.first()
+
 
 class PrizeCategory(EntityModel):
     class Meta:
@@ -937,6 +1012,9 @@ class PrizeCategory(EntityModel):
                 icon=prize.icon.image.url,
             ))
         return prizes
+
+    def get_count_prize(self):
+        return self.prizes.all().count()
 
 
 class Prize(EntityModel):

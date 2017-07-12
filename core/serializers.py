@@ -171,6 +171,44 @@ class BankSerializer(QueryFieldsMixin, serializers.ModelSerializer):
         fields = '__all__'
 
 
+class AccountTransactionSerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    user_credit_nickname = serializers.ReadOnlyField(
+        source='user_credit.member.nickname',
+    )
+
+    user_credit_mobile = serializers.ReadOnlyField(
+        source='user_credit.member.mobile',
+    )
+
+    user_debit_nickname = serializers.ReadOnlyField(
+        source='user_debit.member.nickname',
+    )
+
+    user_debit_mobile = serializers.ReadOnlyField(
+        source='user_debit.member.mobile',
+    )
+
+    nickname = serializers.ReadOnlyField(
+        source='member.nickname',
+    )
+
+    mobile = serializers.ReadOnlyField(
+        source='member.mobile',
+    )
+
+    platform = serializers.ReadOnlyField(
+        source='payment_platform',
+    )
+
+    out_trade_no = serializers.ReadOnlyField(
+        source='payment_out_trade_no',
+    )
+
+    class Meta:
+        model = m.AccountTransaction
+        fields = '__all__'
+
+
 class BankAccountSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     bank_item = BankSerializer(
         source='bank',
@@ -383,6 +421,16 @@ class MemberSerializer(QueryFieldsMixin, serializers.ModelSerializer):
         read_only=True,
     )
 
+    age = serializers.ReadOnlyField(
+        source='get_age',
+    )
+
+    credit_diamond = serializers.ReadOnlyField()
+
+    debit_diamond = serializers.ReadOnlyField()
+
+    debit_star_index = serializers.ReadOnlyField()
+
     class Meta:
         model = m.Member
         # fields = '__all__'
@@ -530,6 +578,10 @@ class LiveSerializer(QueryFieldsMixin, serializers.ModelSerializer):
         source='author.member.nickname',
     )
 
+    mobile = serializers.ReadOnlyField(
+        source='author.member.mobile',
+    )
+
     author_avatar = serializers.ReadOnlyField(
         source='author.member.avatar.image.url',
     )
@@ -670,6 +722,11 @@ class ActiveEventSerializer(QueryFieldsMixin, serializers.ModelSerializer):
         read_only=True,
     )
 
+    preview = ImageSerializer(
+        source='get_preview',
+        read_only=True,
+    )
+
     count_comment = serializers.ReadOnlyField(
         source='get_comment_count',
     )
@@ -684,6 +741,10 @@ class ActiveEventSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
     nickname = serializers.ReadOnlyField(
         source='author.member.nickname',
+    )
+
+    mobile = serializers.ReadOnlyField(
+        source='author.member.mobile',
     )
 
     gender = serializers.ReadOnlyField(
@@ -715,6 +776,11 @@ class PrizeCategorySerializer(QueryFieldsMixin, serializers.ModelSerializer):
     prizes_item = serializers.ReadOnlyField(
         source='get_prizes',
     )
+
+    count_prize = serializers.ReadOnlyField(
+        source='get_count_prize',
+    )
+
     class Meta:
         model = m.PrizeCategory
         fields = '__all__'
@@ -723,6 +789,16 @@ class PrizeCategorySerializer(QueryFieldsMixin, serializers.ModelSerializer):
 class PrizeSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     icon_item = ImageSerializer(
         source='icon',
+        read_only=True,
+    )
+
+    category_name = serializers.ReadOnlyField(
+        source='category.name',
+    )
+
+    stickers_item = ImageSerializer(
+        source='stickers',
+        many=True,
         read_only=True,
     )
 
@@ -754,12 +830,12 @@ class PrizeOrderSerializer(QueryFieldsMixin, serializers.ModelSerializer):
         source='prize_transition.amount',
     )
 
-    user_debit = serializers.ReadOnlyField(
-        source='prize_transition.user_debit.member.mobile',
+    user_credit = serializers.ReadOnlyField(
+        source='prize_transition.user_credit.member.mobile',
     )
 
-    user_debit_nickname = serializers.ReadOnlyField(
-        source='prize_transition.user_debit.member.nickname',
+    user_credit_nickname = serializers.ReadOnlyField(
+        source='prize_transition.user_credit.member.nickname',
     )
 
     live_id = serializers.ReadOnlyField(
@@ -882,8 +958,12 @@ class CommentSerializer(QueryFieldsMixin, serializers.ModelSerializer):
         source='author.member.avatar.image.url',
     )
 
-    author_nickname = serializers.ReadOnlyField(
-        source='author.member.nickname'
+    nickname = serializers.ReadOnlyField(
+        source='author.member.nickname',
+    )
+
+    mobile = serializers.ReadOnlyField(
+        source='author.member.mobile',
     )
 
     class Meta:
