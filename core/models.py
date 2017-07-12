@@ -279,6 +279,17 @@ class Member(AbstractMember,
             amount=models.Sum('amount')).get('amount') or 0
         return debit_star - credit_star
 
+    def add_withdraw_blacklisted(self):
+        """
+        添加到提现黑名单（顺手驳回该用户其他申请中的提现）
+        :return:
+        """
+        self.is_withdraw_blacklisted = True
+        self.save()
+        # 把剩下仍在申请中的提现全部驳回
+        for withdraw_record in WithdrawRecord.objects.filter(author=self.user, status=WithdrawRecord.STATUS_PENDING):
+            withdraw_record.reject()
+
 
 class Robot(models.Model):
     """ 机器人

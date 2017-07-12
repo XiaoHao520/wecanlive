@@ -191,6 +191,8 @@ BMAP_KEY = 'D373d23acd37b0c4af370a517922e020'
 # 是否将音频自动转换为 ogg/mp3
 NORMALIZE_AUDIO = True
 
+# =============== Tencent MLVB ==============
+
 # 騰訊移動直播
 # bizId 編號（4位數字）
 TENCENT_MLVB_BIZ_ID = '9857'
