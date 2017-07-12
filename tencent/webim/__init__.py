@@ -69,7 +69,7 @@ class WebIM:
 
     def create_group(self, owner_account, name='New Group', type=GROUP_TYPE_PUBLIC,
                      group_id=None, introduction='', notification='', face_url=None,
-                     max_member_count=0, apply_join_option='NeedPermission',
+                     max_member_count=0, apply_join_option=None,
                      app_defined_data=None, member_list=()):
         """ 创建群
         :param owner_account: 群主账号
@@ -91,7 +91,6 @@ class WebIM:
             Name=name,
             Introduction=introduction,
             Notification=notification,
-            ApplyJoinOption=apply_join_option,
         )
         # 自定义群组 ID
         if group_id:
@@ -102,8 +101,11 @@ class WebIM:
         # 最大成员数量
         if max_member_count:
             data['MaxMemberCount'] = max_member_count
+        if apply_join_option:
+            data['ApplyJoinOption'] = apply_join_option
         if app_defined_data:
             data['AppDefinedData'] = list([dict(Key=k, Value=v) for k, v in app_defined_data.items()])
+        # print(data)
         return self.post('group_open_http_svc', 'create_group', data)
 
     def add_group_member(self, group_id, member_list, silence: False):
@@ -111,6 +113,7 @@ class WebIM:
         https://www.qcloud.com/document/product/269/1621
         :param group_id: 自定义群组ID，缺省的话自动生成
         :param member_list: 群成员列表 dict(Member_Account, Role, <dict>AppMemberDefinedData)
+        :param silence: 是否静默（不向会员发送通知）
         :return:
         """
         data = dict(

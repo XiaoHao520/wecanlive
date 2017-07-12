@@ -707,6 +707,11 @@ class Live(UserOwnedModel,
         default=0,
     )
 
+    like_count = models.IntegerField(
+        verbose_name='点赞数量',
+        default=0,
+    )
+
     class Meta:
         verbose_name = '直播'
         verbose_name_plural = '直播'
@@ -720,7 +725,7 @@ class Live(UserOwnedModel,
         webim.create_group(
             self.author.username,
             'Live_{}'.format(self.id),
-            type=WebIM.GROUP_TYPE_AV_CHAT_ROOM,
+            type=WebIM.GROUP_TYPE_PRIVATE,
             group_id='live_{}'.format(self.id),
         )
 
@@ -924,7 +929,7 @@ class LiveWatchLog(UserOwnedModel,
         :param kwargs:
         :return:
         """
-        super().save(self, *args, **kwargs)
+        super().save(*args, **kwargs)
         from tencent.webim import WebIM
         webim = WebIM(settings.TENCENT_WEBIM_APPID)
         webim.add_group_member(

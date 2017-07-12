@@ -943,6 +943,12 @@ class LiveViewSet(viewsets.ModelViewSet):
         live.set_like_by(request.user, is_like)
         return u.response_success('')
 
+    @detail_route(methods=['PATCH'])
+    def add_like_count(self, request, pk):
+        count = int(request.data.get('count', 1))
+        m.Live.objects.filter(pk=pk).update(like_count=models.F('like_count') + count)
+        return u.response_success()
+
     @list_route(methods=['POST'])
     def start_live(self, request):
         assert not request.user.is_anonymous, '请先登录'

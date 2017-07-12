@@ -69,14 +69,14 @@ from rest_framework.response import Response
 #     return '{}&sign={}'.format(order_info, rsa_sign(order_info))
 
 
-def response_success(msg):
+def response_success(msg=''):
     return Response(data=dict(
         ok=True,
         msg=msg,
     ))
 
 
-def response_fail(msg, error_code=0, status=400):
+def response_fail(msg='', error_code=0, status=400):
     return Response(data=dict(
         ok=False,
         error_code=error_code,
