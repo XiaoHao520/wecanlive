@@ -31,6 +31,7 @@ def account_transaction_member(self):
         mobile=None,
     )
 
+
 AccountTransaction.member = account_transaction_member
 
 
@@ -39,6 +40,7 @@ def account_transaction_payment_platform(self):
         return None
     return self.recharge_record.payment_record.platform
 
+
 AccountTransaction.payment_platform = account_transaction_payment_platform
 
 
@@ -46,6 +48,7 @@ def account_transaction_payment_out_trade_no(self):
     if not self.type == AccountTransaction.TYPE_RECHARGE:
         return None
     return self.recharge_record.payment_record.out_trade_no
+
 
 AccountTransaction.payment_out_trade_no = account_transaction_payment_out_trade_no
 
@@ -135,6 +138,22 @@ class Member(AbstractMember,
     def save(self, *args, **kwargs):
         if self.user:
             self.load_tencent_sig()
+
+        # 补充资料送元气
+        achievement = self.user.starmissionachievements_owned.filter(
+            type=StarMissionAchievement.TYPE_INFORMATION).exists()
+        if self.nickname and self.avatar and self.gender \
+                and self.signature and self.birthday and self.age \
+                and self.constellation and not achievement:
+            self.user.starmissionachievements_owned.create(
+                # todo:应该为后台可设的数值
+                points=10,
+                type=StarMissionAchievement.TYPE_INFORMATION,
+            )
+            self.user.creditstartransactions_debit.create(
+                amount=10,
+                remark='完成元气任务的完善资料任务奖励'
+            )
         super().save(*args, **kwargs)
 
     def load_tencent_sig(self, force=False):
@@ -1008,6 +1027,14 @@ class LiveWatchLog(UserOwnedModel,
             author=self.author,
             type='WATCH',
         ).count()
+
+    def get_information_mission_count(self):
+        """当前用户完善资料任务完成数
+        """
+
+        return StarMissionAchievement.objects.filter(
+            author=self.author,
+            type=StarMissionAchievement.TYPE_INFORMATION).count()
 
 
 class ActiveEvent(UserOwnedModel,

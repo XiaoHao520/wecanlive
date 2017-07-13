@@ -1272,6 +1272,29 @@ class StarMissionAchievementViewSet(viewsets.ModelViewSet):
     queryset = m.StarMissionAchievement.objects.all()
     serializer_class = s.StarMissionAchievementSerializer
 
+    @list_route(methods=['POST'])
+    def achievement_watch_mission(self, request):
+        # 领取观看直播任务奖励
+        live_id = request.data.get('live')
+
+        user = m.User.objects.get(pk=request.user.id)
+        log = request.user.livewatchlogs_owned.filter(live__id=live_id).first()
+        assert log.get_watch_mission_count() < 8, '直播間觀看任務只能做8次'
+        # 领取记录
+        m.StarMissionAchievement.objects.create(
+            author=request.user,
+            live=m.Live.objects.get(pk=live_id),
+            # todo: 应该为后台可设的数值
+            points=5,
+            type=m.StarMissionAchievement.TYPE_WATCH,
+        )
+        # 元气流水
+        request.user.creditstartransactions_debit.create(
+            amount=5,
+            remark='完成直播間{}觀看任務'.format(live_id),
+        )
+        return Response(True)
+
 
 class LevelOptionViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'

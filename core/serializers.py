@@ -721,6 +721,9 @@ class LiveWatchLogSerializer(QueryFieldsMixin, serializers.ModelSerializer):
         source='get_watch_mission_count',
     )
 
+    information_mission_count = serializers.ReadOnlyField(
+        source='get_information_mission_count'
+    )
 
     class Meta:
         model = m.LiveWatchLog
@@ -977,6 +980,7 @@ class CommentSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     mobile = serializers.ReadOnlyField(
         source='author.member.mobile',
     )
+
 
     class Meta:
         model = m.Comment
