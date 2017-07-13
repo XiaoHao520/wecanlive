@@ -69,29 +69,34 @@ class GroupViewSet(viewsets.ModelViewSet):
     queryset = m.Group.objects.all()
     serializer_class = s.GroupSerializer
     filter_fields = '__all__'
+    ordering = ['-pk']
 
 
 class GroupInfoViewSet(viewsets.ModelViewSet):
     queryset = m.GroupInfo.objects.all()
     serializer_class = s.GroupInfoSerializer
     filter_fields = '__all__'
+    ordering = ['-pk']
 
 
 class AddressDistrictViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.AddressDistrict.objects.all()
     serializer_class = s.AddressDistrictSerializer
+    ordering = ['-pk']
 
 
 class BankViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.Bank.objects.all()
     serializer_class = s.BankSerializer
+    ordering = ['-pk']
 
 
 class ImageViewSet(viewsets.ModelViewSet):
     queryset = m.ImageModel.objects.all()
     serializer_class = s.ImageSerializer
+    ordering = ['-pk']
 
     def perform_create(self, serializer):
         serializer.save(author=not self.request.user.is_anonymous and self.request.user or None)
@@ -110,6 +115,7 @@ class ImageViewSet(viewsets.ModelViewSet):
 class AudioViewSet(viewsets.ModelViewSet):
     queryset = m.AudioModel.objects.all()
     serializer_class = s.AudioSerializer
+    ordering = ['-pk']
 
     def perform_create(self, serializer):
         serializer.save(author=self.request.user)
@@ -138,6 +144,7 @@ class MessageViewSet(viewsets.ModelViewSet):
     filter_class = Filter
     queryset = m.Message.objects.all()
     serializer_class = s.MessageSerializer
+    ordering = ['-pk']
 
     def perform_create(self, serializer):
         serializer.save(author=self.request.user)
@@ -173,6 +180,7 @@ class MenuViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.Menu.objects.all()
     serializer_class = s.MenuSerializer
+    ordering = ['-pk']
 
     @list_route(methods=['POST'], permission_classes=[p.IsAdminUser])
     def sync(self, request):
@@ -250,6 +258,7 @@ class BroadcastViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.Broadcast.objects.all()
     serializer_class = s.BroadcastSerializer
+    ordering = ['-pk']
 
     def perform_create(self, serializer):
         # 保存的时候自动发送
@@ -276,6 +285,7 @@ class UserViewSet(viewsets.ModelViewSet):
     filter_class = Filter
     search_fields = (
         'username', 'first_name', 'last_name', 'member__realname')
+    ordering = ['-pk']
 
     def perform_create(self, serializer):
         from django.contrib.auth.hashers import make_password
@@ -790,30 +800,35 @@ class RobotViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.Robot.objects.all()
     serializer_class = s.RobotSerializer
+    ordering = ['-pk']
 
 
 class CelebrityCategoryViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.CelebrityCategory.objects.all()
     serializer_class = s.CelebrityCategorySerializer
+    ordering = ['-pk']
 
 
 class CreditStarTransactionViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.CreditStarTransaction.objects.all()
     serializer_class = s.CreditStarTransactionSerializer
+    ordering = ['-pk']
 
 
 class CreditStarIndexTransactionViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.CreditStarIndexTransaction.objects.all()
     serializer_class = s.CreditStarIndexTransactionSerializer
+    ordering = ['-pk']
 
 
 class CreditDiamondTransactionViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.CreditDiamondTransaction.objects.all()
     serializer_class = s.CreditDiamondTransactionSerializer
+    ordering = ['-pk']
 
     @list_route(methods=['GET'])
     def get_ranking_list(self, request):
@@ -842,24 +857,28 @@ class CreditCoinTransactionViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.CreditCoinTransaction.objects.all()
     serializer_class = s.CreditCoinTransactionSerializer
+    ordering = ['-pk']
 
 
 class BadgeViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.Badge.objects.all()
     serializer_class = s.BadgeSerializer
+    ordering = ['-pk']
 
 
 class DailyCheckInLogViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.DailyCheckInLog.objects.all()
     serializer_class = s.DailyCheckInLogSerializer
+    ordering = ['-pk']
 
 
 class FamilyViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.Family.objects.all()
     serializer_class = s.FamilySerializer
+    ordering = ['-pk']
 
     def get_queryset(self):
         return interceptor_get_queryset_kw_field(self)
@@ -869,30 +888,35 @@ class FamilyMemberViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.FamilyMember.objects.all()
     serializer_class = s.FamilyMemberSerializer
+    ordering = ['-pk']
 
 
 class FamilyArticleViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.FamilyArticle.objects.all()
     serializer_class = s.FamilyArticleSerializer
+    ordering = ['-pk']
 
 
 class FamilyMissionViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.FamilyMission.objects.all()
     serializer_class = s.FamilyMissionSerializer
+    ordering = ['-pk']
 
 
 class FamilyMissionAchievementViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.FamilyMissionAchievement.objects.all()
     serializer_class = s.FamilyMissionAchievementSerializer
+    ordering = ['-pk']
 
 
 class LiveCategoryViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.LiveCategory.objects.all()
     serializer_class = s.LiveCategorySerializer
+    ordering = ['-pk']
 
     def get_queryset(self):
         return interceptor_get_queryset_kw_field(self)
@@ -1008,11 +1032,31 @@ class LiveViewSet(viewsets.ModelViewSet):
         )
         return Response(data=s.LiveBarrageSerializer(barrage).data)
 
+    @detail_route(methods=['POST'])
+    def buy_prize(self, request, pk):
+        live = m.Live.objects.get(pk=pk)
+        prize = m.Prize.objects.get(pk=request.data.get('prize'))
+        count = request.data.get('count')
+        prize_order = m.PrizeOrder.buy_prize(live, prize, count, request.user)
+
+        return Response(data=s.PrizeOrderSerializer(prize_order).data)
+
+    @detail_route(methods=['POST'])
+    def send_active_prize(self, request, pk):
+        live = m.Live.objects.get(pk=pk)
+        prize = m.Prize.objects.get(pk=request.data.get('prize'))
+        count = request.data.get('count')
+
+        prize_order = m.PrizeOrder.send_active_prize(live, prize, count, request.user)
+
+        return Response(data=s.PrizeOrderSerializer(prize_order).data)
+
 
 class LiveBarrageViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.LiveBarrage.objects.all()
     serializer_class = s.LiveBarrageSerializer
+    ordering = ['-pk']
 
     def get_queryset(self):
         return interceptor_get_queryset_kw_field(self)
@@ -1090,6 +1134,7 @@ class PrizeCategoryViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.PrizeCategory.objects.all()
     serializer_class = s.PrizeCategorySerializer
+    ordering = ['-pk']
 
     def get_queryset(self):
         qs = interceptor_get_queryset_kw_field(self)
@@ -1127,8 +1172,8 @@ class PrizeViewSet(viewsets.ModelViewSet):
 
         prizes = m.Prize.objects.filter(
             category__name__in=active_category,
-            transitions__user_debit=me,
-            transitions__user_credit=None,
+            transactions__user_debit=me,
+            transactions__user_credit=None,
         ).distinct()
 
         data = dict(
@@ -1137,12 +1182,12 @@ class PrizeViewSet(viewsets.ModelViewSet):
             active_prize=[],
         )
         for prize in prizes:
-            accept = me.prizetransitions_debit.filter(
+            accept = me.prizetransactions_debit.filter(
                 prize=prize,
                 user_credit=None,
             ).all().aggregate(amount=models.Sum('amount')).get('amount') or 0
 
-            send = me.prizetransitions_credit.filter(
+            send = me.prizetransactions_credit.filter(
                 prize=prize,
             ).exclude(
                 user_debit=None
@@ -1189,27 +1234,19 @@ class PrizeViewSet(viewsets.ModelViewSet):
         return Response(data=True)
 
 
-class PrizeTransitionViewSet(viewsets.ModelViewSet):
+class PrizeTransactionViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
-    queryset = m.PrizeTransition.objects.all()
-    serializer_class = s.PrizeTransitionSerializer
+    queryset = m.PrizeTransaction.objects.all()
+    serializer_class = s.PrizeTransactionSerializer
+    ordering = ['-pk']
 
     def get_queryset(self):
         return interceptor_get_queryset_kw_field(self)
 
     @list_route(methods=['POST'])
-    def send_active_prize(self, request):
-        count = request.data.get('count')
-        prize = m.Prize.objects.get(pk=request.data.get('prize'))
-        live = m.Live.objects.get(pk=request.data.get('live'))
-
-        m.PrizeTransition.send_active_prize(live, count, prize, request.user.id)
-        return Response(data=True)
-
-    @list_route(methods=['POST'])
     def open_star_box(self, request):
         # 观众开星光宝盒
-        m.PrizeTransition.viewer_open_starbox(request.user.id)
+        m.PrizeTransaction.viewer_open_starbox(request.user.id)
         return Response(True)
 
 
@@ -1217,6 +1254,7 @@ class PrizeOrderViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.PrizeOrder.objects.all()
     serializer_class = s.PrizeOrderSerializer
+    ordering = ['-pk']
 
     def get_queryset(self):
         qs = interceptor_get_queryset_kw_field(self)
@@ -1232,21 +1270,12 @@ class PrizeOrderViewSet(viewsets.ModelViewSet):
                 qs = qs.filter(live_watch_log__live=live)
         return qs
 
-    @list_route(methods=['POST'])
-    def buy_prize(self, request):
-        # todo
-        live = m.Live.objects.get(pk=request.data.get('live'))
-        prize = m.Prize.objects.get(pk=request.data.get('prize'))
-        count = request.data.get('count')
-        m.PrizeOrder.buy_prize(live, prize, count, request.user.id)
-
-        return Response(data=True)
-
 
 class ExtraPrizeViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.ExtraPrize.objects.all()
     serializer_class = s.ExtraPrizeSerializer
+    ordering = ['-pk']
 
     def get_queryset(self):
         return interceptor_get_queryset_kw_field(self)
@@ -1256,6 +1285,7 @@ class StatisticRuleViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.StatisticRule.objects.all()
     serializer_class = s.StatisticRuleSerializer
+    ordering = ['-pk']
 
     def get_queryset(self):
         return interceptor_get_queryset_kw_field(self)
@@ -1265,6 +1295,7 @@ class ActivityViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.Activity.objects.all()
     serializer_class = s.ActivitySerializer
+    ordering = ['-pk']
 
     def get_queryset(self):
         return interceptor_get_queryset_kw_field(self)
@@ -1274,6 +1305,7 @@ class ActivityParticipationViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.ActivityParticipation.objects.all()
     serializer_class = s.ActivityParticipationSerializer
+    ordering = ['-pk']
 
     def get_queryset(self):
         return interceptor_get_queryset_kw_field(self)
@@ -1283,6 +1315,7 @@ class NotificationsViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.Notifications.objects.all()
     serializer_class = s.NotificationsSerializer
+    ordering = ['-pk']
 
     def get_queryset(self):
         return interceptor_get_queryset_kw_field(self)
@@ -1292,6 +1325,7 @@ class VisitLogViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.VisitLog.objects.all()
     serializer_class = s.VisitLogSerializer
+    ordering = ['-pk']
 
     def get_queryset(self):
         return interceptor_get_queryset_kw_field(self)
@@ -1301,6 +1335,7 @@ class MovieViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.Movie.objects.all()
     serializer_class = s.MovieSerializer
+    ordering = ['-pk']
 
     def get_queryset(self):
         return interceptor_get_queryset_kw_field(self)
@@ -1310,6 +1345,7 @@ class StarBoxViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.StarBox.objects.all()
     serializer_class = s.StarBoxSerializer
+    ordering = ['-pk']
 
     def get_queryset(self):
         return interceptor_get_queryset_kw_field(self)
@@ -1329,6 +1365,7 @@ class RedBagRecordViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.RedBagRecord.objects.all()
     serializer_class = s.RedBagRecordSerializer
+    ordering = ['-pk']
 
     def get_queryset(self):
         return interceptor_get_queryset_kw_field(self)
@@ -1338,15 +1375,40 @@ class StarMissionAchievementViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.StarMissionAchievement.objects.all()
     serializer_class = s.StarMissionAchievementSerializer
+    ordering = ['-pk']
 
     def get_queryset(self):
         return interceptor_get_queryset_kw_field(self)
+
+    @list_route(methods=['POST'])
+    def achievement_watch_mission(self, request):
+        # 领取观看直播任务奖励
+        live_id = request.data.get('live')
+
+        user = m.User.objects.get(pk=request.user.id)
+        log = request.user.livewatchlogs_owned.filter(live__id=live_id).first()
+        assert log.get_watch_mission_count() < 8, '直播間觀看任務只能做8次'
+        # 领取记录
+        m.StarMissionAchievement.objects.create(
+            author=request.user,
+            live=m.Live.objects.get(pk=live_id),
+            # todo: 应该为后台可设的数值
+            points=5,
+            type=m.StarMissionAchievement.TYPE_WATCH,
+        )
+        # 元气流水
+        request.user.creditstartransactions_debit.create(
+            amount=5,
+            remark='完成直播間{}觀看任務'.format(live_id),
+        )
+        return Response(True)
 
 
 class LevelOptionViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.LevelOption.objects.all()
     serializer_class = s.LevelOptionSerializer
+    ordering = ['-pk']
 
     def get_queryset(self):
         return interceptor_get_queryset_kw_field(self)
@@ -1356,6 +1418,7 @@ class InformViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.Inform.objects.all()
     serializer_class = s.InformSerializer
+    ordering = ['-pk']
 
     def get_queryset(self):
         return interceptor_get_queryset_kw_field(self)
@@ -1365,6 +1428,7 @@ class FeedbackViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.Feedback.objects.all()
     serializer_class = s.FeedbackSerializer
+    ordering = ['-pk']
 
     def get_queryset(self):
         return interceptor_get_queryset_kw_field(self)
@@ -1374,6 +1438,7 @@ class BannerViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.Banner.objects.all()
     serializer_class = s.BannerSerializer
+    ordering = ['-pk']
 
     def get_queryset(self):
         return interceptor_get_queryset_kw_field(self)
@@ -1383,6 +1448,7 @@ class SensitiveWordViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.SensitiveWord.objects.all()
     serializer_class = s.SensitiveWordSerializer
+    ordering = ['-pk']
 
     def get_queryset(self):
         return interceptor_get_queryset_kw_field(self)
@@ -1392,6 +1458,7 @@ class DiamondExchangeRecordViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.DiamondExchangeRecord.objects.all()
     serializer_class = s.DiamondExchangeRecordSerializer
+    ordering = ['-pk']
 
     def get_queryset(self):
         return interceptor_get_queryset_kw_field(self)
@@ -1401,6 +1468,7 @@ class CommentViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.Comment.objects.all()
     serializer_class = s.CommentSerializer
+    ordering = ['-pk']
 
     def perform_create(self, serializer):
         serializer.save(author=self.request.user)
@@ -1446,6 +1514,7 @@ class UserMarkViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.UserMark.objects.all()
     serializer_class = s.UserMarkSerializer
+    ordering = ['-pk']
 
     def get_queryset(self):
         qs = interceptor_get_queryset_kw_field(self)
@@ -1463,6 +1532,7 @@ class ContactViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.Contact.objects.all()
     serializer_class = s.ContactSerializer
+    ordering = ['-pk']
 
     def get_queryset(self):
         return interceptor_get_queryset_kw_field(self)
@@ -1472,6 +1542,7 @@ class AccountTransactionViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.AccountTransaction.objects.all()
     serializer_class = s.AccountTransactionSerializer
+    ordering = ['-pk']
 
     def get_queryset(self):
         qs = interceptor_get_queryset_kw_field(self)
@@ -1509,6 +1580,7 @@ class WithdrawRecordViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.WithdrawRecord.objects.all()
     serializer_class = s.WithdrawRecordSerializer
+    ordering = ['-pk']
 
     def get_queryset(self):
         return interceptor_get_queryset_kw_field(self)

@@ -1,6 +1,14 @@
 from django_base.models import *
 
 
+class UserPatcher(ModelPatcher):
+    def group_names(self):
+        return ','.join([g.name for g in self.groups.all()]) or '-'
+
+
+UserPatcher.patch(User)
+
+
 class AbstractMember(TaggedModel,
                      GeoPositionedModel,
                      EntityModel):

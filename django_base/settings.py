@@ -191,6 +191,7 @@ BMAP_KEY = 'D373d23acd37b0c4af370a517922e020'
 # 是否将音频自动转换为 ogg/mp3
 NORMALIZE_AUDIO = True
 
+
 # =============== Tencent MLVB ==============
 
 # 騰訊移動直播
@@ -201,3 +202,8 @@ TENCENT_MLVB_APPID = '1253850554'
 TENCENT_MLVB_PUSH_KEY = 'd2f7f1ba70d87e6f58751fbc17427cb8'
 # API鑑權 Key
 TENCENT_MLVB_API_AUTH_KEY = '90c0bc75580a4e91b767e216de99bfbc'
+
+# =============== Tencent  ==============
+
+TENCENT_WEBIM_APPID = '1400033878'
+TENCENT_WEBIM_ACCOUNT_TYPE = '13638'
