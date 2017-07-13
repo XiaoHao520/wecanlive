@@ -123,3 +123,87 @@ class WebIM:
         if silence:
             data['Silence'] = 1
         return self.post('group_open_http_svc', 'add_group_member', data)
+
+    MSG_TYPE_TEXT = 'TIMTextElem'
+    MSG_TYPE_LOCATION = 'TIMLocationElem'
+    MSG_TYPE_FACE = 'TIMFaceElem'
+    MSG_TYPE_CUSTOM = 'TIMCustomElem'
+    MSG_TYPE_SOUND = 'TIMSoundElem'
+    MSG_TYPE_IMAGE = 'TIMImageElem'
+    MSG_TYPE_FILE = 'TIMFileElem'
+
+    @classmethod
+    def make_msg_elem(cls, msg_type, content):
+        return dict(
+            MsgType=msg_type,
+            MsgContent=content,
+        )
+
+    @classmethod
+    def make_msg_elem_text(cls, text):
+        return cls.make_msg_elem(cls.MSG_TYPE_TEXT, dict(Text=text))
+
+    @classmethod
+    def make_msg_elem_location(cls, desc, latitude, longitude):
+        return cls.make_msg_elem(cls.MSG_TYPE_LOCATION, dict(
+            Desc=desc,
+            Latitude=latitude,
+            Longitude=longitude,
+        ))
+
+    @classmethod
+    def make_msg_elem_face(cls, index, data):
+        return cls.make_msg_elem(cls.MSG_TYPE_FACE, dict(Index=index, Data=data))
+
+    @classmethod
+    def make_msg_elem_custom(cls, data, desc, ext, sound):
+        return cls.make_msg_elem(cls.MSG_TYPE_CUSTOM, dict(
+            Data=data, Desc=desc, Ext=ext, Sound=sound
+        ))
+
+    @classmethod
+    def make_msg_elem_sound(cls, uuid, size, second):
+        return cls.make_msg_elem(cls.MSG_TYPE_SOUND, dict(
+            UUID=uuid, Size=size, Second=second
+        ))
+
+    IMAGE_FORMAT_BMP = 1
+    IMAGE_FORMAT_JPG = 2
+    IMAGE_FORMAT_GIF = 3
+    IMAGE_FORMAT_OTHER = 0
+
+    @classmethod
+    def make_msg_elem_image(cls, uuid, image_format, image_info_array):
+        return cls.make_msg_elem(cls.MSG_TYPE_IMAGE, dict(
+            UUID=uuid, ImageFormat=image_format, image_info_array=image_info_array
+        ))
+
+    @classmethod
+    def make_msg_elem_file(cls, uuid, file_size, file_name):
+        return cls.make_msg_elem(cls.MSG_TYPE_FILE, dict(
+            UUID=uuid, FileSize=file_size, FileName=file_name
+        ))
+
+    MSG_PRIORITY_HIGH = 'High'
+    MSG_PRIORITY_NORMAL = 'Normal'
+    MSG_PRIORITY_LOW = 'Low'
+    MSG_PRIORITY_LOWEST = 'Lowest'
+
+    def send_group_msg(self, group_id, msg_body, from_account='admin', priority=MSG_PRIORITY_NORMAL):
+        """ 在群组中发送普通消息
+        https://www.qcloud.com/document/product/269/1629
+        :param group_id:
+        :param msg_body:
+        :param from_account:
+        :param priority:
+        :return:
+        """
+        from random import randint
+        data = dict(
+            GroupId=group_id,
+            Random=randint(0, 1 << 32),
+            MsgBody=msg_body,
+            FromAccount=from_account,
+            MsgPriority=priority,
+        )
+        return self.post('group_open_http_svc', 'send_group_msg', data)

@@ -31,6 +31,7 @@ def account_transaction_member(self):
         mobile=None,
     )
 
+
 AccountTransaction.member = account_transaction_member
 
 
@@ -39,6 +40,7 @@ def account_transaction_payment_platform(self):
         return None
     return self.recharge_record.payment_record.platform
 
+
 AccountTransaction.payment_platform = account_transaction_payment_platform
 
 
@@ -46,6 +48,7 @@ def account_transaction_payment_out_trade_no(self):
     if not self.type == AccountTransaction.TYPE_RECHARGE:
         return None
     return self.recharge_record.payment_record.out_trade_no
+
 
 AccountTransaction.payment_out_trade_no = account_transaction_payment_out_trade_no
 
@@ -288,6 +291,20 @@ class Member(AbstractMember,
         ).all().aggregate(
             amount=models.Sum('amount')).get('amount') or 0
         return transitions_amount - self.user.starboxrecords_owned.count() * 500
+
+    def get_level(self):
+        """ 根据经验值获取用户等级
+        :return:
+        """
+        # TODO: 未实现
+        return 1
+
+    def get_vip_level(self):
+        """ 获取用户 VIP 等级
+        :return:
+        """
+        # TODO: 未实现
+        return 1
 
     def add_withdraw_blacklisted(self):
         """

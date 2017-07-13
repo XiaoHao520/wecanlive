@@ -21,6 +21,7 @@ class AbstractMember(TaggedModel,
         verbose_name='用户',
         to=User,
         related_name='%(class)s',
+        db_column='user_id',
     )
 
     nickname = models.CharField(

@@ -138,6 +138,10 @@ class UserSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
     # contact_to_me = serializers.BooleanField(read_only=True)
 
+    member_level = serializers.ReadOnlyField(source='member.get_level')
+
+    member_vip_level = serializers.ReadOnlyField(source='member.get_vip_level')
+
     class Meta:
         model = m.User
         exclude = ['password', 'user_permissions']
@@ -452,6 +456,10 @@ class MemberSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
     debit_star_index = serializers.ReadOnlyField()
 
+    level = serializers.ReadOnlyField(source='get_level')
+
+    vip_level = serializers.ReadOnlyField(source='get_vip_level')
+
     class Meta:
         model = m.Member
         # fields = '__all__'
@@ -710,9 +718,27 @@ class LiveSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
 
 class LiveBarrageSerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    author_avatar_url = serializers.URLField(
+        source='author.member.avatar.image.url',
+        read_only=True,
+    )
+
+    author_nickname = serializers.ReadOnlyField(
+        source='author.member.nickname'
+    )
+
+    author_level = serializers.ReadOnlyField(
+        source='author.member.get_level'
+    )
+
+    author_vip_level = serializers.ReadOnlyField(
+        source='author.member.get_vip_level'
+    )
+
     class Meta:
         model = m.LiveBarrage
         fields = '__all__'
+        ordering = ['-pk']
 
 
 class LiveWatchLogSerializer(QueryFieldsMixin, serializers.ModelSerializer):
@@ -759,7 +785,6 @@ class LiveWatchLogSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     watch_mission_count = serializers.ReadOnlyField(
         source='get_watch_mission_count',
     )
-
 
     class Meta:
         model = m.LiveWatchLog
