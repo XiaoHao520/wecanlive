@@ -729,6 +729,12 @@ class MemberViewSet(viewsets.ModelViewSet):
             print(rank_type)
         # todo 根據排行榜類型進行排行 'rank_diamond'、'rank_prize'、'rank_star'
 
+        is_withdraw_blacklisted = self.request.query_params.get('is_withdraw_blacklisted')
+        if is_withdraw_blacklisted == 'true':
+            qs = qs.filter(is_withdraw_blacklisted=True)
+        elif is_withdraw_blacklisted == 'false':
+            qs = qs.exclude(is_withdraw_blacklisted=True)
+
         return qs
 
     @list_route(methods=['post'])
