@@ -1192,8 +1192,6 @@ class Contact(UserOwnedModel):
         return contact
 
 
-
-
 class ContactSetting(models.Model):
     contact = models.ForeignKey(
         verbose_name='联系人',
@@ -1219,8 +1217,7 @@ class ContactSetting(models.Model):
         unique_together = [('contact', 'key')]
 
 
-class UserMark(UserOwnedModel,
-               EntityModel):
+class UserMark(UserOwnedModel):
     """ 用于让用户对某类对象产生标记的
     例如：用户收藏商品
     UserMark.objects.create(author=user, object=goods, subject='collect')
@@ -1252,28 +1249,20 @@ class UserMarkableModel(models.Model):
     class Meta:
         abstract = True
 
-    def get_users_marked_with(self, subject):
-        return User.objects.filter(
-            usermarks_owned__content_type=ContentType.objects.get(
-                app_label=type(self)._meta.app_label,
-                model=type(self)._meta.model_name,
-            ),
-            usermarks_owned__object_id=self.pk,
-            usermarks_owned__subject=subject,
-        )
-
-    def is_marked_by(self, user, subject, model=None):
+    def get_users_marked_with(self, subject, model=None):
         model = model or type(self)
         content_type = ContentType.objects.get(
             app_label=model._meta.app_label,
             model=model._meta.model_name,
         )
-        return UserMark.objects.filter(
-            author=user,
-            content_type=content_type,
-            object_id=self.pk,
-            subject=subject,
-        ).exists()
+        return User.objects.filter(
+            usermarks_owned__content_type=content_type,
+            usermarks_owned__object_id=self.pk,
+            usermarks_owned__subject=subject,
+        )
+
+    def is_marked_by(self, user, subject, model=None):
+        return self.get_users_marked_with(subject, model).filter(id=user.id).exists()
 
     def set_marked_by(self, user, subject, is_marked=True, model=None):
         model = model or type(self)
@@ -1287,6 +1276,9 @@ class UserMarkableModel(models.Model):
             object_id=self.pk,
             subject=subject,
         )
+        print(fields)
+        print(model)
+        print(self)
         mark = UserMark.objects.filter(**fields).first()
         if is_marked:
             if not mark:
@@ -1296,8 +1288,26 @@ class UserMarkableModel(models.Model):
 
     @classmethod
     def get_objects_marked_by(cls, user, subject):
-        return cls.objects.filter(marks__author=user,
-                                  marks__subject=subject)
+        content_type = ContentType.objects.get(
+            app_label=cls._meta.app_label,
+            model=cls._meta.model_name,
+        )
+        col = cls._meta.pk.db_column or cls._meta.pk.name + '_id' \
+            if type(cls._meta.pk) == models.OneToOneField else cls._meta.pk.name
+        qs = cls.objects.extra(
+            where=["""
+            exists(
+                select *
+                from base_user_mark um, auth_user u
+                where um.subject = '{subject}'
+                  and um.author_id = {author_id}
+                  and um.object_id = {table}.{col}
+                  and um.content_type_id = {content_type_id}
+            )
+            """.format(subject=subject, author_id=user.id, table=cls._meta.db_table,
+                       col=col, content_type_id=content_type.id)]
+        )
+        return qs
 
 
 class UserPreferenceField(models.Model):
