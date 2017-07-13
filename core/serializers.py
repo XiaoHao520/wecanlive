@@ -142,6 +142,8 @@ class UserSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
     member_vip_level = serializers.ReadOnlyField(source='member.get_vip_level')
 
+    group_names = serializers.ReadOnlyField()
+
     class Meta:
         model = m.User
         exclude = ['password', 'user_permissions']
