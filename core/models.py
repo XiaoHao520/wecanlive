@@ -311,6 +311,17 @@ class Member(AbstractMember,
         # TODO: 未实现
         return 1
 
+    def add_withdraw_blacklisted(self):
+        """
+        添加到提现黑名单（顺手驳回该用户其他申请中的提现）
+        :return:
+        """
+        self.is_withdraw_blacklisted = True
+        self.save()
+        # 把剩下仍在申请中的提现全部驳回
+        for withdraw_record in WithdrawRecord.objects.filter(author=self.user, status=WithdrawRecord.STATUS_PENDING):
+            withdraw_record.reject()
+
 
 class Robot(models.Model):
     """ 机器人
@@ -525,6 +536,7 @@ class Family(UserOwnedModel,
         verbose_name='家族消息',
         to=Message,
         related_name='families',
+        blank=True,
     )
 
     mission_unlock_duration = models.IntegerField(
@@ -579,6 +591,28 @@ class Family(UserOwnedModel,
         :return:
         """
         raise NotImplemented()
+
+    def get_count_admin(self):
+        """
+        审批通过的家族管理员数
+        :return:
+        """
+        return self.users.filter(
+            familymembers_owned__status=FamilyMember.STATUS_APPROVED,
+            familymembers_owned__role=FamilyMember.ROLE_ADMIN,
+        ).count()
+
+    def get_count_family_member(self):
+        """
+        审核通过的家族成员数
+        :return:
+        """
+        return self.users.filter(
+            familymembers_owned__status=FamilyMember.STATUS_APPROVED,
+        ).count()
+
+    def get_count_family_mission(self):
+        return FamilyMission.objects.filter(family=self).count()
 
 
 class FamilyMember(UserOwnedModel):
@@ -1086,6 +1120,11 @@ class ActiveEvent(UserOwnedModel,
 
 
 class PrizeCategory(EntityModel):
+    is_vip_only = models.BooleanField(
+        verbose_name='是否VIP专属',
+        default=False,
+    )
+
     class Meta:
         verbose_name = '礼物分类'
         verbose_name_plural = '礼物分类'
