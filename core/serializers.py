@@ -122,6 +122,8 @@ class UserSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
     member_nickname = serializers.ReadOnlyField(source='member.nickname')
 
+    member_avatar = serializers.ReadOnlyField(source='member.avatar.image.url')
+
     # personal_credit_score = serializers.ReadOnlyField(
     #     source='get_personal_credit_score',
     # )
@@ -237,7 +239,10 @@ class UserDetailedSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     coin_balance = serializers.ReadOnlyField(source='member.get_coin_balance')
     star_balance = serializers.ReadOnlyField(source='member.get_star_balance')
 
-    star_prize_expend = serializers.ReadOnlyField(source='member.get_star_prize_expend')
+    member_level = serializers.ReadOnlyField(source='member.get_level')
+
+    member_vip_level = serializers.ReadOnlyField(source='member.get_vip_level')
+
     # 跟踪数量
     count_follow = serializers.ReadOnlyField(
         source='member.get_follow_count',
@@ -749,6 +754,10 @@ class LiveWatchLogSerializer(QueryFieldsMixin, serializers.ModelSerializer):
         source='get_watch_mission_count',
     )
 
+    information_mission_count = serializers.ReadOnlyField(
+        source='get_information_mission_count'
+    )
+
     class Meta:
         model = m.LiveWatchLog
         fields = '__all__'
@@ -846,9 +855,16 @@ class PrizeSerializer(QueryFieldsMixin, serializers.ModelSerializer):
         fields = '__all__'
 
 
-class PrizeTransitionSerializer(QueryFieldsMixin, serializers.ModelSerializer):
+class PrizeTransactionSerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    prize_name = serializers.ReadOnlyField(
+        source='prize.name',
+    )
+    prize_image = serializers.ReadOnlyField(
+        source='prize.icon.image.url',
+    )
+
     class Meta:
-        model = m.PrizeTransition
+        model = m.PrizeTransaction
         fields = '__all__'
 
 
@@ -865,16 +881,21 @@ class PrizeOrderSerializer(QueryFieldsMixin, serializers.ModelSerializer):
         source='prize.price',
     )
 
-    prize_transition_amount = serializers.ReadOnlyField(
-        source='prize_transition.amount',
+    prize_transaction_item = PrizeTransactionSerializer(
+        source='prize_transaction',
+        read_only=True,
+    )
+
+    prize_transaction_amount = serializers.ReadOnlyField(
+        source='prize_transaction.amount',
     )
 
     user_credit = serializers.ReadOnlyField(
-        source='prize_transition.user_credit.member.mobile',
+        source='prize_transaction.user_credit.member.mobile',
     )
 
     user_credit_nickname = serializers.ReadOnlyField(
-        source='prize_transition.user_credit.member.nickname',
+        source='prize_transaction.user_credit.member.nickname',
     )
 
     live_id = serializers.ReadOnlyField(

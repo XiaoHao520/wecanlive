@@ -999,6 +999,25 @@ class LiveViewSet(viewsets.ModelViewSet):
         )
         return Response(data=s.LiveBarrageSerializer(barrage).data)
 
+    @detail_route(methods=['POST'])
+    def buy_prize(self, request, pk):
+        live = m.Live.objects.get(pk=pk)
+        prize = m.Prize.objects.get(pk=request.data.get('prize'))
+        count = request.data.get('count')
+        prize_order = m.PrizeOrder.buy_prize(live, prize, count, request.user)
+
+        return Response(data=s.PrizeOrderSerializer(prize_order).data)
+
+    @detail_route(methods=['POST'])
+    def send_active_prize(self, request, pk):
+        live = m.Live.objects.get(pk=pk)
+        prize = m.Prize.objects.get(pk=request.data.get('prize'))
+        count = request.data.get('count')
+
+        prize_order = m.PrizeOrder.send_active_prize(live, prize, count, request.user)
+
+        return Response(data=s.PrizeOrderSerializer(prize_order).data)
+
 
 class LiveBarrageViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
@@ -1114,8 +1133,8 @@ class PrizeViewSet(viewsets.ModelViewSet):
 
         prizes = m.Prize.objects.filter(
             category__name__in=active_category,
-            transitions__user_debit=me,
-            transitions__user_credit=None,
+            transactions__user_debit=me,
+            transactions__user_credit=None,
         ).distinct()
 
         data = dict(
@@ -1124,12 +1143,12 @@ class PrizeViewSet(viewsets.ModelViewSet):
             active_prize=[],
         )
         for prize in prizes:
-            accept = me.prizetransitions_debit.filter(
+            accept = me.prizetransactions_debit.filter(
                 prize=prize,
                 user_credit=None,
             ).all().aggregate(amount=models.Sum('amount')).get('amount') or 0
 
-            send = me.prizetransitions_credit.filter(
+            send = me.prizetransactions_credit.filter(
                 prize=prize,
             ).exclude(
                 user_debit=None
@@ -1176,27 +1195,18 @@ class PrizeViewSet(viewsets.ModelViewSet):
         return Response(data=True)
 
 
-class PrizeTransitionViewSet(viewsets.ModelViewSet):
+class PrizeTransactionViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
-    queryset = m.PrizeTransition.objects.all()
-    serializer_class = s.PrizeTransitionSerializer
+    queryset = m.PrizeTransaction.objects.all()
+    serializer_class = s.PrizeTransactionSerializer
 
     def get_queryset(self):
         return interceptor_get_queryset_kw_field(self)
 
     @list_route(methods=['POST'])
-    def send_active_prize(self, request):
-        count = request.data.get('count')
-        prize = m.Prize.objects.get(pk=request.data.get('prize'))
-        live = m.Live.objects.get(pk=request.data.get('live'))
-
-        m.PrizeTransition.send_active_prize(live, count, prize, request.user.id)
-        return Response(data=True)
-
-    @list_route(methods=['POST'])
     def open_star_box(self, request):
         # 观众开星光宝盒
-        m.PrizeTransition.viewer_open_starbox(request.user.id)
+        m.PrizeTransaction.viewer_open_starbox(request.user.id)
         return Response(True)
 
 
@@ -1218,16 +1228,6 @@ class PrizeOrderViewSet(viewsets.ModelViewSet):
             if live:
                 qs = qs.filter(live_watch_log__live=live)
         return qs
-
-    @list_route(methods=['POST'])
-    def buy_prize(self, request):
-        # todo
-        live = m.Live.objects.get(pk=request.data.get('live'))
-        prize = m.Prize.objects.get(pk=request.data.get('prize'))
-        count = request.data.get('count')
-        m.PrizeOrder.buy_prize(live, prize, count, request.user.id)
-
-        return Response(data=True)
 
 
 class ExtraPrizeViewSet(viewsets.ModelViewSet):
@@ -1298,6 +1298,29 @@ class StarMissionAchievementViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.StarMissionAchievement.objects.all()
     serializer_class = s.StarMissionAchievementSerializer
+
+    @list_route(methods=['POST'])
+    def achievement_watch_mission(self, request):
+        # 领取观看直播任务奖励
+        live_id = request.data.get('live')
+
+        user = m.User.objects.get(pk=request.user.id)
+        log = request.user.livewatchlogs_owned.filter(live__id=live_id).first()
+        assert log.get_watch_mission_count() < 8, '直播間觀看任務只能做8次'
+        # 领取记录
+        m.StarMissionAchievement.objects.create(
+            author=request.user,
+            live=m.Live.objects.get(pk=live_id),
+            # todo: 应该为后台可设的数值
+            points=5,
+            type=m.StarMissionAchievement.TYPE_WATCH,
+        )
+        # 元气流水
+        request.user.creditstartransactions_debit.create(
+            amount=5,
+            remark='完成直播間{}觀看任務'.format(live_id),
+        )
+        return Response(True)
 
 
 class LevelOptionViewSet(viewsets.ModelViewSet):
