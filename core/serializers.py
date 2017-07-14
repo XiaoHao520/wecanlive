@@ -144,6 +144,8 @@ class UserSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
     member_vip_level = serializers.ReadOnlyField(source='member.get_vip_level')
 
+    group_names = serializers.ReadOnlyField()
+
     class Meta:
         model = m.User
         exclude = ['password', 'user_permissions']
@@ -293,6 +295,24 @@ class UserDetailedSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.User
         exclude = ['password', 'user_permissions']
+
+
+class WithdrawRecordSerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    nickname = serializers.ReadOnlyField(
+        source='author.member.nickname',
+    )
+
+    mobile = serializers.ReadOnlyField(
+        source='author.member.mobile',
+    )
+
+    account = serializers.ReadOnlyField(
+        source='bank_account.number',
+    )
+
+    class Meta:
+        model = m.WithdrawRecord
+        fields = '__all__'
 
 
 class MenuSerializer(QueryFieldsMixin, serializers.ModelSerializer):
@@ -509,9 +529,15 @@ class CreditStarTransactionSerializer(QueryFieldsMixin, serializers.ModelSeriali
         fields = '__all__'
 
 
-class CreditStarIndexTransactionSerializer(QueryFieldsMixin, serializers.ModelSerializer):
+class CreditStarIndexReceiverTransactionSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
-        model = m.CreditStarIndexTransaction
+        model = m.CreditStarIndexReceiverTransaction
+        fields = '__all__'
+
+
+class CreditStarIndexSenderTransactionSerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    class Meta:
+        model = m.CreditStarIndexSenderTransaction
         fields = '__all__'
 
 
@@ -546,6 +572,27 @@ class Serializer(QueryFieldsMixin, serializers.ModelSerializer):
 
 
 class FamilySerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    logo_item = ImageSerializer(
+        source='logo',
+        read_only=True,
+    )
+
+    nickname = serializers.ReadOnlyField(
+        source='author.member.nickname',
+    )
+
+    count_admin = serializers.ReadOnlyField(
+        source='get_count_admin',
+    )
+
+    count_family_member = serializers.ReadOnlyField(
+        source='get_count_family_member',
+    )
+
+    count_family_mission = serializers.ReadOnlyField(
+        source='get_count_family_mission',
+    )
+
     class Meta:
         model = m.Family
         fields = '__all__'
@@ -996,6 +1043,11 @@ class FeedbackSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 class BannerSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     image_url = serializers.ReadOnlyField(
         source='image.image.url',
+    )
+
+    image_item = ImageSerializer(
+        source='image',
+        read_only=True,
     )
 
     class Meta:

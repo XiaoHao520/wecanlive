@@ -3,54 +3,48 @@ from django_finance.models import *
 from django_member.models import *
 
 
-# 附加到公共類上的方法
-
-def comment_watch_status(self):
-    watch_log = self.livewatchlogs.first()
-    if not watch_log:
-        return None
-    return watch_log.status
+@patch_methods(User)
+class UserPatcher:
+    def group_names(self):
+        return ','.join([g.name for g in self.groups.all()]) or '-'
 
 
-Comment.watch_status = comment_watch_status
+@patch_methods(Comment)
+class CommentPatcher:
+    def comment_watch_status(self):
+        watch_log = self.livewatchlogs.first()
+        if not watch_log:
+            return None
+        return watch_log.status
 
 
-def account_transaction_member(self):
-    if self.user_debit and not self.user_credit:
+@patch_methods(AccountTransaction)
+class AccountTransactionPatcher:
+    def account_transaction_member(self):
+        if self.user_debit and not self.user_credit:
+            return dict(
+                nickname=self.user_debit.member.nickname,
+                mobile=self.user_debit.member.mobile,
+            )
+        elif self.user_credit and not self.user_debit:
+            return dict(
+                nickname=self.user_credit.member.nickname,
+                mobile=self.user_credit.member.mobile,
+            )
         return dict(
-            nickname=self.user_debit.member.nickname,
-            mobile=self.user_debit.member.mobile,
+            nickname=None,
+            mobile=None,
         )
-    elif self.user_credit and not self.user_debit:
-        return dict(
-            nickname=self.user_credit.member.nickname,
-            mobile=self.user_credit.member.mobile,
-        )
-    return dict(
-        nickname=None,
-        mobile=None,
-    )
 
+    def account_transaction_payment_platform(self):
+        if not self.type == AccountTransaction.TYPE_RECHARGE:
+            return None
+        return self.recharge_record.payment_record.platform
 
-AccountTransaction.member = account_transaction_member
-
-
-def account_transaction_payment_platform(self):
-    if not self.type == AccountTransaction.TYPE_RECHARGE:
-        return None
-    return self.recharge_record.payment_record.platform
-
-
-AccountTransaction.payment_platform = account_transaction_payment_platform
-
-
-def account_transaction_payment_out_trade_no(self):
-    if not self.type == AccountTransaction.TYPE_RECHARGE:
-        return None
-    return self.recharge_record.payment_record.out_trade_no
-
-
-AccountTransaction.payment_out_trade_no = account_transaction_payment_out_trade_no
+    def account_transaction_payment_out_trade_no(self):
+        if not self.type == AccountTransaction.TYPE_RECHARGE:
+            return None
+        return self.recharge_record.payment_record.out_trade_no
 
 
 # def total_recharge():
@@ -168,32 +162,49 @@ class Member(AbstractMember,
         self.tencent_sig_expire = datetime.now() + timedelta(days=160)
 
     def is_robot(self):
+        """ 判斷用戶是否機器人
+        :return:
+        """
         return hasattr(self.user, 'robot') and self.user.robot
 
     def is_info_complete(self):
         """ TODO: 判断用户个人资料是否完善
         :return: 返回个人资料是否完善，用于星光任务统计
         """
+        # TODO: 未實現
         raise NotImplemented()
 
     def is_followed_by(self, user):
         return self.is_marked_by(user, 'follow')
 
     def is_followed_by_current_user(self):
+        """ 返回用戶是否被當前登錄用戶跟蹤
+        :return:
+        """
         from django_base.middleware import get_request
         user = get_request().user
         if user.is_anonymous:
             return False
         return self.is_followed_by(user)
 
-    # 标记一个跟踪
     def set_followed_by(self, user, is_follow=True):
+        """ 設置或取消 user 對 self 的跟蹤標記
+        :param user: 發起跟蹤的用戶
+        :param is_follow: True 設置爲跟蹤，False 取消跟蹤
+        :return:
+        """
         self.set_marked_by(user, 'follow', is_follow)
 
     def get_follow(self):
+        """ 獲取會員跟蹤（關注）的用戶列表
+        :return:
+        """
         return Member.get_objects_marked_by(self.user, 'follow')
 
     def get_followed(self):
+        """ 獲取跟蹤當前會員的用戶（粉絲）列表
+        :return:
+        """
         return Member.objects.filter(
             user__usermarks_owned__content_type=ContentType.objects.get(
                 app_label=type(self)._meta.app_label,
@@ -204,28 +215,41 @@ class Member(AbstractMember,
         )
 
     def get_follow_count(self):
-        return self.get_follow().count().__str__()
-
-    def get_followed_count(self):
-        return self.get_followed().count().__str__()
-
-    def get_friend_count(self):
-        return Contact.objects.filter(
-            author=self.user
-        ).count()
-
-    def get_live_count(self):
-        return Live.objects.filter(author=self.user).count()
-
-    def get_last_live_end(self):
-        """
-        最后直播时间
+        """ 獲取跟蹤數
         :return:
         """
-        last_live = Live.objects.filter(author=self.user).last()
-        if not last_live:
-            return None
-        return str(last_live.date_end)
+        return self.get_follow().count()
+
+    def get_followed_count(self):
+        """ 獲取粉絲數（被跟蹤數）
+        :return:
+        """
+        return self.get_followed().count()
+
+    def get_contacts(self):
+        """ 獲取聯繫人列表
+        :return:
+        """
+        return User.objects.filter(
+            contacts_owned__user=self.user,
+            contacts_related__author=self.user,
+        ).distinct()
+
+    def get_friend_count(self):
+        """ 獲取朋友數
+        :return:
+        """
+        return self.get_contacts().count()
+
+    def get_live_count(self):
+        return self.user.lives_owned.count()
+
+    def get_last_live_end(self):
+        """ 最后直播时间
+        :return:
+        """
+        last_live = self.user.lives_owned.order_by('-pk').first()
+        return last_live and last_live.date_end
 
     def get_live_total_duration(self):
         duration = 0
@@ -328,6 +352,17 @@ class Member(AbstractMember,
             author=self.user,
             type=StarMissionAchievement.TYPE_INFORMATION).count()
 
+    def add_withdraw_blacklisted(self):
+        """
+        添加到提现黑名单（顺手驳回该用户其他申请中的提现）
+        :return:
+        """
+        self.is_withdraw_blacklisted = True
+        self.save()
+        # 把剩下仍在申请中的提现全部驳回
+        for withdraw_record in WithdrawRecord.objects.filter(author=self.user, status=WithdrawRecord.STATUS_PENDING):
+            withdraw_record.reject()
+
 
 class Robot(models.Model):
     """ 机器人
@@ -389,17 +424,36 @@ class CelebrityCategory(EntityModel):
 
 
 class CreditStarTransaction(AbstractTransactionModel):
+    """ 元气流水
+    每日签到或者元气任务可以获得元气，元气可用于购买赠送元气礼品
+    """
+
     class Meta:
-        verbose_name = '星星流水'
-        verbose_name_plural = '星星流水'
+        verbose_name = '星星（元气）流水'
+        verbose_name_plural = '星星（元气）流水'
         db_table = 'core_credit_star_transaction'
 
 
-class CreditStarIndexTransaction(AbstractTransactionModel):
+class CreditStarIndexReceiverTransaction(AbstractTransactionModel):
+    """ 元气指数（收礼产生类）
+    主播用户收到元气礼品时可以获得此类指数，每达到 500 个就可以换一个元气宝盒
+    """
+
     class Meta:
-        verbose_name = '星光指数（元氣）流水'
-        verbose_name_plural = '星光指数（元氣）流水'
-        db_table = 'core_credit_star_index_transaction'
+        verbose_name = '星光指数（元氣）流水（收礼）'
+        verbose_name_plural = '星光指数（元氣）流水（收礼）'
+        db_table = 'core_credit_star_index_receiver_transaction'
+
+
+class CreditStarIndexSenderTransaction(AbstractTransactionModel):
+    """ 元气指数（送礼产生类）
+    用户送出元气礼品时可以获得此类指数，每达到 500 个就可以换一个元气宝盒
+    """
+
+    class Meta:
+        verbose_name = '星光指数（元氣）流水（送礼）'
+        verbose_name_plural = '星光指数（元氣）流水（送礼）'
+        db_table = 'core_credit_star_index_sender_transaction'
 
 
 class CreditDiamondTransaction(AbstractTransactionModel):
@@ -542,6 +596,7 @@ class Family(UserOwnedModel,
         verbose_name='家族消息',
         to=Message,
         related_name='families',
+        blank=True,
     )
 
     mission_unlock_duration = models.IntegerField(
@@ -596,6 +651,28 @@ class Family(UserOwnedModel,
         :return:
         """
         raise NotImplemented()
+
+    def get_count_admin(self):
+        """
+        审批通过的家族管理员数
+        :return:
+        """
+        return self.users.filter(
+            familymembers_owned__status=FamilyMember.STATUS_APPROVED,
+            familymembers_owned__role=FamilyMember.ROLE_ADMIN,
+        ).count()
+
+    def get_count_family_member(self):
+        """
+        审核通过的家族成员数
+        :return:
+        """
+        return self.users.filter(
+            familymembers_owned__status=FamilyMember.STATUS_APPROVED,
+        ).count()
+
+    def get_count_family_mission(self):
+        return FamilyMission.objects.filter(family=self).count()
 
 
 class FamilyMember(UserOwnedModel):
@@ -796,6 +873,7 @@ class Live(UserOwnedModel,
         直播持續時間（單位：分鐘）
         :return:
         """
+        # TODO: 要充分考慮中途中斷的情況能夠正確計算直播和觀看的持續時間
         time_end = self.date_end or datetime.now()
         return int((time_end - self.date_created).seconds / 60) + \
                (time_end - self.date_created).days * 1440 or 1
@@ -1088,6 +1166,11 @@ class ActiveEvent(UserOwnedModel,
 
 
 class PrizeCategory(EntityModel):
+    is_vip_only = models.BooleanField(
+        verbose_name='是否VIP专属',
+        default=False,
+    )
+
     class Meta:
         verbose_name = '礼物分类'
         verbose_name_plural = '礼物分类'
@@ -1138,8 +1221,22 @@ class Prize(EntityModel):
     )
 
     price = models.IntegerField(
-        verbose_name='价格（金币）',
+        verbose_name='价格（金币/元气）',
         default=0,
+    )
+
+    PRICE_TYPE_COIN = 'COIN'
+    PRICE_TYPE_STAR = 'STAR'
+    PRICE_TYPE_CHOICES = (
+        (PRICE_TYPE_COIN, '金币'),
+        (PRICE_TYPE_STAR, '元气'),
+    )
+
+    price_type = models.CharField(
+        verbose_name='价格单位',
+        max_length=20,
+        choices=PRICE_TYPE_CHOICES,
+        default=PRICE_TYPE_COIN,
     )
 
     MARQUEE_BIG = 'BIG'
@@ -1231,25 +1328,31 @@ class PrizeOrder(UserOwnedModel):
     """ 礼物订单，关联到用户在哪个直播里面购买了礼物，需要关联到对应的礼物转移记录
     ### 如果是在直播界面直接購買並贈送禮物
     禮物是即時購買並贈送的，會涉及下列的動作：
-    1. 添加 PrizeTransaction，user_debit 是 主播， user_credit 也是主播（主播的禮物數本質上沒有增加）
-    2. 添加 CoinTransaction，user_debit 是 None，user_credit 是 送禮的觀衆用戶
-    3. 添加 DiamondTransaction，user_debit 是 主播，user_credit 是 None
-    4. 添加 PrizeOrder，關聯上述三條流水
+    1. 添加禮物記錄（主播和觀衆雙方記錄，但是禮物數餘額本質上沒有增加）
+      1.1 添加 receiver_prize_transaction，user_debit 是 主播， user_credit 也是主播
+      1.2 添加 sender_prize_transaction，user_debit 是 觀衆， user_credit 也是觀衆
+    2. （如果礼物是金币礼物：PRICE_TYPE=COIN）
+      2.1. 添加 CoinTransaction，user_debit 是 None，user_credit 是 送禮的觀衆用戶
+      2.2. 添加 DiamondTransaction，user_debit 是 主播，user_credit 是 None
+    3. （如果礼物是元气礼物：PRICE_TYPE=STAR）
+      3.1. 添加 StarTransaction，user_debit 是 None，user_credit 是 送禮的觀衆用戶（扣除元气）
+      3.2. 添加 StarIndexSenderTransaction，user_debit None，user_credit 是 观众
+      3.3. 添加 StarIndexReceiverTransaction，user_debit 是 主播，user_credit 是 None
+    4. 添加 PrizeOrder，關聯上述流水
 
-    ### 如果是在活動中獲得禮物獎勵
-    1. 不添加 PrizeOrder
-    2. 添加 PrizeTransaction，user_debit 是 獲得獎勵的用戶，user_credit 是 None
+    ### 如果是在活動或者元氣寶盒中獲得禮物獎勵
+    1. 添加 PrizeTransaction，user_debit 是 獲得獎勵的用戶，user_credit 是 None
 
-    ### 如果在直播中上使用活動獎勵得到的禮物
-    1. 添加 PrizeOrder
-    2. 添加 PrizeTransaction，user_debit 是 主播，user_credit 是 送禮的觀衆用戶
-    3. 添加 DiamondTransaction，user_debit 是 主播，user_credit 是 None
-
-    ### 如果在直播中使用宝盒礼物，扣观众的星光，加主播的元气（原星光指数）
-    1. 添加 PrizeOrder
-    2. 添加 PrizeTransaction，user_debit 是 主播，user_credit 是 送禮的觀衆用戶
-    3. 添加元气(星光指数)流水CreditStarIndexTransaction user_debit 是主播 , user_credit 是none
-    4. 添加星光流水CreditStarTransaction user_debit 是none ，user_credit 是送礼的观众用户
+    ### 如果在直播中上使用活動獎勵或者元氣寶盒中獲得的禮物（揹包中的禮物）
+    1. 添加禮物記錄（主播和觀衆雙方記錄，主播沒有實際獲得禮物餘額，但觀衆的禮物餘額被扣除）
+      1.1 添加 receiver_prize_transaction，user_debit 是 主播， user_credit 也是主播
+      1.2 添加 sender_prize_transaction，user_debit 是 None， user_credit 是觀衆（註銷禮物）
+    2. （如果礼物是金币礼物：PRICE_TYPE=COIN）
+      2.1. 添加 DiamondTransaction，user_debit 是 主播，user_credit 是 None
+    3. （如果礼物是元气礼物：PRICE_TYPE=STAR）
+      3.1. 添加 StarIndexSenderTransaction，user_debit None，user_credit 是 观众
+      3.2. 添加 StarIndexReceiverTransaction，user_debit 是 主播，user_credit 是 None
+    4. 添加 PrizeOrder，關聯上述流水
     """
     prize = models.ForeignKey(
         verbose_name='礼物',
@@ -1263,10 +1366,18 @@ class PrizeOrder(UserOwnedModel):
         related_name='prize_orders',
     )
 
-    prize_transaction = models.OneToOneField(
+    receiver_prize_transaction = models.OneToOneField(
         verbose_name='礼物记录',
         to='PrizeTransaction',
-        related_name='prize_orders',
+        related_name='prize_orders_as_receiver',
+        null=True,
+        blank=True,
+    )
+
+    sender_prize_transaction = models.OneToOneField(
+        verbose_name='礼物记录',
+        to='PrizeTransaction',
+        related_name='prize_orders_as_sender',
         null=True,
         blank=True,
     )
@@ -1288,16 +1399,24 @@ class PrizeOrder(UserOwnedModel):
     )
 
     star_transaction = models.OneToOneField(
-        verbose_name='观众消耗星光记录',
+        verbose_name='观众消耗元氣记录',
         to='CreditStarTransaction',
         related_name='prize_orders',
         null=True,
         blank=True,
     )
 
-    star_index_transaction = models.OneToOneField(
-        verbose_name='主播元气记录',
-        to='CreditStarIndexTransaction',
+    receiver_star_index_transaction = models.OneToOneField(
+        verbose_name='主播元气指數记录',
+        to='CreditStarIndexReceiverTransaction',
+        related_name='prize_orders',
+        null=True,
+        blank=True,
+    )
+
+    sender_star_index_transaction = models.OneToOneField(
+        verbose_name='觀衆元气指數记录',
+        to='CreditStarIndexSenderTransaction',
         related_name='prize_orders',
         null=True,
         blank=True,
@@ -1315,9 +1434,18 @@ class PrizeOrder(UserOwnedModel):
 
     @staticmethod
     def buy_prize(live, prize, count, user):
+        """ 在直播中直接購買禮物並且送出
+        :param live:
+        :param prize:
+        :param count:
+        :param user:
+        :return:
+        """
         total_price = count * prize.price
         assert user.member.get_coin_balance() >= total_price, '赠送失败,余额不足'
-        log = live.watch_logs.filter(author=user).first()
+
+        watch_log = live.watch_logs.filter(author=user).first()
+        assert watch_log, '用戶還沒有進入直播觀看，不能購買禮物贈送'
 
         # 礼物流水
         prize_transaction = PrizeTransaction.objects.create(
@@ -1342,14 +1470,14 @@ class PrizeOrder(UserOwnedModel):
             remark='禮物兌換',
             type='LIVE_GIFT',
             live=live,
-            live_watch_log=log,
+            live_watch_log=watch_log,
         )
 
         # 礼物订单
         order = PrizeOrder.objects.create(
             author=user,
             prize=prize,
-            live_watch_log=log,
+            live_watch_log=watch_log,
             prize_transaction=prize_transaction,
             coin_transaction=coin_transaction,
             diamond_transaction=diamond_transaction,
@@ -1381,7 +1509,7 @@ class PrizeOrder(UserOwnedModel):
                 amount=amount,
                 remark='觀衆贈送礼盒禮物',
             )
-            star_index_transaction = CreditStarIndexTransaction.objects.create(
+            star_index_transaction = CreditStarIndexReceiverTransaction.objects.create(
                 user_debit=live.author,
                 amount=amount,
                 remark='觀衆贈送寶盒禮物',

@@ -18,6 +18,15 @@ from . import utils as u
 from .middleware import get_request
 
 
+def patch_methods(model_class):
+    def do_patch(cls):
+        for k in cls.__dict__:
+            obj = getattr(cls, k)
+            if not k.startswith('_') and callable(obj):
+                setattr(model_class, k, obj)
+    return do_patch
+
+
 class DeletableManager(models.Manager):
     def get_queryset(self):
         if settings.PSEUDO_DELETION:

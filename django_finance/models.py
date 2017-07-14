@@ -521,7 +521,6 @@ class WithdrawRecord(UserOwnedModel,
         self.save()
         # 审核通过发送系统消息
         Message.objects.create(
-            author=None,
             type='OBJECT',
             content='提现审批驳回-{}(****{}),金额 {}'.format(
                 self.bank_account.bank.name,
@@ -539,7 +538,6 @@ class WithdrawRecord(UserOwnedModel,
         self.status = self.STATUS_APPROVED
         self.date_approve = datetime.now()
         self.user_approve = user_approve
-        self.save()
         # 还要插入一条流水
         if not self.account_transaction:
             self.account_transaction = AccountTransaction.objects.create(
@@ -552,10 +550,9 @@ class WithdrawRecord(UserOwnedModel,
                     self.bank_account.number[-4:]
                 )
             )
-
+        self.save()
         # 审核通过发送系统消息
         Message.objects.create(
-            author=None,
             type='OBJECT',
             content='提现审批通过-{}(****{}),金额 {}'.format(
                 self.bank_account.bank.name,
