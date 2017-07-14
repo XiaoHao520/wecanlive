@@ -529,9 +529,15 @@ class CreditStarTransactionSerializer(QueryFieldsMixin, serializers.ModelSeriali
         fields = '__all__'
 
 
-class CreditStarIndexTransactionSerializer(QueryFieldsMixin, serializers.ModelSerializer):
+class CreditStarIndexReceiverTransactionSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
-        model = m.CreditStarIndexTransaction
+        model = m.CreditStarIndexReceiverTransaction
+        fields = '__all__'
+
+
+class CreditStarIndexSenderTransactionSerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    class Meta:
+        model = m.CreditStarIndexSenderTransaction
         fields = '__all__'
 
 

@@ -817,10 +817,17 @@ class CreditStarTransactionViewSet(viewsets.ModelViewSet):
     ordering = ['-pk']
 
 
-class CreditStarIndexTransactionViewSet(viewsets.ModelViewSet):
+class CreditStarIndexReceiverTransactionViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
-    queryset = m.CreditStarIndexTransaction.objects.all()
-    serializer_class = s.CreditStarIndexTransactionSerializer
+    queryset = m.CreditStarIndexReceiverTransaction.objects.all()
+    serializer_class = s.CreditStarIndexReceiverTransactionSerializer
+    ordering = ['-pk']
+
+
+class CreditStarIndexSenderTransactionViewSet(viewsets.ModelViewSet):
+    filter_fields = '__all__'
+    queryset = m.CreditStarIndexSenderTransaction.objects.all()
+    serializer_class = s.CreditStarIndexSenderTransactionSerializer
     ordering = ['-pk']
 
 
