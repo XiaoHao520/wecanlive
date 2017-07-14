@@ -1237,6 +1237,20 @@ class Prize(EntityModel):
         default=0,
     )
 
+    TYPE_NORMAL = 'NORMAL'
+    TYPE_SPECIAL = 'SPECIAL'
+    TYPE_CHOICES = (
+        (TYPE_NORMAL, '普通款'),
+        (TYPE_SPECIAL, '特殊款'),
+    )
+
+    type = models.CharField(
+        verbose_name='礼物类型',
+        max_length=20,
+        choices=TYPE_CHOICES,
+        default=TYPE_NORMAL,
+    )
+
     PRICE_TYPE_COIN = 'COIN'
     PRICE_TYPE_STAR = 'STAR'
     PRICE_TYPE_CHOICES = (
