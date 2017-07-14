@@ -1173,8 +1173,13 @@ class PrizeViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         qs = interceptor_get_queryset_kw_field(self)
         prize_category_id = self.request.query_params.get('prize_category')
+        prize_type = self.request.query_params.get('prize_type')
         if prize_category_id:
             qs = qs.filter(category__id=prize_category_id)
+        if prize_type and prize_type == 'NORMAL':
+            qs = qs.filter(type=m.Prize.TYPE_NORMAL)
+        elif prize_type and prize_type == 'SPECIAL':
+            qs = qs.filter(type=m.Prize.TYPE_SPECIAL)
         return qs
 
     @list_route(methods=['GET'])
