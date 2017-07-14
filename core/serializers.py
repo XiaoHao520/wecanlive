@@ -749,9 +749,6 @@ class LiveBarrageSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
 
 class LiveWatchLogSerializer(QueryFieldsMixin, serializers.ModelSerializer):
-    user = serializers.PrimaryKeyRelatedField(
-        queryset=m.User.objects.all(),
-    )
 
     user_id = serializers.ReadOnlyField(
         source='author.id',
