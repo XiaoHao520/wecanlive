@@ -311,6 +311,23 @@ class Member(AbstractMember,
         # TODO: 未实现
         return 1
 
+    def get_today_watch_mission_count(self):
+        """当前用户当天完成观看任务次数
+        """
+        return StarMissionAchievement.objects.filter(
+            author=self.user,
+            date_created__date=datetime.now().date(),
+            type=StarMissionAchievement.TYPE_WATCH,
+        ).count()
+
+    def get_information_mission_count(self):
+        """当前用户完善资料任务完成数
+        """
+
+        return StarMissionAchievement.objects.filter(
+            author=self.user,
+            type=StarMissionAchievement.TYPE_INFORMATION).count()
+
 
 class Robot(models.Model):
     """ 机器人
@@ -1023,21 +1040,6 @@ class LiveWatchLog(UserOwnedModel,
             total_price += prize_order.prize.price
         return total_price
 
-    def get_watch_mission_count(self):
-        """当前用户分享当前直播间次数
-        """
-        return self.live.star_mission_achievement.filter(
-            author=self.author,
-            type='WATCH',
-        ).count()
-
-    def get_information_mission_count(self):
-        """当前用户完善资料任务完成数
-        """
-
-        return StarMissionAchievement.objects.filter(
-            author=self.author,
-            type=StarMissionAchievement.TYPE_INFORMATION).count()
 
 
 class ActiveEvent(UserOwnedModel,
@@ -1868,13 +1870,13 @@ class StarMissionAchievement(UserOwnedModel):
         auto_now_add=True,
     )
 
-    live = models.ForeignKey(
-        verbose_name='直播',
-        to='Live',
-        related_name='star_mission_achievement',
-        null=True,
-        blank=True,
-    )
+    # live = models.ForeignKey(
+    #     verbose_name='直播',
+    #     to='Live',
+    #     related_name='star_mission_achievement',
+    #     null=True,
+    #     blank=True,
+    # )
 
     # TODO: 领取之后的关联流水
 
