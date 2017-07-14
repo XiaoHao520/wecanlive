@@ -796,6 +796,7 @@ class MemberViewSet(viewsets.ModelViewSet):
         return Response(data=data)
 
 
+
 class RobotViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.Robot.objects.all()
@@ -1062,8 +1063,44 @@ class LiveViewSet(viewsets.ModelViewSet):
     def get_live_diamond_rank(self, request, pk):
         live = m.Live.objects.get(pk=pk)
 
+        members = m.Member.objects.filter(
+            user__prizeorders_owned__live_watch_log__live=live,
+            user__prizeorders_owned__diamond_transaction__user_debit=live.author,
+        ).distinct().all()
+        rank = []
+        for member in members:
+            rank_item = dict()
+            amount = m.PrizeOrder.objects.filter(
+                author=member.user,
+                live_watch_log__live=live,
+                diamond_transaction__id__gt=0,
+            ).aggregate(amount=models.Sum('diamond_transaction__amount')).get('amount') or 6
+            rank_item['amount'] = amount
+            rank_item['member'] = s.MemberSerializer(member).data
+            rank.append(rank_item)
+        return Response(data=sorted(rank, key=lambda item: item['amount'], reverse=True))
 
-        return Response(True)
+    @list_route(methods=['GET'])
+    def get_today_mission(self, request):
+        data = dict()
+        # 当前用户完成完成资料任务
+        information_mission_count = m.StarMissionAchievement.objects.filter(
+            author=self.request.user,
+            type=m.StarMissionAchievement.TYPE_INFORMATION,
+        ).count()
+
+        # 当前用户当日完成观看任务次数
+        today_watch_mission = m.StarMissionAchievement.objects.filter(
+            author=self.request.user,
+            type=m.StarMissionAchievement.TYPE_WATCH,
+            date_created__date=datetime.now().date(),
+        )
+        # 观看任务下次领取倒计时
+        last_watch_mission = today_watch_mission.order_by('-date_created').first()
+
+        data['today_watch_mission_count'] = today_watch_mission.count()
+        data['information_mission_count'] = information_mission_count
+        return Response(data=data)
 
 
 class LiveBarrageViewSet(viewsets.ModelViewSet):
@@ -1615,5 +1652,3 @@ class WithdrawRecordViewSet(viewsets.ModelViewSet):
             member.add_withdraw_blacklisted()
 
         return Response(data=True)
-
-

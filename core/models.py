@@ -272,7 +272,11 @@ class Member(AbstractMember,
         ).get('amount') or 0
 
     def debit_star_index(self):
-        return self.user.creditstarindextransactions_debit.all().aggregate(
+        # return self.user.creditstarindextransactions_debit.all().aggregate(
+        #     amount=models.Sum('amount')
+        # ).get('amount') or 0
+        # todo: 上面注释部分出错了改为下面，不知道上面是主播的指数还是观众的指数。
+        return self.user.creditstarindexreceivertransactions_debit.all().aggregate(
             amount=models.Sum('amount')
         ).get('amount') or 0
 
@@ -308,7 +312,9 @@ class Member(AbstractMember,
         """星光指数
         :return:
         """
-        count = self.user.creditstarindextransactions_debit.all().aggregate(
+        # count = self.user.creditstarindextransactions_debit.all().aggregate(
+        #     amount=models.Sum('amount')).get('amount') or 0
+        count = self.user.creditstarindexreceivertransactions_debit.all().aggregate(
             amount=models.Sum('amount')).get('amount') or 0
         return int(count)
 
@@ -335,22 +341,22 @@ class Member(AbstractMember,
         # TODO: 未实现
         return 1
 
-    def get_today_watch_mission_count(self):
-        """当前用户当天完成观看任务次数
-        """
-        return StarMissionAchievement.objects.filter(
-            author=self.user,
-            date_created__date=datetime.now().date(),
-            type=StarMissionAchievement.TYPE_WATCH,
-        ).count()
-
-    def get_information_mission_count(self):
-        """当前用户完善资料任务完成数
-        """
-
-        return StarMissionAchievement.objects.filter(
-            author=self.user,
-            type=StarMissionAchievement.TYPE_INFORMATION).count()
+    # def get_today_watch_mission_count(self):
+    #     """当前用户当天完成观看任务次数
+    #     """
+    #     return StarMissionAchievement.objects.filter(
+    #         author=self.user,
+    #         date_created__date=datetime.now().date(),
+    #         type=StarMissionAchievement.TYPE_WATCH,
+    #     ).count()
+    #
+    # def get_information_mission_count(self):
+    #     """当前用户完善资料任务完成数
+    #     """
+    #
+    #     return StarMissionAchievement.objects.filter(
+    #         author=self.user,
+    #         type=StarMissionAchievement.TYPE_INFORMATION).count()
 
     def add_withdraw_blacklisted(self):
         """
@@ -1117,7 +1123,6 @@ class LiveWatchLog(UserOwnedModel,
         for prize_order in prize_orders:
             total_price += prize_order.prize.price
         return total_price
-
 
 
 class ActiveEvent(UserOwnedModel,

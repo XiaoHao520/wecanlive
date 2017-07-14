@@ -799,13 +799,13 @@ class LiveWatchLogSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     #     source='get_watch_mission_count',
     # )
     #
-    today_watch_mission_count = serializers.ReadOnlyField(
-        source='author.member.get_today_watch_mission_count',
-    )
-
-    information_mission_count = serializers.ReadOnlyField(
-        source='author.member.get_information_mission_count'
-    )
+    # today_watch_mission_count = serializers.ReadOnlyField(
+    #     source='author.member.get_today_watch_mission_count',
+    # )
+    #
+    # information_mission_count = serializers.ReadOnlyField(
+    #     source='author.member.get_information_mission_count'
+    # )
 
     class Meta:
         model = m.LiveWatchLog
