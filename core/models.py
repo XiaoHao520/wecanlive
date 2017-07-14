@@ -272,13 +272,12 @@ class Member(AbstractMember,
         ).get('amount') or 0
 
     def debit_star_index(self):
-        # return self.user.creditstarindextransactions_debit.all().aggregate(
-        #     amount=models.Sum('amount')
-        # ).get('amount') or 0
-        # todo: 上面注释部分出错了改为下面，不知道上面是主播的指数还是观众的指数。
         return self.user.creditstarindexreceivertransactions_debit.all().aggregate(
             amount=models.Sum('amount')
         ).get('amount') or 0
+        # return self.user.creditstarindextransactions_debit.all().aggregate(
+        #     amount=models.Sum('amount')
+        # ).get('amount') or 0
 
     def get_diamond_balance(self):
         # 钻石余额
@@ -312,8 +311,6 @@ class Member(AbstractMember,
         """星光指数
         :return:
         """
-        # count = self.user.creditstarindextransactions_debit.all().aggregate(
-        #     amount=models.Sum('amount')).get('amount') or 0
         count = self.user.creditstarindexreceivertransactions_debit.all().aggregate(
             amount=models.Sum('amount')).get('amount') or 0
         return int(count)
@@ -326,6 +323,16 @@ class Member(AbstractMember,
         debit_star = self.user.creditstartransactions_debit.all().aggregate(
             amount=models.Sum('amount')).get('amount') or 0
         return debit_star - credit_star
+
+    def get_star_prize_expend(self):
+        """元气礼物赠送的元气数量，观众背包礼物宝盒礼物使用，每500开一个礼盒
+        """
+
+        transitions_amount = self.user.prizetransitions_credit.filter(
+            prize__category__name='宝盒礼物'
+        ).all().aggregate(
+            amount=models.Sum('amount')).get('amount') or 0
+        return transitions_amount - self.user.starboxrecords_owned.count() * 500
 
     def get_level(self):
         """ 根据经验值获取用户等级
@@ -1119,7 +1126,7 @@ class LiveWatchLog(UserOwnedModel,
         """
         # TODO: 未兌換成臺幣
         total_price = 0
-        prize_orders = PrizeOrder.objects.filter(live_watch_log=self.id)
+        prize_orders = PrizeOrder.objects.filter(live_watch_log=self)
         for prize_order in prize_orders:
             total_price += prize_order.prize.price
         return total_price
@@ -1550,10 +1557,12 @@ class ExtraPrize(EntityModel):
     不需要实际产生赠送记录，根据用户消费额筛选以获得可以下载的壁纸列表
     """
 
-    prize = models.ForeignKey(
-        verbose_name='礼物',
-        to='Prize',
+    prize_category = models.ForeignKey(
+        verbose_name='礼物分類',
+        to='PrizeCategory',
         related_name='extra_prizes',
+        null=True,
+        blank=True,
     )
 
     required_amount = models.IntegerField(

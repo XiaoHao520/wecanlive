@@ -196,20 +196,36 @@ class AccountTransactionSerializer(QueryFieldsMixin, serializers.ModelSerializer
         source='user_debit.member.mobile',
     )
 
+    # nickname = serializers.ReadOnlyField(
+    #     source='member.nickname',
+    # )
+    #
+    # mobile = serializers.ReadOnlyField(
+    #     source='member.mobile',
+    # )
+    #
+    # platform = serializers.ReadOnlyField(
+    #     source='payment_platform',
+    # )
+    #
+    # out_trade_no = serializers.ReadOnlyField(
+    #     source='payment_out_trade_no',
+    # )
+
     nickname = serializers.ReadOnlyField(
-        source='member.nickname',
+        source='account_transaction_member.nickname',
     )
 
     mobile = serializers.ReadOnlyField(
-        source='member.mobile',
+        source='account_transaction_member.mobile',
     )
 
     platform = serializers.ReadOnlyField(
-        source='payment_platform',
+        source='account_transaction_payment_platform',
     )
 
     out_trade_no = serializers.ReadOnlyField(
-        source='payment_out_trade_no',
+        source='account_transaction_payment_out_trade_no',
     )
 
     class Meta:
@@ -755,9 +771,6 @@ class LiveBarrageSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
 
 class LiveWatchLogSerializer(QueryFieldsMixin, serializers.ModelSerializer):
-    user = serializers.PrimaryKeyRelatedField(
-        queryset=m.User.objects.all(),
-    )
 
     user_id = serializers.ReadOnlyField(
         source='author.id',
@@ -918,6 +931,14 @@ class PrizeTransactionSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
 
 class PrizeOrderSerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    author_mobile = serializers.ReadOnlyField(
+        source='author.member.mobile',
+    )
+
+    author_nickname = serializers.ReadOnlyField(
+        source='author.member.mobile',
+    )
+
     prize_name = serializers.ReadOnlyField(
         source='prize.name',
     )
@@ -936,19 +957,31 @@ class PrizeOrderSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     )
 
     prize_transaction_amount = serializers.ReadOnlyField(
-        source='prize_transaction.amount',
+        source='sender_prize_transaction.amount',
     )
 
-    user_credit = serializers.ReadOnlyField(
-        source='prize_transaction.user_credit.member.mobile',
-    )
-
-    user_credit_nickname = serializers.ReadOnlyField(
-        source='prize_transaction.user_credit.member.nickname',
-    )
+    # user_credit = serializers.ReadOnlyField(
+    #     source='prize_transaction.user_credit.member.mobile',
+    # )
+    #
+    # user_credit_nickname = serializers.ReadOnlyField(
+    #     source='prize_transaction.user_credit.member.nickname',
+    # )
 
     live_id = serializers.ReadOnlyField(
         source='live_watch_log.live.id',
+    )
+
+    live_author_id = serializers.ReadOnlyField(
+        source='live_watch_log.live.author.id',
+    )
+
+    live_author_mobile = serializers.ReadOnlyField(
+        source='live_watch_log.live.author.member.mobile',
+    )
+
+    live_author_nickname = serializers.ReadOnlyField(
+        source='live_watch_log.live.author.member.nickname',
     )
 
     class Meta:
@@ -957,6 +990,17 @@ class PrizeOrderSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
 
 class ExtraPrizeSerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    prize_category_name = serializers.ReadOnlyField(
+        source='prize_category.name',
+    )
+
+    wallpaper_url = serializers.ReadOnlyField(source="wallpaper.image.url")
+
+    wallpaper_item = ImageSerializer(
+        source='wallpaper',
+        read_only=True,
+    )
+
     class Meta:
         model = m.ExtraPrize
         fields = '__all__'
@@ -1078,6 +1122,10 @@ class CommentSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
     mobile = serializers.ReadOnlyField(
         source='author.member.mobile',
+    )
+
+    watch_status = serializers.ReadOnlyField(
+        source='comment_watch_status',
     )
 
     class Meta:
