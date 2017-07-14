@@ -817,10 +817,17 @@ class CreditStarTransactionViewSet(viewsets.ModelViewSet):
     ordering = ['-pk']
 
 
-class CreditStarIndexTransactionViewSet(viewsets.ModelViewSet):
+class CreditStarIndexReceiverTransactionViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
-    queryset = m.CreditStarIndexTransaction.objects.all()
-    serializer_class = s.CreditStarIndexTransactionSerializer
+    queryset = m.CreditStarIndexReceiverTransaction.objects.all()
+    serializer_class = s.CreditStarIndexReceiverTransactionSerializer
+    ordering = ['-pk']
+
+
+class CreditStarIndexSenderTransactionViewSet(viewsets.ModelViewSet):
+    filter_fields = '__all__'
+    queryset = m.CreditStarIndexSenderTransaction.objects.all()
+    serializer_class = s.CreditStarIndexSenderTransactionSerializer
     ordering = ['-pk']
 
 
@@ -1050,6 +1057,13 @@ class LiveViewSet(viewsets.ModelViewSet):
         prize_order = m.PrizeOrder.send_active_prize(live, prize, count, request.user)
 
         return Response(data=s.PrizeOrderSerializer(prize_order).data)
+
+    @detail_route(methods=['GET'])
+    def get_live_diamond_rank(self, request, pk):
+        live = m.Live.objects.get(pk=pk)
+
+
+        return Response(True)
 
 
 class LiveBarrageViewSet(viewsets.ModelViewSet):
@@ -1383,23 +1397,18 @@ class StarMissionAchievementViewSet(viewsets.ModelViewSet):
     @list_route(methods=['POST'])
     def achievement_watch_mission(self, request):
         # 领取观看直播任务奖励
-        live_id = request.data.get('live')
-
-        user = m.User.objects.get(pk=request.user.id)
-        log = request.user.livewatchlogs_owned.filter(live__id=live_id).first()
-        assert log.get_watch_mission_count() < 8, '直播間觀看任務只能做8次'
+        assert self.request.user.member.get_today_watch_mission_count() < 8, '直播間觀看任務只能做8次'
         # 领取记录
         m.StarMissionAchievement.objects.create(
-            author=request.user,
-            live=m.Live.objects.get(pk=live_id),
-            # todo: 应该为后台可设的数值
+            author=self.request.user,
             points=5,
             type=m.StarMissionAchievement.TYPE_WATCH,
         )
         # 元气流水
-        request.user.creditstartransactions_debit.create(
+        m.CreditStarTransaction.objects.create(
+            user_debit=self.request.user,
             amount=5,
-            remark='完成直播間{}觀看任務'.format(live_id),
+            remark='完成直播間觀看任務',
         )
         return Response(True)
 

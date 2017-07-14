@@ -18,13 +18,13 @@ from . import utils as u
 from .middleware import get_request
 
 
-class ModelPatcher:
-    @classmethod
-    def patch(cls, target):
+def patch_methods(model_class):
+    def do_patch(cls):
         for k in cls.__dict__:
             obj = getattr(cls, k)
             if not k.startswith('_') and callable(obj):
-                setattr(target, k, obj)
+                setattr(model_class, k, obj)
+    return do_patch
 
 
 class DeletableManager(models.Manager):
