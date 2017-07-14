@@ -272,9 +272,12 @@ class Member(AbstractMember,
         ).get('amount') or 0
 
     def debit_star_index(self):
-        return self.user.creditstarindextransactions_debit.all().aggregate(
+        return self.user.creditstarindexreceivertransactions_debit.all().aggregate(
             amount=models.Sum('amount')
         ).get('amount') or 0
+        # return self.user.creditstarindextransactions_debit.all().aggregate(
+        #     amount=models.Sum('amount')
+        # ).get('amount') or 0
 
     def get_diamond_balance(self):
         # 钻石余额
@@ -308,7 +311,7 @@ class Member(AbstractMember,
         """星光指数
         :return:
         """
-        count = self.user.creditstarindextransactions_debit.all().aggregate(
+        count = self.user.creditstarindexreceivertransactions_debit.all().aggregate(
             amount=models.Sum('amount')).get('amount') or 0
         return int(count)
 
@@ -1123,11 +1126,10 @@ class LiveWatchLog(UserOwnedModel,
         """
         # TODO: 未兌換成臺幣
         total_price = 0
-        prize_orders = PrizeOrder.objects.filter(live_watch_log=self.id)
+        prize_orders = PrizeOrder.objects.filter(live_watch_log=self)
         for prize_order in prize_orders:
             total_price += prize_order.prize.price
         return total_price
-
 
 
 class ActiveEvent(UserOwnedModel,
@@ -1555,10 +1557,12 @@ class ExtraPrize(EntityModel):
     不需要实际产生赠送记录，根据用户消费额筛选以获得可以下载的壁纸列表
     """
 
-    prize = models.ForeignKey(
-        verbose_name='礼物',
-        to='Prize',
+    prize_category = models.ForeignKey(
+        verbose_name='礼物分類',
+        to='PrizeCategory',
         related_name='extra_prizes',
+        null=True,
+        blank=True,
     )
 
     required_amount = models.IntegerField(
