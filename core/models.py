@@ -440,6 +440,12 @@ class CreditStarTransaction(AbstractTransactionModel):
     """ 元气流水
     每日签到或者元气任务可以获得元气，元气可用于购买赠送元气礼品
     """
+    TYPE_LIVE_GIFT = 'LIVE_GIFT'
+    TYPE_EARNING = 'EARNING'
+    TYPE_CHOICES = (
+        (TYPE_LIVE_GIFT, '直播赠送'),
+        (TYPE_EARNING, '任務獲得'),
+    )
 
     class Meta:
         verbose_name = '星星（元气）流水'
@@ -451,6 +457,12 @@ class CreditStarIndexReceiverTransaction(AbstractTransactionModel):
     """ 元气指数（收礼产生类）
     主播用户收到元气礼品时可以获得此类指数，每达到 500 个就可以换一个元气宝盒
     """
+    TYPE_GENERATE = 'GENERATE'
+    TYPE_BOX_EXPENSE = 'BOX_EXPENSE'
+    TYPE_CHOICES = (
+        (TYPE_GENERATE, '送禮產生'),
+        (TYPE_BOX_EXPENSE, '寶盒消耗'),
+    )
 
     class Meta:
         verbose_name = '星光指数（元氣）流水（收礼）'
@@ -463,6 +475,13 @@ class CreditStarIndexSenderTransaction(AbstractTransactionModel):
     用户送出元气礼品时可以获得此类指数，每达到 500 个就可以换一个元气宝盒
     """
 
+    TYPE_GENERATE = 'GENERATE'
+    TYPE_BOX_EXPENSE = 'BOX_EXPENSE'
+    TYPE_CHOICES = (
+        (TYPE_GENERATE, '送禮產生'),
+        (TYPE_BOX_EXPENSE, '寶盒消耗'),
+    )
+
     class Meta:
         verbose_name = '星光指数（元氣）流水（送礼）'
         verbose_name_plural = '星光指数（元氣）流水（送礼）'
@@ -471,30 +490,20 @@ class CreditStarIndexSenderTransaction(AbstractTransactionModel):
 
 class CreditDiamondTransaction(AbstractTransactionModel):
     TYPE_LIVE_GIFT = 'LIVE_GIFT'
+    TYPE_EXCHANGE = 'EXCHANGE'
+    TYPE_WITHDRAW = 'WITHDRAW'
+    TYPE_ACTIVITY_EXPENSE = 'ACTIVITY_EXPENSE'
     TYPE_CHOICES = (
         (TYPE_LIVE_GIFT, '直播赠送'),
+        (TYPE_EXCHANGE, '兌換'),
+        (TYPE_WITHDRAW, '提現'),
+        (TYPE_ACTIVITY_EXPENSE, '活動消費'),
     )
 
     type = models.CharField(
         verbose_name='流水类型',
         max_length=20,
         choices=TYPE_CHOICES,
-    )
-
-    live = models.ForeignKey(
-        verbose_name='直播',
-        to='Live',
-        related_name='diamond_transactions',
-        null=True,
-        blank=True,
-    )
-
-    live_watch_log = models.ForeignKey(
-        verbose_name='直播参与记录',
-        to='LiveWatchLog',
-        related_name='diamond_transactions',
-        null=True,
-        blank=True,
     )
 
     class Meta:
@@ -504,6 +513,21 @@ class CreditDiamondTransaction(AbstractTransactionModel):
 
 
 class CreditCoinTransaction(AbstractTransactionModel):
+    TYPE_LIVE_GIFT = 'LIVE_GIFT'
+    TYPE_RECHARGE = 'RECHARGE'
+    TYPE_EXCHANGE = 'EXCHANGE'
+    TYPE_CHOICES = (
+        (TYPE_LIVE_GIFT, '直播赠送'),
+        (TYPE_RECHARGE, '充值'),
+        (TYPE_EXCHANGE, '兌換'),
+    )
+
+    type = models.CharField(
+        verbose_name='流水类型',
+        max_length=20,
+        choices=TYPE_CHOICES,
+    )
+
     class Meta:
         verbose_name = '金币流水'
         verbose_name_plural = '金币流水'
@@ -1316,6 +1340,25 @@ class PrizeTransaction(AbstractTransactionModel):
         related_name='transactions',
     )
 
+    TYPE_LIVE_RECEIVE = 'LIVE_RECEIVE'
+    TYPE_LIVE_SEND_BUY = 'LIVE_SEND_BUY'
+    TYPE_LIVE_SEND_BAG = 'LIVE_SEND_BAG'
+    TYPE_ACTIVITY_GAIN = 'ACTIVITY_GAIN'
+    TYPE_STAR_BOX_GAIN = 'STAR_BOX_GAIN'
+    TYPE_CHOICES = (
+        (TYPE_LIVE_RECEIVE, '直播獲得'),
+        (TYPE_LIVE_SEND_BUY, '直播赠送-購買'),
+        (TYPE_LIVE_SEND_BAG, '直播贈送-揹包'),
+        (TYPE_ACTIVITY_GAIN, '活動獲得'),
+        (TYPE_STAR_BOX_GAIN, '元氣寶盒獲得'),
+    )
+
+    type = models.CharField(
+        verbose_name='流水类型',
+        max_length=20,
+        choices=TYPE_CHOICES,
+    )
+
     # prize_count = models.IntegerField(
     #     verbose_name='礼物数量',
     #     default=1
@@ -1467,99 +1510,168 @@ class PrizeOrder(UserOwnedModel):
         :param user:
         :return:
         """
-        total_price = count * prize.price
-        assert user.member.get_coin_balance() >= total_price, '赠送失败,余额不足'
-
+        # 獲取直播記錄
         watch_log = live.watch_logs.filter(author=user).first()
         assert watch_log, '用戶還沒有進入直播觀看，不能購買禮物贈送'
 
+        total_price = count * prize.price
+
+        # 校驗餘額是否充足
+        if prize.price_type == Prize.PRICE_TYPE_COIN:
+            assert user.member.get_coin_balance() >= total_price, '赠送失败,金幣余额不足'
+        elif prize.price_type == Prize.PRICE_TYPE_STAR:
+            assert user.member.get_star_balance() >= total_price, '赠送失败,元氣不足'
+        else:
+            raise AssertionError('不正確的禮物支付類型')
+
         # 礼物流水
-        prize_transaction = PrizeTransaction.objects.create(
+        receiver_prize_transaction = PrizeTransaction.objects.create(
             amount=count,
             user_debit=live.author,
             user_credit=live.author,
-            remark='直接購買(直播#{})'.format(live.id),
+            remark='收到用戶贈送的禮物(直播#{}-直接購買)'.format(live.id),
             prize=prize,
+            type=PrizeTransaction.TYPE_LIVE_RECEIVE,
         )
-
-        # 金币流水
-        coin_transaction = CreditCoinTransaction.objects.create(
+        sender_prize_transaction = PrizeTransaction.objects.create(
+            amount=count,
+            user_debit=user,
             user_credit=user,
-            amount=total_price,
-            remark='購買禮物',
+            remark='贈送禮物給主播(直播#{}-直接購買)'.format(live.id),
+            prize=prize,
+            type=PrizeTransaction.TYPE_LIVE_SEND_BUY,
         )
 
-        # 钻石流水
-        diamond_transaction = CreditDiamondTransaction.objects.create(
-            user_debit=live.author,
-            amount=total_price,
-            remark='禮物兌換',
-            type='LIVE_GIFT',
-            live=live,
-            live_watch_log=watch_log,
-        )
+        coin_transaction = None
+        diamond_transaction = None
+        if prize.price_type == Prize.PRICE_TYPE_COIN:
+            # 金币流水
+            coin_transaction = CreditCoinTransaction.objects.create(
+                user_credit=user,
+                amount=total_price,
+                type=CreditCoinTransaction.TYPE_LIVE_GIFT,
+                remark='購買禮物',
+            )
+            # 钻石流水
+            diamond_transaction = CreditDiamondTransaction.objects.create(
+                user_debit=live.author,
+                amount=total_price,
+                remark='禮物兌換',
+                type=CreditDiamondTransaction.TYPE_LIVE_GIFT,
+            )
+
+        star_transaction = None
+        receiver_star_index_transaction = None
+        sender_star_index_transaction = None
+        if prize.price_type == Prize.PRICE_TYPE_STAR:
+            star_transaction = CreditStarTransaction.objects.create(
+                user_credit=user,
+                amount=total_price,
+                remark='購買禮物',
+                type=CreditStarTransaction.TYPE_LIVE_GIFT,
+            )
+            receiver_star_index_transaction = CreditStarIndexReceiverTransaction.objects.create(
+                user_credit=user,
+                amount=total_price,
+                remark='直播贈送禮物產生',
+                type=CreditStarIndexReceiverTransaction.TYPE_GENERATE,
+            )
+            sender_star_index_transaction = CreditStarIndexSenderTransaction.objects.create(
+                user_credit=user,
+                amount=total_price,
+                remark='直播贈送禮物產生',
+                type=CreditStarIndexSenderTransaction.TYPE_GENERATE,
+            )
 
         # 礼物订单
         order = PrizeOrder.objects.create(
             author=user,
             prize=prize,
             live_watch_log=watch_log,
-            prize_transaction=prize_transaction,
+            receiver_prize_transaction=receiver_prize_transaction,
+            senderprize_transaction=sender_prize_transaction,
             coin_transaction=coin_transaction,
             diamond_transaction=diamond_transaction,
-            star_transaction=None,
-            star_index_transaction=None,
+            star_transaction=star_transaction,
+            receiver_star_index_transaction=receiver_star_index_transaction,
+            sender_star_index_transaction=sender_star_index_transaction,
         )
 
         return order
 
     @staticmethod
     def send_active_prize(live, prize, count, user):
-        amount = prize.price * count
-        log = live.watch_logs.filter(author=user).first()
+        """ 在直播中送出揹包中的禮物
+        :param live:
+        :param prize:
+        :param count:
+        :param user:
+        :return:
+        """
+        # 獲取直播記錄
+        watch_log = live.watch_logs.filter(author=user).first()
+        assert watch_log, '用戶還沒有進入直播觀看，不能購買禮物贈送'
+
+        total_price = count * prize.price
 
         assert prize.get_balance(user) <= count, '贈送失敗，禮物剩餘不足'
 
-        prize_transaction = PrizeTransaction.objects.create(
-            user_credit=user,
-            user_debit=live.author,
+        # 礼物流水
+        receiver_prize_transaction = PrizeTransaction.objects.create(
             amount=count,
+            user_debit=live.author,
+            user_credit=live.author,
+            remark='收到用戶贈送的禮物(直播#{}-揹包贈送)'.format(live.id),
             prize=prize,
+            type=PrizeTransaction.TYPE_LIVE_RECEIVE,
         )
-        star_index_transaction = None
+        sender_prize_transaction = PrizeTransaction.objects.create(
+            amount=count,
+            user_debit=None,
+            user_credit=user,
+            remark='贈送禮物給主播(直播#{}-揹包贈送)'.format(live.id),
+            prize=prize,
+            type=PrizeTransaction.TYPE_LIVE_SEND_BAG,
+        )
+
         diamond_transaction = None
-        # 如果是礼盒礼物不加钻石，加元气指数
-        if prize.category.name == '宝盒礼物':
-            star_transaction = CreditStarTransaction.objects.create(
-                user_=live.author,
-                amount=amount,
-                remark='觀衆贈送礼盒禮物',
-            )
-            star_index_transaction = CreditStarIndexReceiverTransaction.objects.create(
-                user_debit=live.author,
-                amount=amount,
-                remark='觀衆贈送寶盒禮物',
-            )
-        else:
+        if prize.price_type == Prize.PRICE_TYPE_COIN:
             # 钻石流水
             diamond_transaction = CreditDiamondTransaction.objects.create(
                 user_debit=live.author,
-                amount=amount,
+                amount=total_price,
                 remark='禮物兌換',
-                type='LIVE_GIFT',
-                live=live,
-                live_watch_log=log,
+                type=CreditDiamondTransaction.TYPE_LIVE_GIFT,
+            )
+
+        receiver_star_index_transaction = None
+        sender_star_index_transaction = None
+        if prize.price_type == Prize.PRICE_TYPE_STAR:
+            receiver_star_index_transaction = CreditStarIndexReceiverTransaction.objects.create(
+                user_credit=user,
+                amount=total_price,
+                remark='直播贈送禮物產生',
+                type=CreditStarIndexReceiverTransaction.TYPE_GENERATE,
+            )
+            sender_star_index_transaction = CreditStarIndexSenderTransaction.objects.create(
+                user_credit=user,
+                amount=total_price,
+                remark='直播贈送禮物產生',
+                type=CreditStarIndexSenderTransaction.TYPE_GENERATE,
             )
 
         # 礼物订单
         order = PrizeOrder.objects.create(
             author=user,
             prize=prize,
-            live_watch_log=log,
-            prize_transaction=prize_transaction,
+            live_watch_log=watch_log,
+            receiver_prize_transaction=receiver_prize_transaction,
+            senderprize_transaction=sender_prize_transaction,
             coin_transaction=None,
             diamond_transaction=diamond_transaction,
-            star_index_transaction=star_index_transaction,
+            star_transaction=None,
+            receiver_star_index_transaction=receiver_star_index_transaction,
+            sender_star_index_transaction=sender_star_index_transaction,
         )
 
         return order
