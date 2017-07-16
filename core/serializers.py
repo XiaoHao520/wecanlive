@@ -912,6 +912,11 @@ class PrizeSerializer(QueryFieldsMixin, serializers.ModelSerializer):
         read_only=True,
     )
 
+    marquee_image_item = ImageSerializer(
+        source='marquee_image',
+        read_only=True,
+    )
+
     class Meta:
         model = m.Prize
         fields = '__all__'

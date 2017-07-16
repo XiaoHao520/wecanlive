@@ -42,26 +42,27 @@ def interceptor_get_queryset_kw_field(self):
     """
     qs = super(type(self), self).get_queryset()
     for key in self.request.query_params:
+        value = self.request.query_params[key]
         if key.startswith('kw_'):
             field = key[3:]
-            qs = qs.filter(**{
-                field + '__contains': self.request.query_params[key]
-            })
-        elif key.startswith('date_from__'):
-            field = key[11:]
-            qs = qs.filter(**{
-                field + '__date__gte': self.request.query_params[key]
-            })
+            qs = qs.filter(**{field + '__contains': value})
         elif key.startswith('exact__'):
             field = key[7:]
-            qs = qs.filter(**{
-                field: self.request.query_params[key]
-            })
+            qs = qs.filter(**{field: value})
+        elif key.startswith('date_from__'):
+            field = key[11:]
+            qs = qs.filter(**{field + '__date__gte': value})
         elif key.startswith('date_to__'):
             field = key[9:]
-            qs = qs.filter(**{
-                field + '__date__lte': self.request.query_params[key]
-            })
+            qs = qs.filter(**{field + '__date__lte': value})
+        elif key.startswith('ne__'):
+            field = key[4:]
+            qs = qs.exclude(**{field: value})
+        elif re.match(r'^(?:gt|gte|lt|lte|contains)__', key):
+            pos = key.find('__')
+            op = key[:pos]
+            field = key[pos + 2:]
+            qs = qs.filter(**{field + '__' + op: value})
     return qs
 
 
@@ -249,7 +250,7 @@ class MenuViewSet(viewsets.ModelViewSet):
                         title=submenu.title,
                         link=dict(
                             name=submenu.name,
-                        )) for submenu in menu.children.filter(groups__user=request.user)],
+                        )) for submenu in menu.children.filter(groups__user=request.user).distinct()],
                 ))
         return Response(data=data)
 
@@ -794,7 +795,6 @@ class MemberViewSet(viewsets.ModelViewSet):
                 unread=unread,
             ))
         return Response(data=data)
-
 
 
 class RobotViewSet(viewsets.ModelViewSet):

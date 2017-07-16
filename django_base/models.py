@@ -1060,6 +1060,14 @@ class Menu(HierarchicalModel, models.Model):
         default=0,
     )
 
+    project = models.CharField(
+        verbose_name='项目名称',
+        max_length=50,
+        blank=True,
+        default='',
+        help_text='如果有多个后台模块，通过这个字段区分',
+    )
+
     groups = models.ManyToManyField(
         verbose_name='组',
         to=Group,

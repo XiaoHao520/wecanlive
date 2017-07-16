@@ -1244,13 +1244,13 @@ class Prize(EntityModel):
         blank=True,
     )
 
-    date_sticker_begin = models.DateTimeField(
+    date_sticker_begin = models.DateField(
         verbose_name='表情包有效期开始',
         blank=True,
         null=True,
     )
 
-    date_sticker_end = models.DateTimeField(
+    date_sticker_end = models.DateField(
         verbose_name='表情包有效期结束',
         blank=True,
         null=True,
@@ -1259,20 +1259,6 @@ class Prize(EntityModel):
     price = models.IntegerField(
         verbose_name='价格（金币/元气）',
         default=0,
-    )
-
-    TYPE_NORMAL = 'NORMAL'
-    TYPE_SPECIAL = 'SPECIAL'
-    TYPE_CHOICES = (
-        (TYPE_NORMAL, '普通款'),
-        (TYPE_SPECIAL, '特殊款'),
-    )
-
-    type = models.CharField(
-        verbose_name='礼物类型',
-        max_length=20,
-        choices=TYPE_CHOICES,
-        default=TYPE_NORMAL,
     )
 
     PRICE_TYPE_COIN = 'COIN'
@@ -1289,10 +1275,26 @@ class Prize(EntityModel):
         default=PRICE_TYPE_COIN,
     )
 
-    MARQUEE_BIG = 'BIG'
+    TYPE_NORMAL = 'NORMAL'
+    TYPE_SPECIAL = 'SPECIAL'
+    TYPE_CHOICES = (
+        (TYPE_NORMAL, '普通款'),
+        (TYPE_SPECIAL, '特殊款'),
+    )
+
+    type = models.CharField(
+        verbose_name='礼物类型',
+        max_length=20,
+        choices=TYPE_CHOICES,
+        default=TYPE_NORMAL,
+    )
+
+    MARQUEE_LARGE = 'LARGE'
+    MARQUEE_MEDIUM = 'MEDIUM'
     MARQUEE_SMALL = 'SMALL'
     MARQUEE_CHOICES = (
-        (MARQUEE_BIG, '大'),
+        (MARQUEE_LARGE, '大'),
+        (MARQUEE_MEDIUM, '中'),
         (MARQUEE_SMALL, '小'),
     )
     marquee_size = models.CharField(
@@ -1300,6 +1302,14 @@ class Prize(EntityModel):
         max_length=20,
         choices=MARQUEE_CHOICES,
         default=MARQUEE_SMALL,
+    )
+
+    marquee_image = models.OneToOneField(
+        verbose_name='跑马灯图案',
+        to=ImageModel,
+        related_name='prize_as_marquee',
+        null=True,
+        blank=True,
     )
 
     category = models.ForeignKey(
