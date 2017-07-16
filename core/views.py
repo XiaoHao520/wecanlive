@@ -815,6 +815,7 @@ class CreditStarTransactionViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.CreditStarTransaction.objects.all()
     serializer_class = s.CreditStarTransactionSerializer
+    permission_classes = [p.IsAdminOrReadOnly]
     ordering = ['-pk']
 
 
@@ -822,6 +823,7 @@ class CreditStarIndexReceiverTransactionViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.CreditStarIndexReceiverTransaction.objects.all()
     serializer_class = s.CreditStarIndexReceiverTransactionSerializer
+    permission_classes = [p.IsAdminOrReadOnly]
     ordering = ['-pk']
 
 
@@ -829,6 +831,7 @@ class CreditStarIndexSenderTransactionViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.CreditStarIndexSenderTransaction.objects.all()
     serializer_class = s.CreditStarIndexSenderTransactionSerializer
+    permission_classes = [p.IsAdminOrReadOnly]
     ordering = ['-pk']
 
 
@@ -836,6 +839,7 @@ class CreditDiamondTransactionViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.CreditDiamondTransaction.objects.all()
     serializer_class = s.CreditDiamondTransactionSerializer
+    permission_classes = [p.IsAdminOrReadOnly]
     ordering = ['-pk']
 
     @list_route(methods=['GET'])
@@ -865,6 +869,7 @@ class CreditCoinTransactionViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.CreditCoinTransaction.objects.all()
     serializer_class = s.CreditCoinTransactionSerializer
+    permission_classes = [p.IsAdminOrReadOnly]
     ordering = ['-pk']
 
 
@@ -1044,19 +1049,16 @@ class LiveViewSet(viewsets.ModelViewSet):
     def buy_prize(self, request, pk):
         live = m.Live.objects.get(pk=pk)
         prize = m.Prize.objects.get(pk=request.data.get('prize'))
-        count = request.data.get('count')
+        count = int(request.data.get('count'))
         prize_order = m.PrizeOrder.buy_prize(live, prize, count, request.user)
-
         return Response(data=s.PrizeOrderSerializer(prize_order).data)
 
     @detail_route(methods=['POST'])
     def send_active_prize(self, request, pk):
         live = m.Live.objects.get(pk=pk)
         prize = m.Prize.objects.get(pk=request.data.get('prize'))
-        count = request.data.get('count')
-
+        count = int(request.data.get('count'))
         prize_order = m.PrizeOrder.send_active_prize(live, prize, count, request.user)
-
         return Response(data=s.PrizeOrderSerializer(prize_order).data)
 
     @detail_route(methods=['GET'])
@@ -1101,6 +1103,12 @@ class LiveViewSet(viewsets.ModelViewSet):
         data['today_watch_mission_count'] = today_watch_mission.count()
         data['information_mission_count'] = information_mission_count
         return Response(data=data)
+
+    @detail_route(methods=['GET'])
+    def get_watch_logs(self, request, pk):
+        live = m.Live.objects.get(id=pk)
+        watch_logs = live.watch_logs.exclude(author=live.author)
+        return Response(data=s.LiveWatchLogSerializer(watch_logs, many=True).data)
 
 
 class LiveBarrageViewSet(viewsets.ModelViewSet):
@@ -1294,6 +1302,7 @@ class PrizeTransactionViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.PrizeTransaction.objects.all()
     serializer_class = s.PrizeTransactionSerializer
+    permission_classes = [p.IsAdminOrReadOnly]
     ordering = ['-pk']
 
     def get_queryset(self):

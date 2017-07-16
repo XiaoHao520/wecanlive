@@ -266,61 +266,75 @@ class Member(AbstractMember,
         return self.user.creditdiamondtransactions_debit.all().aggregate(
             amount=models.Sum('amount')).get('amount') or 0
 
-    def credit_star_index(self):
-        return self.user.creditstarindextransactions_credit.all().aggregate(
-            amount=models.Sum('amount')
-        ).get('amount') or 0
+    # def credit_star_index(self):
+    #     return self.user.creditstarindextransactions_credit.all().aggregate(
+    #         amount=models.Sum('amount')
+    #     ).get('amount') or 0
 
-    def debit_star_index(self):
-        return self.user.creditstarindexreceivertransactions_debit.all().aggregate(
-            amount=models.Sum('amount')
-        ).get('amount') or 0
-        # return self.user.creditstarindextransactions_debit.all().aggregate(
-        #     amount=models.Sum('amount')
-        # ).get('amount') or 0
+    # def debit_star_index(self):
+    #     return self.user.creditstarindexreceivertransactions_debit.all().aggregate(
+    #         amount=models.Sum('amount')
+    #     ).get('amount') or 0
+    #     # return self.user.creditstarindextransactions_debit.all().aggregate(
+    #     #     amount=models.Sum('amount')
+    #     # ).get('amount') or 0
 
     def get_diamond_balance(self):
         # 钻石余额
         # 支出鑽石數
-        credit_diamond = self.user.creditdiamondtransactions_credit.all().aggregate(
+        credit_diamond = self.user.creditdiamondtransactions_credit.aggregate(
             amount=models.Sum('amount')).get('amount') or 0
         # 收入鑽石數
-        debit_diamond = self.user.creditdiamondtransactions_debit.all().aggregate(
+        debit_diamond = self.user.creditdiamondtransactions_debit.aggregate(
             amount=models.Sum('amount')).get('amount') or 0
         return debit_diamond - credit_diamond
 
     def get_coin_balance(self):
         # 金币余额
         # 支出金币
-        credit_coin = self.user.creditcointransactions_credit.all().aggregate(
+        credit_coin = self.user.creditcointransactions_credit.aggregate(
             amount=models.Sum('amount')).get('amount') or 0
         # 收入金币
-        debit_coin = self.user.creditcointransactions_debit.all().aggregate(
+        debit_coin = self.user.creditcointransactions_debit.aggregate(
             amount=models.Sum('amount')).get('amount') or 0
         return debit_coin - credit_coin
+
+    def get_star_index_sender_balance(self):
+        credit = self.user.creditstarindexsendertransactions_credit.aggregate(
+            amount=models.Sum('amount')).get('amount') or 0
+        debit = self.user.creditstarindexsendertransactions_debit.aggregate(
+            amount=models.Sum('amount')).get('amount') or 0
+        return debit - credit
+
+    def get_star_index_receiver_balance(self):
+        credit = self.user.creditstarindexreceivertransactions_credit.aggregate(
+            amount=models.Sum('amount')).get('amount') or 0
+        debit = self.user.creditstarindexreceivertransactions_debit.aggregate(
+            amount=models.Sum('amount')).get('amount') or 0
+        return debit - credit
 
     def diamond_count(self):
         """获得钻石总数
         :return:
         """
-        count = self.user.creditdiamondtransactions_debit.all().aggregate(
+        count = self.user.creditdiamondtransactions_debit.aggregate(
             amount=models.Sum('amount')).get('amount') or 0
         return int(count)
 
-    def starlight_count(self):
-        """星光指数
-        :return:
-        """
-        count = self.user.creditstarindexreceivertransactions_debit.all().aggregate(
-            amount=models.Sum('amount')).get('amount') or 0
-        return int(count)
+    # def starlight_count(self):
+    #     """星光指数
+    #     :return:
+    #     """
+    #     count = self.user.creditstarindexreceivertransactions_debit.aggregate(
+    #         amount=models.Sum('amount')).get('amount') or 0
+    #     return int(count)
 
     def get_star_balance(self):
         """星星（元气）余额
         """
-        credit_star = self.user.creditstartransactions_credit.all().aggregate(
+        credit_star = self.user.creditstartransactions_credit.aggregate(
             amount=models.Sum('amount')).get('amount') or 0
-        debit_star = self.user.creditstartransactions_debit.all().aggregate(
+        debit_star = self.user.creditstartransactions_debit.aggregate(
             amount=models.Sum('amount')).get('amount') or 0
         return debit_star - credit_star
 
@@ -442,9 +456,17 @@ class CreditStarTransaction(AbstractTransactionModel):
     """
     TYPE_LIVE_GIFT = 'LIVE_GIFT'
     TYPE_EARNING = 'EARNING'
+    TYPE_ADMIN = 'ADMIN'
     TYPE_CHOICES = (
         (TYPE_LIVE_GIFT, '直播赠送'),
         (TYPE_EARNING, '任務獲得'),
+        (TYPE_ADMIN, '後臺補償'),
+    )
+
+    type = models.CharField(
+        verbose_name='流水类型',
+        max_length=20,
+        choices=TYPE_CHOICES,
     )
 
     class Meta:
@@ -462,6 +484,12 @@ class CreditStarIndexReceiverTransaction(AbstractTransactionModel):
     TYPE_CHOICES = (
         (TYPE_GENERATE, '送禮產生'),
         (TYPE_BOX_EXPENSE, '寶盒消耗'),
+    )
+
+    type = models.CharField(
+        verbose_name='流水类型',
+        max_length=20,
+        choices=TYPE_CHOICES,
     )
 
     class Meta:
@@ -482,6 +510,12 @@ class CreditStarIndexSenderTransaction(AbstractTransactionModel):
         (TYPE_BOX_EXPENSE, '寶盒消耗'),
     )
 
+    type = models.CharField(
+        verbose_name='流水类型',
+        max_length=20,
+        choices=TYPE_CHOICES,
+    )
+
     class Meta:
         verbose_name = '星光指数（元氣）流水（送礼）'
         verbose_name_plural = '星光指数（元氣）流水（送礼）'
@@ -489,11 +523,13 @@ class CreditStarIndexSenderTransaction(AbstractTransactionModel):
 
 
 class CreditDiamondTransaction(AbstractTransactionModel):
+    TYPE_ADMIN = 'ADMIN'
     TYPE_LIVE_GIFT = 'LIVE_GIFT'
     TYPE_EXCHANGE = 'EXCHANGE'
     TYPE_WITHDRAW = 'WITHDRAW'
     TYPE_ACTIVITY_EXPENSE = 'ACTIVITY_EXPENSE'
     TYPE_CHOICES = (
+        (TYPE_ADMIN, '管理員發放'),
         (TYPE_LIVE_GIFT, '直播赠送'),
         (TYPE_EXCHANGE, '兌換'),
         (TYPE_WITHDRAW, '提現'),
@@ -513,10 +549,12 @@ class CreditDiamondTransaction(AbstractTransactionModel):
 
 
 class CreditCoinTransaction(AbstractTransactionModel):
+    TYPE_ADMIN = 'ADMIN'
     TYPE_LIVE_GIFT = 'LIVE_GIFT'
     TYPE_RECHARGE = 'RECHARGE'
     TYPE_EXCHANGE = 'EXCHANGE'
     TYPE_CHOICES = (
+        (TYPE_ADMIN, '管理員發放'),
         (TYPE_LIVE_GIFT, '直播赠送'),
         (TYPE_RECHARGE, '充值'),
         (TYPE_EXCHANGE, '兌換'),
@@ -1212,18 +1250,6 @@ class PrizeCategory(EntityModel):
         verbose_name_plural = '礼物分类'
         db_table = 'core_prize_category'
 
-    def get_prizes(self):
-        prizes = []
-        # todo 经验值
-        for prize in self.prizes.all():
-            prizes.append(dict(
-                id=prize.id,
-                name=prize.name,
-                price=prize.price,
-                icon=prize.icon.image.url,
-            ))
-        return prizes
-
     def get_count_prize(self):
         return self.prizes.all().count()
 
@@ -1325,19 +1351,22 @@ class Prize(EntityModel):
         verbose_name_plural = '礼物'
         db_table = 'core_prize'
 
-    def get_balance(self, user):
+    def get_balance(self, user, source_tag):
         """ 返回某個用戶對這個禮物的存量
         :param user:
+        :param source_tag: 來源標籤
         :return:
         """
         # 計算當前用戶該項禮品的餘額
         # 獲得該禮物的數量
         accept = user.prizetransactions_debit.filter(
             prize=self,
+            source_tag=source_tag,
         ).aggregate(amount=models.Sum('amount')).get('amount') or 0
         # 消費該禮物的數量
         send = user.prizetransactions_credit.filter(
             prize=self,
+            source_tag=source_tag,
         ).aggregate(amount=models.Sum('amount')).get('amount') or 0
         # 返回餘額
         return accept - send
@@ -1367,6 +1396,22 @@ class PrizeTransaction(AbstractTransactionModel):
         verbose_name='流水类型',
         max_length=20,
         choices=TYPE_CHOICES,
+    )
+
+    SOURCE_TAG_ACTIVITY = 'ACTIVITY'
+    SOURCE_TAG_STAR_BOX = 'STAR_BOX'
+    SOURCE_TAG_VIP = 'VIP'
+    SOURCE_TAG_SHOP = 'SHOP'
+    SOURCE_TAG_CHOICES = (
+        (SOURCE_TAG_ACTIVITY, '活動禮物'),
+        (SOURCE_TAG_STAR_BOX, '寶盒禮物'),
+        (SOURCE_TAG_VIP, 'VIP回饋禮物'),
+        (SOURCE_TAG_SHOP, '商店購買'),
+    )
+    source_tag = models.CharField(
+        verbose_name='流水类型',
+        max_length=20,
+        choices=SOURCE_TAG_CHOICES,
     )
 
     # prize_count = models.IntegerField(
@@ -1542,6 +1587,7 @@ class PrizeOrder(UserOwnedModel):
             remark='收到用戶贈送的禮物(直播#{}-直接購買)'.format(live.id),
             prize=prize,
             type=PrizeTransaction.TYPE_LIVE_RECEIVE,
+            source_tag=PrizeTransaction.SOURCE_TAG_SHOP,
         )
         sender_prize_transaction = PrizeTransaction.objects.create(
             amount=count,
@@ -1550,6 +1596,7 @@ class PrizeOrder(UserOwnedModel):
             remark='贈送禮物給主播(直播#{}-直接購買)'.format(live.id),
             prize=prize,
             type=PrizeTransaction.TYPE_LIVE_SEND_BUY,
+            source_tag=PrizeTransaction.SOURCE_TAG_SHOP,
         )
 
         coin_transaction = None
@@ -1581,13 +1628,13 @@ class PrizeOrder(UserOwnedModel):
                 type=CreditStarTransaction.TYPE_LIVE_GIFT,
             )
             receiver_star_index_transaction = CreditStarIndexReceiverTransaction.objects.create(
-                user_credit=user,
+                user_debit=user,
                 amount=total_price,
                 remark='直播贈送禮物產生',
                 type=CreditStarIndexReceiverTransaction.TYPE_GENERATE,
             )
             sender_star_index_transaction = CreditStarIndexSenderTransaction.objects.create(
-                user_credit=user,
+                user_debit=user,
                 amount=total_price,
                 remark='直播贈送禮物產生',
                 type=CreditStarIndexSenderTransaction.TYPE_GENERATE,
@@ -1599,7 +1646,7 @@ class PrizeOrder(UserOwnedModel):
             prize=prize,
             live_watch_log=watch_log,
             receiver_prize_transaction=receiver_prize_transaction,
-            senderprize_transaction=sender_prize_transaction,
+            sender_prize_transaction=sender_prize_transaction,
             coin_transaction=coin_transaction,
             diamond_transaction=diamond_transaction,
             star_transaction=star_transaction,
@@ -1610,12 +1657,13 @@ class PrizeOrder(UserOwnedModel):
         return order
 
     @staticmethod
-    def send_active_prize(live, prize, count, user):
+    def send_active_prize(live, prize, count, user, source_tag):
         """ 在直播中送出揹包中的禮物
         :param live:
         :param prize:
         :param count:
         :param user:
+        :param source_tag: 禮物的來源編號，不同的禮物來源賬戶是分開的
         :return:
         """
         # 獲取直播記錄
@@ -1624,7 +1672,7 @@ class PrizeOrder(UserOwnedModel):
 
         total_price = count * prize.price
 
-        assert prize.get_balance(user) <= count, '贈送失敗，禮物剩餘不足'
+        assert prize.get_balance(user, source_tag) <= count, '贈送失敗，禮物剩餘不足'
 
         # 礼物流水
         receiver_prize_transaction = PrizeTransaction.objects.create(
@@ -1634,6 +1682,7 @@ class PrizeOrder(UserOwnedModel):
             remark='收到用戶贈送的禮物(直播#{}-揹包贈送)'.format(live.id),
             prize=prize,
             type=PrizeTransaction.TYPE_LIVE_RECEIVE,
+            source_tag=source_tag,
         )
         sender_prize_transaction = PrizeTransaction.objects.create(
             amount=count,
@@ -1642,6 +1691,7 @@ class PrizeOrder(UserOwnedModel):
             remark='贈送禮物給主播(直播#{}-揹包贈送)'.format(live.id),
             prize=prize,
             type=PrizeTransaction.TYPE_LIVE_SEND_BAG,
+            source_tag=source_tag,
         )
 
         diamond_transaction = None
@@ -1676,7 +1726,7 @@ class PrizeOrder(UserOwnedModel):
             prize=prize,
             live_watch_log=watch_log,
             receiver_prize_transaction=receiver_prize_transaction,
-            senderprize_transaction=sender_prize_transaction,
+            sender_prize_transaction=sender_prize_transaction,
             coin_transaction=None,
             diamond_transaction=diamond_transaction,
             star_transaction=None,
