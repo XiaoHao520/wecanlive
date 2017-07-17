@@ -796,7 +796,6 @@ class MemberViewSet(viewsets.ModelViewSet):
         return Response(data=data)
 
 
-
 class RobotViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.Robot.objects.all()
@@ -1101,6 +1100,16 @@ class LiveViewSet(viewsets.ModelViewSet):
         data['today_watch_mission_count'] = today_watch_mission.count()
         data['information_mission_count'] = information_mission_count
         return Response(data=data)
+
+    @detail_route(methods=['POST'])
+    def live_report(self, request, pk):
+        live = m.Live.objects.get(pk=pk)
+        live.informs.create(
+            author=self.request.user,
+            inform_type=request.data.get('content'),
+            reason=request.data.get('content'),
+        )
+        return Response(True)
 
 
 class LiveBarrageViewSet(viewsets.ModelViewSet):

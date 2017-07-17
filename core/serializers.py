@@ -483,6 +483,12 @@ class MemberSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
     vip_level = serializers.ReadOnlyField(source='get_vip_level')
 
+    is_living = serializers.ReadOnlyField()
+
+    contact_form_me = serializers.BooleanField(read_only=True)
+
+    contact_to_me = serializers.BooleanField(read_only=True)
+
     class Meta:
         model = m.Member
         # fields = '__all__'
@@ -771,7 +777,6 @@ class LiveBarrageSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
 
 class LiveWatchLogSerializer(QueryFieldsMixin, serializers.ModelSerializer):
-
     user_id = serializers.ReadOnlyField(
         source='author.id',
     )

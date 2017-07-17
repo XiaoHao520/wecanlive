@@ -365,6 +365,31 @@ class Member(AbstractMember,
     #         author=self.user,
     #         type=StarMissionAchievement.TYPE_INFORMATION).count()
 
+    def is_living(self):
+        # 是否在直播
+        live = self.user.lives_owned.filter(date_end=None)
+        # return live.exists() ? live.fist().id : False
+        if live.exists():
+            return live.order_by('-pk').first().id
+        else:
+            return False
+
+    def contact_form_me(self):
+        # 我的联系人
+        me = get_request().user
+        return Contact.objects.filter(
+            author=me,
+            user=self.user,
+        ).exists()
+
+    def contact_to_me(self):
+        # 对方的联系人有我
+        me = get_request().user
+        return Contact.objects.filter(
+            author=self.user,
+            user=me,
+        ).exists()
+
     def add_withdraw_blacklisted(self):
         """
         添加到提现黑名单（顺手驳回该用户其他申请中的提现）
