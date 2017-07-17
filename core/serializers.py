@@ -251,9 +251,12 @@ class UserDetailedSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     constellation = serializers.ReadOnlyField(source="member.constellation")
     avatar_url = serializers.ReadOnlyField(source="member.avatar.image.url")
     signature = serializers.ReadOnlyField(source="member.signature")
+
     diamond_balance = serializers.ReadOnlyField(source='member.get_diamond_balance')
     coin_balance = serializers.ReadOnlyField(source='member.get_coin_balance')
     star_balance = serializers.ReadOnlyField(source='member.get_star_balance')
+    star_index_sender_balance = serializers.ReadOnlyField(source='member.get_star_index_sender_balance')
+    star_index_receiver_balance = serializers.ReadOnlyField(source='member.get_star_index_receiver_balance')
 
     member_level = serializers.ReadOnlyField(source='member.get_level')
 
@@ -427,57 +430,27 @@ class InfomableSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
 
 class MemberSerializer(QueryFieldsMixin, serializers.ModelSerializer):
-    user = serializers.PrimaryKeyRelatedField(
-        queryset=m.User.objects.all(),
-    )
-
-    avatar_url = serializers.ReadOnlyField(
-        source='avatar.image.url',
-    )
-
-    avatar_item = ImageSerializer(
-        source='avatar',
-        read_only=True,
-    )
-
-    member_age = serializers.ReadOnlyField(
-        source='get_age',
-    )
-
-    count_follow = serializers.ReadOnlyField(
-        source='get_follow_count',
-    )
-
-    count_followed = serializers.ReadOnlyField(
-        source='get_followed_count',
-    )
-
-    count_friend = serializers.ReadOnlyField(
-        source='get_friend_count',
-    )
-
-    count_live = serializers.ReadOnlyField(
-        source='get_live_count',
-    )
-
-    last_live_end = serializers.ReadOnlyField(
-        source='get_last_live_end',
-    )
-
-    is_following = serializers.BooleanField(
-        source='is_followed_by_current_user',
-        read_only=True,
-    )
-
-    age = serializers.ReadOnlyField(
-        source='get_age',
-    )
+    user = serializers.PrimaryKeyRelatedField(queryset=m.User.objects.all(), )
+    avatar_url = serializers.ReadOnlyField(source='avatar.image.url', )
+    avatar_item = ImageSerializer(source='avatar', read_only=True)
+    member_age = serializers.ReadOnlyField(source='get_age')
+    count_follow = serializers.ReadOnlyField(source='get_follow_count')
+    count_followed = serializers.ReadOnlyField(source='get_followed_count')
+    count_friend = serializers.ReadOnlyField(source='get_friend_count')
+    count_live = serializers.ReadOnlyField(source='get_live_count')
+    last_live_end = serializers.ReadOnlyField(source='get_last_live_end')
+    is_following = serializers.BooleanField(source='is_followed_by_current_user', read_only=True)
+    age = serializers.ReadOnlyField(source='get_age')
 
     credit_diamond = serializers.ReadOnlyField()
-
     debit_diamond = serializers.ReadOnlyField()
+    # debit_star_index = serializers.ReadOnlyField()
 
-    debit_star_index = serializers.ReadOnlyField()
+    diamond_balance = serializers.ReadOnlyField(source='get_diamond_balance')
+    coin_balance = serializers.ReadOnlyField(source='get_coin_balance')
+    star_balance = serializers.ReadOnlyField(source='get_star_balance')
+    star_index_sender_balance = serializers.ReadOnlyField(source='get_star_index_sender_balance')
+    star_index_receiver_balance = serializers.ReadOnlyField(source='get_star_index_receiver_balance')
 
     level = serializers.ReadOnlyField(source='get_level')
 
@@ -599,21 +572,13 @@ class FamilySerializer(QueryFieldsMixin, serializers.ModelSerializer):
         read_only=True,
     )
 
-    nickname = serializers.ReadOnlyField(
-        source='author.member.nickname',
-    )
+    nickname = serializers.ReadOnlyField(source='author.member.nickname')
 
-    count_admin = serializers.ReadOnlyField(
-        source='get_count_admin',
-    )
+    count_admin = serializers.ReadOnlyField(source='get_count_admin')
 
-    count_family_member = serializers.ReadOnlyField(
-        source='get_count_family_member',
-    )
+    count_family_member = serializers.ReadOnlyField(source='get_count_family_member')
 
-    count_family_mission = serializers.ReadOnlyField(
-        source='get_count_family_mission',
-    )
+    count_family_mission = serializers.ReadOnlyField(source='get_count_family_mission')
 
     class Meta:
         model = m.Family
@@ -651,101 +616,41 @@ class LiveCategorySerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
 
 class LiveSerializer(QueryFieldsMixin, serializers.ModelSerializer):
-    category = serializers.ReadOnlyField(
-        source='category.name',
-    )
-
-    author_id = serializers.ReadOnlyField(
-        source='author.id',
-    )
-
-    nickname = serializers.ReadOnlyField(
-        source='author.member.nickname',
-    )
-
-    mobile = serializers.ReadOnlyField(
-        source='author.member.mobile',
-    )
-
-    author_avatar = serializers.ReadOnlyField(
-        source='author.member.avatar.image.url',
-    )
-
-    gender = serializers.ReadOnlyField(
-        source='author.member.gender',
-    )
-
-    constellation = serializers.ReadOnlyField(
-        source='author.member.constellation',
-    )
-
-    signature = serializers.ReadOnlyField(
-        source='author.member.signature',
-    )
-
-    age = serializers.ReadOnlyField(
-        source='author.member.age',
-    )
-
+    category = serializers.ReadOnlyField(source='category.name')
+    author_id = serializers.ReadOnlyField(source='author.id')
+    nickname = serializers.ReadOnlyField(source='author.member.nickname')
+    mobile = serializers.ReadOnlyField(source='author.member.mobile')
+    author_avatar = serializers.ReadOnlyField(source='author.member.avatar.image.url')
+    gender = serializers.ReadOnlyField(source='author.member.gender')
+    constellation = serializers.ReadOnlyField(source='author.member.constellation')
+    signature = serializers.ReadOnlyField(source='author.member.signature')
+    age = serializers.ReadOnlyField(source='author.member.age')
     author_is_following = serializers.ReadOnlyField(
         source='author.member.is_followed_by_current_user',
         read_only=True,
     )
 
-    count_comment = serializers.ReadOnlyField(
-        source='get_comment_count',
-    )
-
-    count_view = serializers.ReadOnlyField(
-        source='get_view_count',
-    )
-
-    count_prize = serializers.ReadOnlyField(
-        source='get_prize_count',
-    )
-
-    count_like = serializers.ReadOnlyField(
-        source='get_like_count',
-    )
+    count_comment = serializers.ReadOnlyField(source='get_comment_count')
+    count_view = serializers.ReadOnlyField(source='get_view_count')
+    count_prize = serializers.ReadOnlyField(source='get_prize_count')
+    count_like = serializers.ReadOnlyField(source='get_like_count')
 
     # 主播粉丝数
-    count_following_author = serializers.ReadOnlyField(
-        source='author.member.get_followed_count',
-    )
+    count_following_author = serializers.ReadOnlyField(source='author.member.get_followed_count')
 
     # 主播追踪数
-    count_author_followed = serializers.ReadOnlyField(
-        source='author.member.get_follow_count',
-    )
-
-    count_author_diamond = serializers.ReadOnlyField(
-        source='author.member.diamond_count',
-    )
-
-    count_author_starlight = serializers.ReadOnlyField(
-        source='author.member.starlight_count',
-    )
-
-    duration = serializers.ReadOnlyField(
-        source='get_duration',
-    )
-
-    live_status = serializers.ReadOnlyField(
-        source='get_live_status',
-    )
+    count_author_followed = serializers.ReadOnlyField(source='author.member.get_follow_count')
+    count_author_diamond = serializers.ReadOnlyField(source='author.member.diamond_count')
+    duration = serializers.ReadOnlyField(source='get_duration')
+    live_status = serializers.ReadOnlyField(source='get_live_status')
 
     is_following = serializers.BooleanField(
         source='is_followed_by_current_user',
         read_only=True,
     )
 
-    push_url = serializers.ReadOnlyField(
-        source='get_push_url',
-    )
-
-    play_url = serializers.ReadOnlyField(
-        source='get_play_url',
-    )
+    push_url = serializers.ReadOnlyField(source='get_push_url')
+    play_url = serializers.ReadOnlyField(source='get_play_url')
 
     class Meta:
         model = m.Live
@@ -811,6 +716,10 @@ class LiveWatchLogSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
     expense = serializers.ReadOnlyField(
         source='get_total_prize',
+    )
+
+    author_avatar_url = serializers.ImageField(
+        source='author.member.avatar.image',
     )
 
     # watch_mission_count = serializers.ReadOnlyField(
@@ -888,10 +797,6 @@ class ActiveEventSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
 
 class PrizeCategorySerializer(QueryFieldsMixin, serializers.ModelSerializer):
-    prizes_item = serializers.ReadOnlyField(
-        source='get_prizes',
-    )
-
     count_prize = serializers.ReadOnlyField(
         source='get_count_prize',
     )
@@ -914,6 +819,11 @@ class PrizeSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     stickers_item = ImageSerializer(
         source='stickers',
         many=True,
+        read_only=True,
+    )
+
+    marquee_image_item = ImageSerializer(
+        source='marquee_image',
         read_only=True,
     )
 
@@ -950,6 +860,11 @@ class PrizeOrderSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
     prize_category = serializers.ReadOnlyField(
         source='prize.category.name',
+    )
+
+    prize_marquee_url = serializers.ImageField(
+        source='prize.marquee_image.image',
+        read_only=True,
     )
 
     prize_price = serializers.ReadOnlyField(

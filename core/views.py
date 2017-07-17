@@ -42,26 +42,27 @@ def interceptor_get_queryset_kw_field(self):
     """
     qs = super(type(self), self).get_queryset()
     for key in self.request.query_params:
+        value = self.request.query_params[key]
         if key.startswith('kw_'):
             field = key[3:]
-            qs = qs.filter(**{
-                field + '__contains': self.request.query_params[key]
-            })
-        elif key.startswith('date_from__'):
-            field = key[11:]
-            qs = qs.filter(**{
-                field + '__date__gte': self.request.query_params[key]
-            })
+            qs = qs.filter(**{field + '__contains': value})
         elif key.startswith('exact__'):
             field = key[7:]
-            qs = qs.filter(**{
-                field: self.request.query_params[key]
-            })
+            qs = qs.filter(**{field: value})
+        elif key.startswith('date_from__'):
+            field = key[11:]
+            qs = qs.filter(**{field + '__date__gte': value})
         elif key.startswith('date_to__'):
             field = key[9:]
-            qs = qs.filter(**{
-                field + '__date__lte': self.request.query_params[key]
-            })
+            qs = qs.filter(**{field + '__date__lte': value})
+        elif key.startswith('ne__'):
+            field = key[4:]
+            qs = qs.exclude(**{field: value})
+        elif re.match(r'^(?:gt|gte|lt|lte|contains)__', key):
+            pos = key.find('__')
+            op = key[:pos]
+            field = key[pos + 2:]
+            qs = qs.filter(**{field + '__' + op: value})
     return qs
 
 
@@ -249,7 +250,7 @@ class MenuViewSet(viewsets.ModelViewSet):
                         title=submenu.title,
                         link=dict(
                             name=submenu.name,
-                        )) for submenu in menu.children.filter(groups__user=request.user)],
+                        )) for submenu in menu.children.filter(groups__user=request.user).distinct()],
                 ))
         return Response(data=data)
 
@@ -814,6 +815,7 @@ class CreditStarTransactionViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.CreditStarTransaction.objects.all()
     serializer_class = s.CreditStarTransactionSerializer
+    permission_classes = [p.IsAdminOrReadOnly]
     ordering = ['-pk']
 
 
@@ -821,6 +823,7 @@ class CreditStarIndexReceiverTransactionViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.CreditStarIndexReceiverTransaction.objects.all()
     serializer_class = s.CreditStarIndexReceiverTransactionSerializer
+    permission_classes = [p.IsAdminOrReadOnly]
     ordering = ['-pk']
 
 
@@ -828,6 +831,7 @@ class CreditStarIndexSenderTransactionViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.CreditStarIndexSenderTransaction.objects.all()
     serializer_class = s.CreditStarIndexSenderTransactionSerializer
+    permission_classes = [p.IsAdminOrReadOnly]
     ordering = ['-pk']
 
 
@@ -835,6 +839,7 @@ class CreditDiamondTransactionViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.CreditDiamondTransaction.objects.all()
     serializer_class = s.CreditDiamondTransactionSerializer
+    permission_classes = [p.IsAdminOrReadOnly]
     ordering = ['-pk']
 
     @list_route(methods=['GET'])
@@ -864,6 +869,7 @@ class CreditCoinTransactionViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.CreditCoinTransaction.objects.all()
     serializer_class = s.CreditCoinTransactionSerializer
+    permission_classes = [p.IsAdminOrReadOnly]
     ordering = ['-pk']
 
 
@@ -1043,19 +1049,16 @@ class LiveViewSet(viewsets.ModelViewSet):
     def buy_prize(self, request, pk):
         live = m.Live.objects.get(pk=pk)
         prize = m.Prize.objects.get(pk=request.data.get('prize'))
-        count = request.data.get('count')
+        count = int(request.data.get('count'))
         prize_order = m.PrizeOrder.buy_prize(live, prize, count, request.user)
-
         return Response(data=s.PrizeOrderSerializer(prize_order).data)
 
     @detail_route(methods=['POST'])
     def send_active_prize(self, request, pk):
         live = m.Live.objects.get(pk=pk)
         prize = m.Prize.objects.get(pk=request.data.get('prize'))
-        count = request.data.get('count')
-
+        count = int(request.data.get('count'))
         prize_order = m.PrizeOrder.send_active_prize(live, prize, count, request.user)
-
         return Response(data=s.PrizeOrderSerializer(prize_order).data)
 
     @detail_route(methods=['GET'])
@@ -1110,6 +1113,12 @@ class LiveViewSet(viewsets.ModelViewSet):
             reason=request.data.get('content'),
         )
         return Response(True)
+
+    @detail_route(methods=['GET'])
+    def get_watch_logs(self, request, pk):
+        live = m.Live.objects.get(id=pk)
+        watch_logs = live.watch_logs.exclude(author=live.author)
+        return Response(data=s.LiveWatchLogSerializer(watch_logs, many=True).data)
 
 
 class LiveBarrageViewSet(viewsets.ModelViewSet):
@@ -1219,8 +1228,13 @@ class PrizeViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         qs = interceptor_get_queryset_kw_field(self)
         prize_category_id = self.request.query_params.get('prize_category')
+        prize_type = self.request.query_params.get('prize_type')
         if prize_category_id:
             qs = qs.filter(category__id=prize_category_id)
+        if prize_type and prize_type == 'NORMAL':
+            qs = qs.filter(type=m.Prize.TYPE_NORMAL)
+        elif prize_type and prize_type == 'SPECIAL':
+            qs = qs.filter(type=m.Prize.TYPE_SPECIAL)
         return qs
 
     @list_route(methods=['GET'])
@@ -1298,6 +1312,7 @@ class PrizeTransactionViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.PrizeTransaction.objects.all()
     serializer_class = s.PrizeTransactionSerializer
+    permission_classes = [p.IsAdminOrReadOnly]
     ordering = ['-pk']
 
     def get_queryset(self):
