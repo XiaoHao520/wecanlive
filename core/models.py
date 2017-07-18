@@ -603,11 +603,54 @@ class Badge(UserOwnedModel,
         blank=True,
     )
 
-    item_key = models.CharField(
-        verbose_name='元件序号',
-        max_length=20,
-        blank=True,
-        default='根据后台指定的几种任务元件的编号',
+    # item_key = models.CharField(
+    #     verbose_name='元件序号',
+    #     max_length=20,
+    #     blank=True,
+    #     default='根据后台指定的几种任务元件的编号',
+    # )
+    ITEM_SEND_PRIZE = 'SEND_PRIZE'
+    ITEM_WATCH_LIVE_DURATION = 'WATCH_LIVE_DURATION'
+    ITEM_COUNT_WATCH_LOG = 'COUNT_WATCH_LOG'
+    ITEM_COUNT_FOLLOWED = 'COUNT_FOLLOWED'
+    ITEM_COUNT_FRIEND = 'COUNT_FRIEND'
+    ITEM_COUNT_LOGIN = 'COUNT_LOGIN'
+    ITEM_COUNT_INVITE = 'COUNT_INVITE'
+    ITEM_COUNT_ENTER_LIVE = 'COUNT_ENTER_LIVE'
+    ITEM_COUNT_SHARE_LIVE = 'COUNT_SHARE_LIVE'
+    ITEM_COUNT_LIVE = 'COUNT_LIVE'
+    ITEM_COUNT_RECEIVE_DIAMOND = 'COUNT_RECEIVE_DIAMOND'
+    ITEM_COUNT_RECEIVE_PRIZE = 'COUNT_RECEIVE_PRIZE'
+    ITEM_BINDING_MOBILE = 'BINDING_MOBILE'
+    ITEM_INFO_COMPLETE = 'INFO_COMPLETE'
+    ITEM_LIVE_DURATION = 'LIVE_DURATION'
+    ITEM_CONTRIBUTION = 'CONTRIBUTION'
+    ITEM_SPECIAL = 'SPECIAL'
+    ITEM_CHOICES = (
+        (ITEM_SEND_PRIZE, '送礼物额度'),
+        (ITEM_WATCH_LIVE_DURATION, '观看时长'),
+        (ITEM_COUNT_WATCH_LOG, '累计观看数'),
+        (ITEM_COUNT_FOLLOWED, '追踪数'),
+        (ITEM_COUNT_FRIEND, '好友数'),
+        (ITEM_COUNT_LOGIN, '连续登录天数'),
+        (ITEM_COUNT_INVITE, '邀请好友注册数'),
+        (ITEM_COUNT_ENTER_LIVE, '直播间访谈数'),
+        (ITEM_COUNT_SHARE_LIVE, '分享直播间数'),
+        (ITEM_COUNT_LIVE, '连续开播的天数'),
+        (ITEM_COUNT_RECEIVE_DIAMOND, '收到钻石额度'),
+        (ITEM_COUNT_RECEIVE_PRIZE, '收到礼物数量'),
+        (ITEM_BINDING_MOBILE, '绑定手机'),
+        (ITEM_INFO_COMPLETE, '完善个人资料'),
+        (ITEM_LIVE_DURATION, '开播时数'),
+        (ITEM_CONTRIBUTION, '贡献值（家族任务限定）'),
+        (ITEM_SPECIAL, '特殊'),
+    )
+
+    badge_item = models.CharField(
+        verbose_name='任务元件',
+        max_length=50,
+        default=ITEM_SEND_PRIZE,
+        choices=ITEM_CHOICES,
     )
 
     item_value = models.IntegerField(
