@@ -259,8 +259,10 @@ class Member(AbstractMember,
         return duration
 
     def credit_diamond(self):
-        return self.user.creditdiamondtransactions_credit.all().aggregate(
-            amount=models.Sum('amount')).get('amount') or 0
+        return PrizeOrder.objects.filter(
+            author=self.user,
+            diamond_transaction__id__gt=0,
+        ).aggregate(amount=models.Sum('diamond_transaction__amount')).get('amount') or 0
 
     def debit_diamond(self):
         return self.user.creditdiamondtransactions_debit.all().aggregate(
@@ -746,7 +748,18 @@ class Family(UserOwnedModel,
             familymembers_owned__status=FamilyMember.STATUS_APPROVED,
         ).count()
 
+    def get_count_family_article(self):
+        """
+        家族公告数
+        :return:
+        """
+        return FamilyArticle.objects.filter(family=self).count()
+
     def get_count_family_mission(self):
+        """
+        家族任务数
+        :return:
+        """
         return FamilyMission.objects.filter(family=self).count()
 
 
@@ -785,6 +798,12 @@ class FamilyMember(UserOwnedModel):
         choices=STATUS_CHOICES,
     )
 
+    date_approved = models.DateTimeField(
+        verbose_name='审批通过时间',
+        null=True,
+        blank=True,
+    )
+
     ROLE_MASTER = 'MASTER'
     ROLE_ADMIN = 'ADMIN'
     ROLE_NORMAL = 'NORMAL'
@@ -806,6 +825,54 @@ class FamilyMember(UserOwnedModel):
         verbose_name_plural = '家族成员'
         db_table = 'core_family_member'
 
+    def __str__(self):
+        return '{} - {} - {}'.format(self.family.name, self.get_role_display(), self.author.member.mobile)
+
+    def approve(self):
+        # 审批通过
+        self.status = FamilyMember.STATUS_APPROVED,
+        self.date_approved = datetime.now()
+        self.save()
+
+    def get_watch_master_live_logs(self):
+        """
+        獲得觀看家族長直播的記錄
+        :return:
+        """
+        family_master = FamilyMember.objects.filter(
+            family=self.family,
+            status=self.STATUS_APPROVED,
+            role=self.ROLE_MASTER,
+        ).first()
+        assert family_master, '家族族長不存在'
+        watch_logs = LiveWatchLog.objects.filter(
+            author=self.author,
+            live__author=family_master.author,
+        )
+        return watch_logs
+
+    def watch_master_live_duration(self):
+        """
+        观看家族长直播时长
+        :return:
+        """
+        duration = 0
+        watch_logs = self.get_watch_master_live_logs()
+        for watch_log in watch_logs:
+            duration += watch_log.get_duration()
+        return duration
+
+    def watch_master_live_prize(self):
+        """
+        贈送給家族長的禮物數
+        :return:
+        """
+        total_prize = 0
+        watch_logs = self.get_watch_master_live_logs()
+        for watch_log in watch_logs:
+            total_prize += watch_log.get_total_prize()
+        return total_prize
+
 
 class FamilyArticle(UserOwnedModel,
                     EntityModel):
@@ -813,6 +880,12 @@ class FamilyArticle(UserOwnedModel,
         verbose_name='家族',
         to='Family',
         related_name='articles',
+    )
+
+    content = models.TextField(
+        verbose_name='内容',
+        blank=True,
+        default='',
     )
 
     class Meta:
@@ -827,6 +900,108 @@ class FamilyMission(UserOwnedModel,
         verbose_name='家族',
         to='Family',
         related_name='missions',
+    )
+
+    ITEM_WATCH_MASTER_PRIZE = 'WATCH_MASTER_PRIZE'
+    ITEM_WATCH_MASTER_DURATION = 'WATCH_MASTER_DURATION'
+    ITEM_COUNT_WATCH_LOG = 'COUNT_WATCH_LOG'
+    ITEM_COUNT_FOLLOWED = 'COUNT_FOLLOWED'
+    ITEM_COUNT_FRIEND = 'COUNT_FRIEND'
+    ITEM_COUNT_LOGIN = 'COUNT_LOGIN'
+    ITEM_COUNT_INVITE = 'COUNT_INVITE'
+    ITEM_COUNT_SHARE_MASTER_LIVE = 'COUNT_SHARE_MASTER_LIVE'
+    ITEM_COUNT_WATCH_MASTER_LIVE = 'COUNT_WATCH_MASTER_LIVE'
+    ITEM_COUNT_LIVE = 'COUNT_LIVE'
+    ITEM_COUNT_RECEIVE_DIAMOND = 'COUNT_RECEIVE_DIAMOND'
+    ITEM_CHOICES = (
+        (ITEM_WATCH_MASTER_PRIZE, '送家族长礼物额度'),
+        (ITEM_WATCH_MASTER_DURATION, '观看家族长直播时长'),
+        (ITEM_COUNT_WATCH_LOG, '累计观看数'),
+        (ITEM_COUNT_FOLLOWED, '陌生人追踪你的个数'),
+        (ITEM_COUNT_FRIEND, '拥有的好友数'),
+        (ITEM_COUNT_LOGIN, '连续登录天数'),
+        (ITEM_COUNT_INVITE, '邀请好友注册数'),
+        (ITEM_COUNT_SHARE_MASTER_LIVE, '分享家族长直播的分享数'),
+        (ITEM_COUNT_WATCH_MASTER_LIVE, '在家族长直播间的访谈数'),
+        (ITEM_COUNT_LIVE, '连续开播的天数'),
+        (ITEM_COUNT_RECEIVE_DIAMOND, '收到钻石额度'),
+    )
+
+    mission_item = models.CharField(
+        verbose_name='任务元件',
+        max_length=50,
+        default=ITEM_WATCH_MASTER_PRIZE,
+        choices=ITEM_CHOICES,
+    )
+
+    mission_item_value = models.IntegerField(
+        verbose_name='任务元件数值',
+        blank=True,
+        default=0,
+        help_text='指定条件达到所需的数值'
+    )
+
+    AWARD_EXPERIENCE_POINTS = 'EXPERIENCE_POINTS'
+    AWARD_ICOIN = 'ICOIN'
+    AWARD_COIN = 'COIN'
+    AWARD_PRIZE = 'PRIZE'
+    AWARD_CONTRIBUTION = 'CONTRIBUTION'
+    AWARD_BADGE = 'BADGE'
+    AWARD_MARQUEE_CONTENT = 'MARQUEE_CONTENT'
+    AWARD_STAR = 'STAR'
+    AWARD_CHOICES = (
+        (AWARD_EXPERIENCE_POINTS, '经验值'),
+        (AWARD_ICOIN, 'i币'),
+        (AWARD_COIN, '金币'),
+        (AWARD_PRIZE, '礼物'),
+        (AWARD_CONTRIBUTION, '贡献值'),
+        (AWARD_BADGE, '勋章'),
+        (AWARD_MARQUEE_CONTENT, '跑马灯内容'),
+        (AWARD_STAR, '元气'),
+    )
+
+    award_item = models.CharField(
+        verbose_name='奖励元件',
+        max_length=50,
+        default=AWARD_EXPERIENCE_POINTS,
+        choices=AWARD_CHOICES,
+    )
+
+    award_item_value = models.IntegerField(
+        verbose_name='奖励元件数值',
+        blank=True,
+        default=0,
+        help_text='指定条件达到后的奖励'
+    )
+
+    prize = models.ForeignKey(
+        verbose_name='奖励礼物',
+        to='Prize',
+        related_name='family_missions',
+        blank=True,
+        null=True,
+        help_text='当选择的奖励元件为礼物时添加',
+    )
+
+    badge = models.ForeignKey(
+        verbose_name='奖励徽章',
+        to='Badge',
+        related_name='family_missions',
+        blank=True,
+        null=True,
+        help_text='当选择的奖励元件为徽章时添加',
+    )
+
+    date_begin = models.DateField(
+        verbose_name='任务开始时间',
+        blank=True,
+        null=True,
+    )
+
+    date_end = models.DateField(
+        verbose_name='任务结束时间',
+        blank=True,
+        null=True,
     )
 
     class Meta:

@@ -634,7 +634,6 @@ class MemberViewSet(viewsets.ModelViewSet):
     serializer_class = s.MemberSerializer
     filter_class = Filter
     search_fields = ['nickname', 'mobile']
-    ordering = ['-pk']
     filter_fields = '__all__'
 
     # def perform_update(self, serializer):
@@ -736,9 +735,21 @@ class MemberViewSet(viewsets.ModelViewSet):
                            ).exclude(user__contacts_related__author=self.request.user)
 
         rank_type = self.request.query_params.get('rank_type')
-        if rank_type:
-            print(rank_type)
-        # todo 根據排行榜類型進行排行 'rank_diamond'、'rank_prize'、'rank_star'
+
+        if rank_type and rank_type == 'rank_diamond':
+            qs = m.Member.objects.annotate(
+                amount=m.models.Sum('user__prizeorders_owned__receiver_prize_transaction__amount')
+            ).order_by('-amount')
+        if rank_type and rank_type == 'rank_prize':
+            qs = m.Member.objects.annotate(
+                amount=m.models.Sum('user__prizeorders_owned__sender_prize_transaction__amount')
+            ).order_by('-amount')
+        if rank_type and rank_type == 'rank_star':
+            # TODO：根据收到主播元气指数排序
+            qs = m.Member.objects.annotate(
+                amount=m.models.Sum('user__creditstarindexsendertransactions_credit__amount')
+                       - m.models.Sum('user__creditstarindexsendertransactions_debit__amount')
+            ).order_by('amount')
 
         is_withdraw_blacklisted = self.request.query_params.get('is_withdraw_blacklisted')
         if is_withdraw_blacklisted == 'true':
@@ -872,6 +883,9 @@ class CreditCoinTransactionViewSet(viewsets.ModelViewSet):
     permission_classes = [p.IsAdminOrReadOnly]
     ordering = ['-pk']
 
+    def get_queryset(self):
+        return interceptor_get_queryset_kw_field(self)
+
 
 class BadgeViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
@@ -879,12 +893,18 @@ class BadgeViewSet(viewsets.ModelViewSet):
     serializer_class = s.BadgeSerializer
     ordering = ['-pk']
 
+    def get_queryset(self):
+        return interceptor_get_queryset_kw_field(self)
+
 
 class DailyCheckInLogViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.DailyCheckInLog.objects.all()
     serializer_class = s.DailyCheckInLogSerializer
     ordering = ['-pk']
+
+    def get_queryset(self):
+        return interceptor_get_queryset_kw_field(self)
 
 
 class FamilyViewSet(viewsets.ModelViewSet):
@@ -894,7 +914,8 @@ class FamilyViewSet(viewsets.ModelViewSet):
     ordering = ['-pk']
 
     def get_queryset(self):
-        return interceptor_get_queryset_kw_field(self)
+        qs = interceptor_get_queryset_kw_field(self)
+        return qs
 
 
 class FamilyMemberViewSet(viewsets.ModelViewSet):
@@ -903,12 +924,31 @@ class FamilyMemberViewSet(viewsets.ModelViewSet):
     serializer_class = s.FamilyMemberSerializer
     ordering = ['-pk']
 
+    def get_queryset(self):
+        qs = interceptor_get_queryset_kw_field(self)
+        family_id = self.request.query_params.get('family')
+        if family_id:
+            family = m.Family.objects.get(id=family_id)
+            qs = qs.filter(
+                family=family,
+                status=m.FamilyMember.STATUS_APPROVED,
+            )
+        return qs
+
 
 class FamilyArticleViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.FamilyArticle.objects.all()
     serializer_class = s.FamilyArticleSerializer
     ordering = ['-pk']
+
+    def get_queryset(self):
+        qs = interceptor_get_queryset_kw_field(self)
+        family_id = self.request.query_params.get('family')
+        if family_id:
+            family = m.Family.objects.get(id=family_id)
+            qs = qs.filter(family=family)
+        return qs
 
 
 class FamilyMissionViewSet(viewsets.ModelViewSet):
@@ -917,12 +957,23 @@ class FamilyMissionViewSet(viewsets.ModelViewSet):
     serializer_class = s.FamilyMissionSerializer
     ordering = ['-pk']
 
+    def get_queryset(self):
+        qs = interceptor_get_queryset_kw_field(self)
+        family_id = self.request.query_params.get('family')
+        if family_id:
+            family = m.Family.objects.get(id=family_id)
+            qs = qs.filter(family=family)
+        return qs
+
 
 class FamilyMissionAchievementViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.FamilyMissionAchievement.objects.all()
     serializer_class = s.FamilyMissionAchievementSerializer
     ordering = ['-pk']
+
+    def get_queryset(self):
+        return interceptor_get_queryset_kw_field(self)
 
 
 class LiveCategoryViewSet(viewsets.ModelViewSet):

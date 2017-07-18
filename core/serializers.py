@@ -543,6 +543,11 @@ class CreditCoinTransactionSerializer(QueryFieldsMixin, serializers.ModelSeriali
 
 
 class BadgeSerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    icon_item = ImageSerializer(
+        source='icon',
+        read_only=True,
+    )
+
     class Meta:
         model = m.Badge
         fields = '__all__'
@@ -566,7 +571,7 @@ class FamilySerializer(QueryFieldsMixin, serializers.ModelSerializer):
         read_only=True,
     )
 
-    nickname = serializers.ReadOnlyField(source='author.member.nickname')
+    author_nickname = serializers.ReadOnlyField(source='author.member.nickname')
 
     count_admin = serializers.ReadOnlyField(source='get_count_admin')
 
@@ -574,24 +579,44 @@ class FamilySerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
     count_family_mission = serializers.ReadOnlyField(source='get_count_family_mission')
 
+    count_family_article = serializers.ReadOnlyField(source='get_count_family_article')
+
     class Meta:
         model = m.Family
         fields = '__all__'
 
 
 class FamilyMemberSerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    is_active = serializers.ReadOnlyField(source='author.is_active')
+
+    author_nickname = serializers.ReadOnlyField(source='author.member.nickname')
+
+    author_mobile = serializers.ReadOnlyField(source='author.member.mobile')
+
+    watch_master_live_duration = serializers.ReadOnlyField()
+
+    watch_master_live_prize = serializers.ReadOnlyField()
+
     class Meta:
         model = m.FamilyMember
         fields = '__all__'
 
 
 class FamilyArticleSerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    author_nickname = serializers.ReadOnlyField(source='author.member.nickname')
+
+    author_mobile = serializers.ReadOnlyField(source='author.member.mobile')
+
     class Meta:
         model = m.FamilyArticle
         fields = '__all__'
 
 
 class FamilyMissionSerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    author_nickname = serializers.ReadOnlyField(source='author.member.nickname')
+
+    author_mobile = serializers.ReadOnlyField(source='author.member.mobile')
+
     class Meta:
         model = m.FamilyMission
         fields = '__all__'
@@ -845,7 +870,15 @@ class PrizeOrderSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     )
 
     author_nickname = serializers.ReadOnlyField(
-        source='author.member.mobile',
+        source='author.member.nickname',
+    )
+
+    receiver_mobile = serializers.ReadOnlyField(
+        source='receiver_prize_transaction.user_debit.member.mobile',
+    )
+
+    receiver_nickname = serializers.ReadOnlyField(
+        source='receiver_prize_transaction.user_debit.member.nickname',
     )
 
     prize_name = serializers.ReadOnlyField(
