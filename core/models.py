@@ -2092,6 +2092,13 @@ class Activity(EntityModel):
         (TYPE_DIAMOND, '累计钻石'),
     )
 
+    type = models.CharField(
+        verbose_name='活动类型',
+        max_length=20,
+        default=TYPE_VOTE,
+        choices=TYPE_CHOICES,
+    )
+
     thumbnail = models.OneToOneField(
         verbose_name='活动海报',
         to=ImageModel,
