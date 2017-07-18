@@ -2415,6 +2415,35 @@ class DiamondExchangeRecord(UserOwnedModel):
         verbose_name_plural = '钻石兑换记录'
         db_table = 'core_diamond_exchange_record'
 
+    @staticmethod
+    def diamond_exchange_coin(user, coin_count):
+        # todo :比率
+        diamond_count = 2 * coin_count
+        assert user.member.get_diamond_balance() > diamond_count, '鑽石余额不足'
+
+        diamond_transaction = CreditDiamondTransaction.objects.create(
+            user_credit=user,
+            amount=diamond_count,
+            type=CreditDiamondTransaction.TYPE_EXCHANGE,
+            remark='鑽石兌換金幣',
+        )
+        coin_transaction = CreditCoinTransaction.objects.create(
+            user_debit=user,
+            amount=coin_count,
+            type=CreditCoinTransaction.TYPE_EXCHANGE,
+            remark='鑽石兌換金幣',
+        )
+
+        record = DiamondExchangeRecord.objects.create(
+            author=user,
+            diamond_count=diamond_count,
+            coins_count=coin_count,
+            diamond_transaction=diamond_transaction,
+            coin_transaction=coin_transaction,
+        )
+
+        # return record
+
 
 class VirboCard(UserOwnedModel,
                 EntityModel):

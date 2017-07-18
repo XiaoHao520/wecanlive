@@ -777,16 +777,18 @@ class MemberViewSet(viewsets.ModelViewSet):
         member.set_followed_by(request.user, is_follow)
         return u.response_success('')
 
-    @list_route(methods=['GET'])
-    def get_contact_list(self, request):
+    @detail_route(methods=['GET'])
+    def get_contact_list(self, request, pk):
         # 当前用户所有联系人
-        contact_list = m.Member.objects.filter(m.models.Q(user__contacts_related__author=self.request.user),
-                                               m.models.Q(user__contacts_owned__user=self.request.user))
+        member = m.Member.objects.get(pk=pk)
+
+        contact_list = m.Member.objects.filter(m.models.Q(user__contacts_related__author=member.user),
+                                               m.models.Q(user__contacts_owned__user=member.user))
 
         data = []
         for contact in contact_list:
             unread = m.Message.objects.filter(sender=contact.user,
-                                              receiver=self.request.user,
+                                              receiver=member.user,
                                               is_read=False).count()
             data.append(dict(
                 id=contact.user.id,
@@ -795,6 +797,38 @@ class MemberViewSet(viewsets.ModelViewSet):
                 unread=unread,
             ))
         return Response(data=data)
+
+    @list_route(methods=['GET'])
+    def get_prize_rank(self, request):
+        # 个人送礼排行
+
+        members = m.Member.objects.filter(
+            m.models.Q(user__prizeorders_owned__diamond_transaction__user_debit=self.request.user) |
+            m.models.Q(user__prizeorders_owned__receiver_star_index_transaction__user_debit=self.request.user)
+        ).distinct().all()
+        rank = []
+        for member in members:
+            rank_item = dict()
+            diamond_amount = m.PrizeOrder.objects.filter(
+                author=member.user,
+                diamond_transaction__user_debit=self.request.user
+            ).aggregate(
+                amount=models.Sum('diamond_transaction__amount')
+            ).get('amount') or 0
+
+            star_amount = m.PrizeOrder.objects.filter(
+                author=member.user,
+                receiver_star_index_transaction__user_debit=self.request.user
+            ).aggregate(
+                amount=models.Sum('receiver_star_index_transaction__amount')
+            ).get('amount') or 0
+            # todo: 礼物价值按照　元气指数＋钻石数
+            amount = diamond_amount + star_amount
+            rank_item['amount'] = amount
+            rank_item['member'] = s.MemberSerializer(member).data
+            rank.append(rank_item)
+        # todo: 只要３个
+        return Response(data=sorted(rank, key=lambda item: item['amount'], reverse=True))
 
 
 class RobotViewSet(viewsets.ModelViewSet):
@@ -1532,6 +1566,13 @@ class DiamondExchangeRecordViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return interceptor_get_queryset_kw_field(self)
+
+    @list_route(methods=['POST'])
+    def diamond_exchange_coin(self, request):
+        # 钻石兑换金币
+        coin_count = request.data.get('coin_count')
+        m.DiamondExchangeRecord.diamond_exchange_coin(request.user, coin_count)
+        return Response(True)
 
 
 class CommentViewSet(viewsets.ModelViewSet):
