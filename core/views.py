@@ -145,7 +145,8 @@ class MessageViewSet(viewsets.ModelViewSet):
     filter_class = Filter
     queryset = m.Message.objects.all()
     serializer_class = s.MessageSerializer
-    ordering = ['-pk']
+
+    # ordering = ['-pk']
 
     def perform_create(self, serializer):
         serializer.save(sender=self.request.user)
@@ -166,8 +167,7 @@ class MessageViewSet(viewsets.ModelViewSet):
 
         family = self.request.query_params.get('family')
         if family:
-            qs = qs.filter(families__id=family)
-
+            qs = qs.filter(families__id=family).order_by('date_created')
         return qs
 
     @list_route(methods=['POST'])
@@ -955,6 +955,24 @@ class FamilyViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         qs = interceptor_get_queryset_kw_field(self)
         return qs
+
+    @list_route(methods=['POST'])
+    def create_family(self, request):
+        # 创建家族
+        family = m.Family.objects.create(
+            name=request.data.get('name'),
+            family_introduce=request.data.get('family_introduce'),
+            author=self.request.user,
+            logo=m.ImageModel.objects.get(pk=request.data.get('logo')),
+        )
+        m.FamilyMember.objects.create(
+            family=family,
+            author=self.request.user,
+            status=m.FamilyMember.STATUS_APPROVED,
+            date_approved=datetime.now(),
+            role=m.FamilyMember.ROLE_MASTER,
+        )
+        return Response(data=s.FamilySerializer(family).data)
 
 
 class FamilyMemberViewSet(viewsets.ModelViewSet):
