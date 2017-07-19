@@ -1463,7 +1463,11 @@ class ActivityViewSet(viewsets.ModelViewSet):
     ordering = ['-pk']
 
     def get_queryset(self):
-        return interceptor_get_queryset_kw_field(self)
+        qs = interceptor_get_queryset_kw_field(self)
+        activity_type = self.request.query_params.get('activity_type')
+        if activity_type:
+            qs = qs.filter(type=activity_type)
+        return qs
 
 
 class ActivityParticipationViewSet(viewsets.ModelViewSet):
