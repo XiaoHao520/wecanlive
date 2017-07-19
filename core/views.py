@@ -148,7 +148,7 @@ class MessageViewSet(viewsets.ModelViewSet):
     ordering = ['-pk']
 
     def perform_create(self, serializer):
-        serializer.save(author=self.request.user)
+        serializer.save(sender=self.request.user)
 
     def get_queryset(self):
         qs = interceptor_get_queryset_kw_field(self)
@@ -161,8 +161,13 @@ class MessageViewSet(viewsets.ModelViewSet):
             receiver=self.request.user,
         ) | m.models.Q(
             # receiver__id__in=users_related,
-            author=self.request.user,
+            sender=self.request.user,
         ))
+
+        family = self.request.query_params.get('family')
+        if family:
+            qs = qs.filter(families__id=family)
+
         return qs
 
     @list_route(methods=['POST'])

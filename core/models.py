@@ -737,6 +737,13 @@ class Family(UserOwnedModel,
         default=datetime(1900, 1, 1)
     )
 
+    family_introduce = models.TextField(
+        verbose_name='家族简介',
+        null=True,
+        blank=True,
+        default='',
+    )
+
     class Meta:
         verbose_name = '家族'
         verbose_name_plural = '家族'

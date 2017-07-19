@@ -362,17 +362,23 @@ class GroupSerializer(AllowNestedWriteMixin,
 
 class MessageSerializer(AllowNestedWriteMixin,
                         QueryFieldsMixin, serializers.ModelSerializer):
-    author_item = UserSerializer(
-        source='author',
-        read_only=True,
-    )
+    # author_item = UserSerializer(
+    #     source='author',
+    #     read_only=True,
+    # )
 
-    avatar_url = serializers.ReadOnlyField(read_only=True)
+    avatar_url = serializers.ReadOnlyField(source='sender.member.avatar.image.url')
 
     images_item = ImageSerializer(
         source='images',
         many=True,
         read_only=True,
+    )
+
+    families = serializers.PrimaryKeyRelatedField(
+        many=True,
+        queryset=m.Family.objects.all(),
+        required=False,
     )
 
     class Meta:
