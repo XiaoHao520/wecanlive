@@ -837,6 +837,19 @@ class Family(UserOwnedModel,
         """
         return FamilyMission.objects.filter(family=self).count()
 
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        # WebIM 建群
+        from tencent.webim import WebIM
+        webim = WebIM(settings.TENCENT_WEBIM_APPID)
+        create = webim.create_group(
+            self.author.username,
+            'Family_{}'.format(self.id),
+            type=WebIM.GROUP_TYPE_PRIVATE,
+            group_id='family_{}'.format(self.id),
+        )
+
+
 
 class FamilyMember(UserOwnedModel):
     family = models.ForeignKey(
@@ -848,12 +861,16 @@ class FamilyMember(UserOwnedModel):
     title = models.CharField(
         verbose_name='称号',
         max_length=100,
+        null=True,
+        blank=True,
     )
 
     join_message = models.CharField(
         verbose_name='加入信息',
         max_length=255,
         help_text='用户在申请加入家族的时候填写的信息',
+        null=True,
+        blank=True,
     )
 
     STATUS_PENDING = 'PENDING'
