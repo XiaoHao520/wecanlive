@@ -2172,6 +2172,90 @@ class Activity(EntityModel):
         #                 assert type(value) == int
         #         except:
         #             raise ValidationError('观看类活动参数设置不正确')
+    def status(self):
+        """
+        活動進行狀態 （NOTSTART:未開始、BEGIN:進行中、END:已結束）
+        """
+        now = datetime.now()
+        if now < self.date_begin:
+            return 'NOTSTART'
+        elif now > self.date_end:
+            return 'END'
+        return 'BEGIN'
+
+    def vote_way(self):
+        """
+        票選活動 得票方式
+        """
+        if not self.type == self.TYPE_VOTE:
+            return None
+        rule = json.loads(self.rules)
+        if rule['prize']:
+            prize_id = rule['prize']
+            prize = Prize.objects.filter(id=prize_id).first()
+            if prize:
+                return prize.name
+        return None
+
+    def vote_count_award(self):
+        """
+        票選活動 獲獎名額
+        """
+        if not self.type == self.TYPE_VOTE:
+            return None
+        rule = json.loads(self.rules)
+        if rule['awards']:
+            data = []
+            for award in rule['awards']:
+                data.append(award['to'] - award['from'] + 1)
+            return sum(data) or 0
+        return 0
+
+    def watch_min_watch(self):
+        """
+        觀看直播活動 最小觀看數
+        """
+        if not self.type == self.TYPE_WATCH:
+            return None
+        rule = json.loads(self.rules)
+        if rule['min_watch']:
+            return rule['min_watch']
+        return 0
+
+    def watch_min_duration(self):
+        """
+        觀看直播活動 每次觀看需要的時長
+        """
+        if not self.type == self.TYPE_WATCH:
+            return None
+        rule = json.loads(self.rules)
+        if rule['min_duration']:
+            return rule['min_duration']
+        return 0
+
+    def draw_condition_code(self):
+        """
+        抽奖活动 返回抽奖资格编号
+        """
+        if not self.type == self.TYPE_DRAW:
+            return None
+        rule = json.loads(self.rules)
+        if rule['condition_code']:
+            return rule['condition_code']
+        return None
+
+    def draw_condition_value(self):
+        """
+        抽奖活动 返回需要达到的数量
+        :return:
+        """
+        if not self.type == self.TYPE_DRAW:
+            return None
+        rule = json.loads(self.rules)
+        if rule['condition_value']:
+            return rule['condition_value']
+        return 0
+
 
     def settle(self):
         """ 结算当次活动，找出所有参与记录，然后统计满足条件的自动发放奖励
