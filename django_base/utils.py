@@ -5,6 +5,10 @@ from time import time
 from datetime import datetime
 from calendar import monthrange
 
+from Crypto.Signature import PKCS1_v1_5
+from Crypto.Hash import SHA
+from Crypto.PublicKey import RSA
+
 import base64
 from base64 import b64decode, b64encode
 
@@ -15,14 +19,30 @@ from django.conf import settings
 from rest_framework.response import Response
 
 
-def response_success(msg):
+def rsa_sign(text):
+    key = RSA.importKey(b64decode(settings.ALIPAY_RSA_PRIVATE))
+    h = SHA.new(text.encode())
+    signer = PKCS1_v1_5.new(key)
+    return b64encode(signer.sign(h)).decode()
+
+
+def rsa_verify(text, sign):
+    from base64 import b64decode, b64encode
+    public_key = RSA.importKey(b64decode(settings.ALIPAY_RSA_PUBLIC))
+    sign = b64decode(sign)
+    h = SHA.new(text.encode('GBK'))
+    verifier = PKCS1_v1_5.new(public_key)
+    return verifier.verify(h, sign)
+
+
+def response_success(msg=''):
     return Response(data=dict(
         ok=True,
         msg=msg,
     ))
 
 
-def response_fail(msg, error_code=0, status=400):
+def response_fail(msg='', error_code=0, status=400):
     return Response(data=dict(
         ok=False,
         error_code=error_code,
@@ -162,12 +182,12 @@ def sms_send(mobile, template_code, params):
         return resp
     except Exception as e:
         raise ValidationError('短信发送过于频繁，请稍后再试。')
-    # try:
-    #     resp = req.getResponse()
-    #     request.session['mobile_vcode'] = vcode
-    #     print(resp)
-    # except Exception as e:
-    #     print(e)
+        # try:
+        #     resp = req.getResponse()
+        #     request.session['mobile_vcode'] = vcode
+        #     print(resp)
+        # except Exception as e:
+        #     print(e)
 
 
 def normalize_date(dt):
@@ -220,3 +240,39 @@ def earth_distance(lat1, lng1, lat2, lng2):
     a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) ** 2
     c = 2 * atan2(sqrt(a), sqrt(1 - a))
     return R * c
+
+
+class AESCipher:
+    class InvalidBlockSizeError(Exception):
+        """Raised for invalid block sizes"""
+        pass
+
+    def __init__(self, key):
+        self.key = key
+        self.iv = bytes(key[0:16], 'utf-8')
+
+    def __pad(self, text):
+        from Crypto.Cipher import AES
+        text_length = len(text)
+        amount_to_pad = AES.block_size - (text_length % AES.block_size)
+        if amount_to_pad == 0:
+            amount_to_pad = AES.block_size
+        pad = chr(amount_to_pad)
+        return text + pad * amount_to_pad
+
+    def __unpad(self, text):
+        pad = ord(text[-1])
+        from Crypto.Cipher import AES
+        return text[:-pad] if pad <= AES.block_size else text
+
+    def encrypt(self, raw):
+        from Crypto.Cipher import AES
+        raw = self.__pad(raw)
+        cipher = AES.new(self.key, AES.MODE_CBC, self.iv)
+        return base64.b64encode(cipher.encrypt(raw))
+
+    def decrypt(self, enc):
+        from Crypto.Cipher import AES
+        enc = base64.b64decode(enc)
+        cipher = AES.new(self.key, AES.MODE_CBC, self.iv)
+        return self.__unpad(cipher.decrypt(enc).decode())
