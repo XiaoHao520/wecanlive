@@ -974,6 +974,20 @@ class StatisticRuleSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
 
 class ActivitySerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    vote_way = serializers.ReadOnlyField()
+
+    vote_count_award = serializers.ReadOnlyField()
+
+    status = serializers.ReadOnlyField()
+
+    watch_min_watch = serializers.ReadOnlyField()
+
+    watch_min_duration = serializers.ReadOnlyField()
+
+    draw_condition_code = serializers.ReadOnlyField()
+
+    draw_condition_value = serializers.ReadOnlyField()
+
     class Meta:
         model = m.Activity
         fields = '__all__'

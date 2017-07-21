@@ -628,11 +628,54 @@ class Badge(UserOwnedModel,
         blank=True,
     )
 
-    item_key = models.CharField(
-        verbose_name='元件序号',
-        max_length=20,
-        blank=True,
-        default='根据后台指定的几种任务元件的编号',
+    # item_key = models.CharField(
+    #     verbose_name='元件序号',
+    #     max_length=20,
+    #     blank=True,
+    #     default='根据后台指定的几种任务元件的编号',
+    # )
+    ITEM_SEND_PRIZE = 'SEND_PRIZE'
+    ITEM_WATCH_LIVE_DURATION = 'WATCH_LIVE_DURATION'
+    ITEM_COUNT_WATCH_LOG = 'COUNT_WATCH_LOG'
+    ITEM_COUNT_FOLLOWED = 'COUNT_FOLLOWED'
+    ITEM_COUNT_FRIEND = 'COUNT_FRIEND'
+    ITEM_COUNT_LOGIN = 'COUNT_LOGIN'
+    ITEM_COUNT_INVITE = 'COUNT_INVITE'
+    ITEM_COUNT_ENTER_LIVE = 'COUNT_ENTER_LIVE'
+    ITEM_COUNT_SHARE_LIVE = 'COUNT_SHARE_LIVE'
+    ITEM_COUNT_LIVE = 'COUNT_LIVE'
+    ITEM_COUNT_RECEIVE_DIAMOND = 'COUNT_RECEIVE_DIAMOND'
+    ITEM_COUNT_RECEIVE_PRIZE = 'COUNT_RECEIVE_PRIZE'
+    ITEM_BINDING_MOBILE = 'BINDING_MOBILE'
+    ITEM_INFO_COMPLETE = 'INFO_COMPLETE'
+    ITEM_LIVE_DURATION = 'LIVE_DURATION'
+    ITEM_CONTRIBUTION = 'CONTRIBUTION'
+    ITEM_SPECIAL = 'SPECIAL'
+    ITEM_CHOICES = (
+        (ITEM_SEND_PRIZE, '送礼物额度'),
+        (ITEM_WATCH_LIVE_DURATION, '观看时长'),
+        (ITEM_COUNT_WATCH_LOG, '累计观看数'),
+        (ITEM_COUNT_FOLLOWED, '追踪数'),
+        (ITEM_COUNT_FRIEND, '好友数'),
+        (ITEM_COUNT_LOGIN, '连续登录天数'),
+        (ITEM_COUNT_INVITE, '邀请好友注册数'),
+        (ITEM_COUNT_ENTER_LIVE, '直播间访谈数'),
+        (ITEM_COUNT_SHARE_LIVE, '分享直播间数'),
+        (ITEM_COUNT_LIVE, '连续开播的天数'),
+        (ITEM_COUNT_RECEIVE_DIAMOND, '收到钻石额度'),
+        (ITEM_COUNT_RECEIVE_PRIZE, '收到礼物数量'),
+        (ITEM_BINDING_MOBILE, '绑定手机'),
+        (ITEM_INFO_COMPLETE, '完善个人资料'),
+        (ITEM_LIVE_DURATION, '开播时数'),
+        (ITEM_CONTRIBUTION, '贡献值（家族任务限定）'),
+        (ITEM_SPECIAL, '特殊'),
+    )
+
+    badge_item = models.CharField(
+        verbose_name='任务元件',
+        max_length=50,
+        default=ITEM_SEND_PRIZE,
+        choices=ITEM_CHOICES,
     )
 
     item_value = models.IntegerField(
@@ -2104,6 +2147,13 @@ class Activity(EntityModel):
         (TYPE_DIAMOND, '累计钻石'),
     )
 
+    type = models.CharField(
+        verbose_name='活动类型',
+        max_length=20,
+        default=TYPE_VOTE,
+        choices=TYPE_CHOICES,
+    )
+
     thumbnail = models.OneToOneField(
         verbose_name='活动海报',
         to=ImageModel,
@@ -2177,6 +2227,90 @@ class Activity(EntityModel):
         #                 assert type(value) == int
         #         except:
         #             raise ValidationError('观看类活动参数设置不正确')
+    def status(self):
+        """
+        活動進行狀態 （NOTSTART:未開始、BEGIN:進行中、END:已結束）
+        """
+        now = datetime.now()
+        if now < self.date_begin:
+            return 'NOTSTART'
+        elif now > self.date_end:
+            return 'END'
+        return 'BEGIN'
+
+    def vote_way(self):
+        """
+        票選活動 得票方式
+        """
+        if not self.type == self.TYPE_VOTE:
+            return None
+        rule = json.loads(self.rules)
+        if rule['prize']:
+            prize_id = rule['prize']
+            prize = Prize.objects.filter(id=prize_id).first()
+            if prize:
+                return prize.name
+        return None
+
+    def vote_count_award(self):
+        """
+        票選活動 獲獎名額
+        """
+        if not self.type == self.TYPE_VOTE:
+            return None
+        rule = json.loads(self.rules)
+        if rule['awards']:
+            data = []
+            for award in rule['awards']:
+                data.append(award['to'] - award['from'] + 1)
+            return sum(data) or 0
+        return 0
+
+    def watch_min_watch(self):
+        """
+        觀看直播活動 最小觀看數
+        """
+        if not self.type == self.TYPE_WATCH:
+            return None
+        rule = json.loads(self.rules)
+        if rule['min_watch']:
+            return rule['min_watch']
+        return 0
+
+    def watch_min_duration(self):
+        """
+        觀看直播活動 每次觀看需要的時長
+        """
+        if not self.type == self.TYPE_WATCH:
+            return None
+        rule = json.loads(self.rules)
+        if rule['min_duration']:
+            return rule['min_duration']
+        return 0
+
+    def draw_condition_code(self):
+        """
+        抽奖活动 返回抽奖资格编号
+        """
+        if not self.type == self.TYPE_DRAW:
+            return None
+        rule = json.loads(self.rules)
+        if rule['condition_code']:
+            return rule['condition_code']
+        return None
+
+    def draw_condition_value(self):
+        """
+        抽奖活动 返回需要达到的数量
+        :return:
+        """
+        if not self.type == self.TYPE_DRAW:
+            return None
+        rule = json.loads(self.rules)
+        if rule['condition_value']:
+            return rule['condition_value']
+        return 0
+
 
     def settle(self):
         """ 结算当次活动，找出所有参与记录，然后统计满足条件的自动发放奖励
