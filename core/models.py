@@ -850,7 +850,6 @@ class Family(UserOwnedModel,
         )
 
 
-
 class FamilyMember(UserOwnedModel):
     family = models.ForeignKey(
         verbose_name='家族',
@@ -984,6 +983,13 @@ class FamilyArticle(UserOwnedModel,
         verbose_name = '家族文章'
         verbose_name_plural = '家族文章'
         db_table = 'core_family_article'
+
+    def get_author_role(self):
+        """ 返回公告作者的家族角色"""
+        return FamilyMember.objects.filter(
+            family=self.family,
+            author=self.author,
+        ).first().role
 
 
 class FamilyMission(UserOwnedModel,
