@@ -619,6 +619,8 @@ class FamilyArticleSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
     author_mobile = serializers.ReadOnlyField(source='author.member.mobile')
 
+    author_role = serializers.ReadOnlyField(source='get_author_role')
+
     class Meta:
         model = m.FamilyArticle
         fields = '__all__'

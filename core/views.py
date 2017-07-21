@@ -979,7 +979,7 @@ class FamilyMemberViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.FamilyMember.objects.all()
     serializer_class = s.FamilyMemberSerializer
-    ordering = ['-pk']
+    ordering = ['date_approved']
 
     def get_queryset(self):
         qs = interceptor_get_queryset_kw_field(self)
