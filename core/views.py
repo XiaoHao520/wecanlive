@@ -363,6 +363,25 @@ class UserViewSet(viewsets.ModelViewSet):
             data=s.UserDetailedSerializer(user).data
         )
 
+    @list_route(methods=['POST'])
+    def landing_with_wecan_session(self, request):
+        session = request.data.get('session')
+        aes = u.AESCipher(settings.WECAN_AES_KEY_SERVER)
+        data = aes.decrypt(session)
+        account = data.split('|')[1]
+        user = m.User.objects.filter(username=account).first() or \
+               m.User.objects.create_user(username=account)
+        member, created = m.Member.objects.get_or_create(
+            user=user,
+            defaults=dict(mobile=account),
+        )
+        # 创建完之后登录之
+        from django.contrib.auth import login
+        login(request, user)
+        data = s.MemberSerializer(member).data
+        data['is_register'] = created
+        return Response(data=data)
+
     @list_route(methods=['GET'])
     def current(self, request):
         if request.user.is_anonymous():
