@@ -980,6 +980,8 @@ class ActivitySerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
     status = serializers.ReadOnlyField()
 
+    json_rules = serializers.ReadOnlyField()
+
     watch_min_watch = serializers.ReadOnlyField()
 
     watch_min_duration = serializers.ReadOnlyField()

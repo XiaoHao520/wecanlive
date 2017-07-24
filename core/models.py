@@ -2238,6 +2238,14 @@ class Activity(EntityModel):
             return 'END'
         return 'BEGIN'
 
+    def json_rules(self):
+        try:
+            rule = json.loads(self.rules)
+        except Exception as e:
+            print('>>>>>>> 格式化错误 <<<<<<<')
+            return e
+        return rule
+
     def vote_way(self):
         """
         票選活動 得票方式
