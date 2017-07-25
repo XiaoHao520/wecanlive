@@ -1185,7 +1185,8 @@ class LiveViewSet(viewsets.ModelViewSet):
         live = m.Live.objects.get(pk=pk)
         prize = m.Prize.objects.get(pk=request.data.get('prize'))
         count = int(request.data.get('count'))
-        prize_order = m.PrizeOrder.send_active_prize(live, prize, count, request.user)
+        source_tag = request.data.get('source_tag')
+        prize_order = m.PrizeOrder.send_active_prize(live, prize, count, request.user, source_tag)
         return Response(data=s.PrizeOrderSerializer(prize_order).data)
 
     @detail_route(methods=['GET'])
@@ -1386,14 +1387,14 @@ class PrizeViewSet(viewsets.ModelViewSet):
             accept = me.prizetransactions_debit.filter(
                 prize=prize,
                 user_credit=None,
-            ).all().aggregate(amount=models.Sum('amount')).get('amount') or 0
-
+            ).all().aggregate(amount=m.models.Sum('amount')).get('amount') or 0
+            print(accept)
             send = me.prizetransactions_credit.filter(
                 prize=prize,
             ).exclude(
-                user_debit=None
-            ).all().aggregate(amount=models.Sum('amount')).get('amount') or 0
-            count = int((accept - send) / prize.price)
+                user_debit__id__gt=0,
+            ).all().aggregate(amount=m.models.Sum('amount')).get('amount') or 0
+            count = int(accept - send)
             if count > 0 and prize.category.name == '活动礼物':
                 data['active_prize'].append(dict(
                     id=prize.id,
@@ -1601,6 +1602,7 @@ class StarMissionAchievementViewSet(viewsets.ModelViewSet):
             user_debit=self.request.user,
             amount=5,
             remark='完成直播間觀看任務',
+            type='EARNING',
         )
         return Response(True)
 
