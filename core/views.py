@@ -761,11 +761,10 @@ class MemberViewSet(viewsets.ModelViewSet):
         rank_type = self.request.query_params.get('rank_type')
 
         if rank_type and rank_type == 'rank_diamond':
-            # qs = m.Member.objects.annotate(
-            #     amount=m.models.Sum('user__prizeorders_owned__receiver_prize_transaction__amount')
-            # ).order_by('-amount')
             qs = m.Member.objects.annotate(
-                amount=m.models.Sum('user__creditdiamondtransactions_debit__amount')
+                amount=m.models.Sum(
+                    'user__creditdiamondtransactions_debit__prize_orders__diamond_transaction__amount'
+                )
             ).order_by('-amount')
         if rank_type and rank_type == 'rank_prize':
             qs = m.Member.objects.annotate(

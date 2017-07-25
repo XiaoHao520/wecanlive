@@ -264,9 +264,14 @@ class Member(AbstractMember,
             diamond_transaction__id__gt=0,
         ).aggregate(amount=models.Sum('diamond_transaction__amount')).get('amount') or 0
 
+    # def debit_diamond(self):
+    #     return self.user.creditdiamondtransactions_debit.all().aggregate(
+    #         amount=models.Sum('amount')).get('amount') or 0
+
     def debit_diamond(self):
-        return self.user.creditdiamondtransactions_debit.all().aggregate(
-            amount=models.Sum('amount')).get('amount') or 0
+        return PrizeOrder.objects.filter(
+            diamond_transaction__user_debit=self.user,
+        ).aggregate(amount=models.Sum('diamond_transaction__amount')).get('amount') or 0
 
     # def credit_star_index(self):
     #     return self.user.creditstarindextransactions_credit.all().aggregate(
@@ -2010,6 +2015,88 @@ class PrizeOrder(UserOwnedModel):
         return order
 
 
+class RankRecord(UserOwnedModel):
+    DURATION_DATE = 'DATE'
+    DURATION_WEEK = 'WEEK'
+    DURATION_TOTAL = 'TOTAL'
+    DURATION_CHOICES = (
+        (DURATION_DATE, '每日'),
+        (DURATION_WEEK, '每週'),
+        (DURATION_TOTAL, '統計'),
+    )
+
+    duration = models.CharField(
+        verbose_name='統計區間',
+        max_length=20,
+        choices=DURATION_CHOICES,
+    )
+
+    receive_diamond_amount = models.DecimalField(
+        verbose_name='收到钻石數量',
+        decimal_places=2,
+        max_digits=18,
+    )
+
+    send_diamond_amount = models.DecimalField(
+        verbose_name='送出钻石數量',
+        decimal_places=2,
+        max_digits=18,
+    )
+
+    star_index_amount = models.DecimalField(
+        verbose_name='元气指数',
+        decimal_places=2,
+        max_digits=18,
+    )
+
+    class Meta:
+        verbose_name = '排行榜記錄'
+        verbose_name_plural = '排行榜記錄'
+        db_table = 'core_rank_record'
+
+    def update(self):
+        #     TODO: 如果是一天的开始 or 一周的开始，分别重置日榜、周榜为0
+        self.receive_diamond_amount += PrizeOrder.objects.filter(
+            diamond_transaction__user_debit=self.author,
+        ).aggregate(amount=models.Sum('diamond_transaction__amount')).get('amount') or 0
+
+        self.send_diamond_amount += PrizeOrder.objects.filter(
+            author=self.author,
+            diamond_transaction__id__gt=0,
+        ).aggregate(amount=models.Sum('diamond_transaction__amount')).get('amount') or 0
+
+        self.star_index_amount += CreditStarIndexReceiverTransaction.objects.filter(
+            user_credit=self.author,
+        ).aggregate(amount=models.Sum('amount')).get('amount') - CreditStarIndexSenderTransaction.objects.filter(
+            user_debit=self.author,
+        ).aggregate(amount=models.Sum('amount')).get('amount') or 0
+        self.save()
+
+    @staticmethod
+    def make(member):
+        RankRecord.objects.create(
+            author=member.user,
+            duration=RankRecord.DURATION_DATE,
+            receive_diamond_amount=0,
+            send_diamond_amount=0,
+            star_index_amount=0,
+        )
+        RankRecord.objects.create(
+            author=member.user,
+            duration=RankRecord.DURATION_WEEK,
+            receive_diamond_amount=0,
+            send_diamond_amount=0,
+            star_index_amount=0,
+        )
+        RankRecord.objects.create(
+            author=member.user,
+            duration=RankRecord.DURATION_TOTAL,
+            receive_diamond_amount=0,
+            send_diamond_amount=0,
+            star_index_amount=0,
+        )
+
+
 class ExtraPrize(EntityModel):
     """ 赠送礼物
     购买礼物包超过N个金币，赠送给对应的用户一张壁纸
@@ -2227,6 +2314,7 @@ class Activity(EntityModel):
         #                 assert type(value) == int
         #         except:
         #             raise ValidationError('观看类活动参数设置不正确')
+
     def status(self):
         """
         活動進行狀態 （NOTSTART:未開始、BEGIN:進行中、END:已結束）
@@ -2410,7 +2498,7 @@ class Activity(EntityModel):
         elif type == 'star':
             return '元氣'
         elif type == 'contribution':
-            return  '貢獻值'
+            return '貢獻值'
         return None
 
     def settle(self):

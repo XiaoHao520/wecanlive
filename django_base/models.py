@@ -1551,6 +1551,17 @@ class PlannedTask(models.Model):
         """
         UserPreference.set(User.objects.get(id=user_id), 'payment_password', hashed_password)
 
+    # 更新每个用户的排行榜
+    @staticmethod
+    def update_rank_record():
+        from core.models import Member, RankRecord
+        for member in Member.objects.all():
+            rank_records = RankRecord.objects.filter(author=member.user)
+            if not rank_records:
+                RankRecord.make(member)
+            for rank_record in rank_records:
+                rank_record.update()
+
 
 class AdminLog(UserOwnedModel):
     date_created = models.DateTimeField(
