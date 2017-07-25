@@ -2238,14 +2238,6 @@ class Activity(EntityModel):
             return 'END'
         return 'BEGIN'
 
-    def json_rules(self):
-        try:
-            rule = json.loads(self.rules)
-        except Exception as e:
-            print('>>>>>>> 格式化错误 <<<<<<<')
-            return e
-        return rule
-
     def vote_way(self):
         """
         票選活動 得票方式
@@ -2319,6 +2311,107 @@ class Activity(EntityModel):
             return rule['condition_value']
         return 0
 
+    def award_way(self):
+        """
+        获奖方式
+        :return:
+        """
+        rule = json.loads(self.rules)
+        string = []
+        str_rank = ''
+        str_weight = ''
+        str_award = ''
+        if self.type == self.TYPE_VOTE:
+            for award_item in rule['awards']:
+                if award_item['from'] == award_item['to']:
+                    str_rank = '第{}名：'.format(award_item['from'])
+                else:
+                    str_rank = '第{}名 - 第{}名：'.format(award_item['from'], award_item['to'])
+                if award_item['award']['type'] == 'badge':
+                    badge = Badge.objects.filter(id=award_item['award']['value']).first()
+                    if badge:
+                        str_award = badge.name
+                elif award_item['award']['type'] == 'prize':
+                    prize = Prize.objects.filter(id=award_item['award']['value']).first()
+                    if prize:
+                        str_award = prize.name
+                else:
+                    str_award = '{}{}'.format(
+                        award_item['award']['value'],
+                        self.award_type_format(award_item['award']['type'])
+                    )
+                string.append(str_rank + str_award)
+            return string
+        if self.type == self.TYPE_WATCH:
+            if rule['award']['type'] == 'badge':
+                badge = Badge.objects.filter(id=rule['award']['value']).first()
+                if badge:
+                    str_award = badge.name
+            elif rule['award']['type'] == 'prize':
+                prize = Prize.objects.filter(id=rule['award']['value']).first()
+                if prize:
+                    str_award = prize.name
+            else:
+                str_award = '{}{}'.format(
+                    rule['award']['value'],
+                    self.award_type_format(rule['award']['type'])
+                )
+            string.append(str_award)
+            return string
+        if self.type == self.TYPE_DRAW:
+            for award_item in rule['awards']:
+                str_weight = '權重：({}) -  '.format(award_item['weight'])
+                if award_item['award']['type'] == 'badge':
+                    badge = Badge.objects.filter(id=award_item['award']['value']).first()
+                    if badge:
+                        str_award = badge.name
+                elif award_item['award']['type'] == 'prize':
+                    prize = Prize.objects.filter(id=award_item['award']['value']).first()
+                    if prize:
+                        str_award = prize.name
+                else:
+                    str_award = '  {}{}'.format(
+                        award_item['award']['value'],
+                        self.award_type_format(award_item['award']['type'])
+                    )
+                string.append(str_weight + str_award)
+            return string
+        if self.type == self.TYPE_DIAMOND:
+            for award_item in rule['awards']:
+                if award_item['from'] == award_item['to']:
+                    str_rank = '{}鑽石'.format(award_item['from'])
+                else:
+                    str_rank = '{} - {}鑽石：'.format(award_item['from'], award_item['to'])
+                if award_item['award']['type'] == 'badge':
+                    badge = Badge.objects.filter(id=award_item['award']['value']).first()
+                    if badge:
+                        str_award = badge.name
+                elif award_item['award']['type'] == 'prize':
+                    prize = Prize.objects.filter(id=award_item['award']['value']).first()
+                    if prize:
+                        str_award = prize.name
+                else:
+                    str_award = '  {}{}'.format(
+                        award_item['award']['value'],
+                        self.award_type_format(award_item['award']['type'])
+                    )
+                string.append(str_rank + str_award)
+            return string
+        return None
+
+    @staticmethod
+    def award_type_format(type):
+        if type == 'experience':
+            return '經驗值'
+        elif type == 'icoin':
+            return 'i幣'
+        elif type == 'coin':
+            return '金幣'
+        elif type == 'star':
+            return '元氣'
+        elif type == 'contribution':
+            return  '貢獻值'
+        return None
 
     def settle(self):
         """ 结算当次活动，找出所有参与记录，然后统计满足条件的自动发放奖励
