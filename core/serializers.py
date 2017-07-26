@@ -601,9 +601,17 @@ class FamilySerializer(QueryFieldsMixin, serializers.ModelSerializer):
 class FamilyMemberSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     is_active = serializers.ReadOnlyField(source='author.is_active')
 
+    author_avatar = serializers.ReadOnlyField(source='author.member.avatar.image.url')
+
     author_nickname = serializers.ReadOnlyField(source='author.member.nickname')
 
     author_mobile = serializers.ReadOnlyField(source='author.member.mobile')
+
+    author_age = serializers.ReadOnlyField(source='author.member.age')
+
+    author_gender = serializers.ReadOnlyField(source='author.member.gender')
+
+    author_constellation = serializers.ReadOnlyField(source='author.member.constellation')
 
     watch_master_live_duration = serializers.ReadOnlyField()
 

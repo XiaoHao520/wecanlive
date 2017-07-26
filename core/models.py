@@ -364,14 +364,15 @@ class Member(AbstractMember,
         # TODO: 未实现
         return 1
 
-    # def get_today_watch_mission_count(self):
-    #     """当前用户当天完成观看任务次数
-    #     """
-    #     return StarMissionAchievement.objects.filter(
-    #         author=self.user,
-    #         date_created__date=datetime.now().date(),
-    #         type=StarMissionAchievement.TYPE_WATCH,
-    #     ).count()
+    def get_today_watch_mission_count(self):
+        """当前用户当天完成观看任务次数
+        """
+        return StarMissionAchievement.objects.filter(
+            author=self.user,
+            date_created__date=datetime.now().date(),
+            type=StarMissionAchievement.TYPE_WATCH,
+        ).count()
+
     #
     # def get_information_mission_count(self):
     #     """当前用户完善资料任务完成数
@@ -1946,7 +1947,6 @@ class PrizeOrder(UserOwnedModel):
         total_price = count * prize.price
 
         assert prize.get_balance(user, source_tag) <= count, '贈送失敗，禮物剩餘不足'
-
         # 礼物流水
         receiver_prize_transaction = PrizeTransaction.objects.create(
             amount=count,
@@ -2227,6 +2227,7 @@ class Activity(EntityModel):
         #                 assert type(value) == int
         #         except:
         #             raise ValidationError('观看类活动参数设置不正确')
+
     def status(self):
         """
         活動進行狀態 （NOTSTART:未開始、BEGIN:進行中、END:已結束）
@@ -2310,7 +2311,6 @@ class Activity(EntityModel):
         if rule['condition_value']:
             return rule['condition_value']
         return 0
-
 
     def settle(self):
         """ 结算当次活动，找出所有参与记录，然后统计满足条件的自动发放奖励
