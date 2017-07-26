@@ -37,7 +37,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'django_base.middleware.CustomExceptionMiddleware',
     'django_base.middleware.GlobalRequestMiddleware',
-    # 'django_base.middleware.FullMediaUrlMiddleware',
+    'django_base.middleware.FullMediaUrlMiddleware',
     'django_base.middleware.DebugMiddleware',
     'django_base.middleware.CookieCsrfMiddleware',
     'django_base.middleware.GlobalRequestMiddleware',
