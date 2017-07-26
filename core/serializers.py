@@ -996,6 +996,8 @@ class ActivitySerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
     draw_condition_value = serializers.ReadOnlyField()
 
+    award_way = serializers.ReadOnlyField()
+
     class Meta:
         model = m.Activity
         fields = '__all__'
