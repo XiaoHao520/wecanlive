@@ -1569,22 +1569,36 @@ class AdminLog(UserOwnedModel):
         auto_now_add=True,
     )
 
-    LEVEL_DEBUG = 0
-    LEVEL_INFO = 1
-    LEVEL_WARN = 2
-    LEVEL_ERROR = 3
-    LEVEL_FATAL = 4
-    LEVEL_CHOICES = (
-        (LEVEL_DEBUG, '调试'),
-        (LEVEL_INFO, '信息'),
-        (LEVEL_WARN, '警告'),
-        (LEVEL_ERROR, '错误'),
-        (LEVEL_FATAL, '致命'),
+    # LEVEL_DEBUG = 0
+    # LEVEL_INFO = 1
+    # LEVEL_WARN = 2
+    # LEVEL_ERROR = 3
+    # LEVEL_FATAL = 4
+    # LEVEL_CHOICES = (
+    #     (LEVEL_DEBUG, '调试'),
+    #     (LEVEL_INFO, '信息'),
+    #     (LEVEL_WARN, '警告'),
+    #     (LEVEL_ERROR, '错误'),
+    #     (LEVEL_FATAL, '致命'),
+    # )
+    #
+    # level = models.IntegerField(
+    #     verbose_name='日志级别',
+    #     choices=LEVEL_CHOICES,
+    # )
+    TYPE_CREATE = 'CREATE'
+    TYPE_UPDATE = 'UPDATE'
+    TYPE_DELETE = 'DELETE'
+    TYPE_CHOICES = (
+        (TYPE_CREATE, '新建'),
+        (TYPE_UPDATE, '修改'),
+        (TYPE_DELETE, '刪除'),
     )
 
-    level = models.IntegerField(
-        verbose_name='日志级别',
-        choices=LEVEL_CHOICES,
+    type = models.CharField(
+        verbose_name='修改类型',
+        choices=TYPE_CHOICES,
+        max_length=20,
     )
 
     target_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
@@ -1600,3 +1614,18 @@ class AdminLog(UserOwnedModel):
         verbose_name = '管理日志'
         verbose_name_plural = '管理日志'
         db_table = 'base_admin_log'
+
+    @staticmethod
+    def make(author, modification_type, item, content):
+        model = type(item)
+        content_type = ContentType.objects.get(
+            app_label=model._meta.app_label,
+            model=model._meta.model_name,
+        )
+        return AdminLog.objects.create(
+            author=author,
+            type=modification_type,
+            target_type=content_type,
+            target_id=item.pk,
+            content=content,
+        )
