@@ -1128,3 +1128,35 @@ class ContactSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.Contact
         fields = '__all__'
+
+
+class RankRecordSerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    author_nickname = serializers.ReadOnlyField(source='author.member.nickname')
+
+    author_mobile = serializers.ReadOnlyField(source='author.member.mobile')
+
+    gender = serializers.ReadOnlyField(source='author.member.gender')
+
+    age = serializers.ReadOnlyField(source='author.member.age')
+
+    constellation = serializers.ReadOnlyField(source='author.member.constellation')
+
+    class Meta:
+        model = m.RankRecord
+        fields = '__all__'
+
+
+class AdminLogSerializer(QueryFieldsMixin, serializers.ModelSerializer):
+
+    author_name = serializers.ReadOnlyField(source='author.first_name')
+
+    author_groups = serializers.ReadOnlyField(source='author.group_names')
+
+    author_account = serializers.ReadOnlyField(source='author.username')
+
+    target_type = serializers.ReadOnlyField(source='target_type.name')
+
+    class Meta:
+        model = m.AdminLog
+        fields = '__all__'
+

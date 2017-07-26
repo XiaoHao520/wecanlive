@@ -357,6 +357,10 @@ class UserViewSet(viewsets.ModelViewSet):
         if request.data.get('remember', '') not in {True, '1'}:
             request.session.set_expiry(0)
 
+        # if user.is_superuser:
+        #     m.AdminLog.make(request.user, request.user,
+        #                     '管理员用户【{}】登录了系统'.format(request.user.username))
+
         login(request, user)
 
         return Response(
@@ -1816,3 +1820,28 @@ class WithdrawRecordViewSet(viewsets.ModelViewSet):
             member.add_withdraw_blacklisted()
 
         return Response(data=True)
+
+
+class RankRecordViewSet(viewsets.ModelViewSet):
+    filter_fields = '__all__'
+    queryset = m.RankRecord.objects.all()
+    serializer_class = s.RankRecordSerializer
+    permission_classes = [p.IsAdminOrReadOnly]
+
+    def get_queryset(self):
+        qs = interceptor_get_queryset_kw_field(self)
+        rank_type = self.request.query_params.get('rank_type')
+        duration = self.request.query_params.get('duration')
+        if rank_type and duration:
+            qs = qs.filter(duration=duration).order_by('-{}'.format(rank_type))
+        return qs
+
+
+class AdminLogViewSet(viewsets.ModelViewSet):
+    filter_fields = '__all__'
+    queryset = m.AdminLog.objects.all()
+    serializer_class = s.AdminLogSerializer
+    ordering = ['-pk']
+
+    def get_queryset(self):
+        return interceptor_get_queryset_kw_field(self)
