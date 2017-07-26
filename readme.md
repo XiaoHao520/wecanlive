@@ -29,4 +29,8 @@ WE CAN LIVE 直播平台
 | 金币钻石汇率          | exchange_diamonds_per_coin      | 整数     | 一个金币可兑换的钻石数             |
 | 金币充值规则          | coin_recharge_rules             | JSON     | 金币充值规则                       |
 | 客户服务中心链接      | url_customer_center             | 文本     |                                    |
-
+| 元气宝盒金币最大值     | max_star_box_coin               | 整数     | 打开元气宝盒如果是金币的最大值
+| 元气宝盒金币最小值     | min_star_box_coin               | 整数     | 打开元气宝盒如果是金币的最小值
+| 元气宝盒钻石最大值     | max_star_box_diamond            | 整数     | 打开元气宝盒如果是钻石的最大值
+| 元气宝盒钻石最小值     | min_star_box_diamond            | 整数     | 打开元气宝盒如果是钻石的最小值
+| 元气宝盒随机礼物列表   | star_box_prize_list             | JSON     | 打开元气宝盒随机礼物列表和数量

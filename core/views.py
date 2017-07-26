@@ -1574,6 +1574,20 @@ class StarBoxRecordViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return interceptor_get_queryset_kw_field(self)
 
+    @list_route(methods=['POST'])
+    def receiver_open_star_box(self, request):
+        user = self.request.user
+        live = m.Live.objects.get(pk=request.data.get('live'))
+        record = m.StarBoxRecord.receiver_open_star_box(user, live)
+        if record.coin_transaction:
+            return response_success('獲得金幣{}'.format(record.coin_transaction.amount))
+        elif record.diamond_transaction:
+            return response_success('獲得鑽石{}'.format(record.diamond_transaction.amount))
+        elif record.prize_transaction:
+            return response_success(
+                '獲得禮物{}{}個'.format(record.prize_transaction.prize.name, record.prize_transaction.amount))
+        return Response(True)
+
 
 class RedBagRecordViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
