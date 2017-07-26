@@ -159,6 +159,14 @@ class UserSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 #     class Meta:
 #         model = m.Tag
 #         fields = '__all__'
+
+
+class OptionSerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    class Meta:
+        model = m.Option
+        fields = '__all__'
+
+
 class AudioSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.AudioModel
@@ -562,6 +570,21 @@ class BadgeSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
     class Meta:
         model = m.Badge
+        fields = '__all__'
+
+
+class BadgeRecordSerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    badge_name = serializers.ReadOnlyField(
+        source='badge.name',
+    )
+
+    icon_url = serializers.ImageField(
+        source='badge.icon.image',
+        read_only=True,
+    )
+
+    class Meta:
+        model = m.BadgeRecord
         fields = '__all__'
 
 
@@ -1160,7 +1183,6 @@ class RankRecordSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
 
 class AdminLogSerializer(QueryFieldsMixin, serializers.ModelSerializer):
-
     author_name = serializers.ReadOnlyField(source='author.first_name')
 
     author_groups = serializers.ReadOnlyField(source='author.group_names')
@@ -1172,4 +1194,3 @@ class AdminLogSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.AdminLog
         fields = '__all__'
-

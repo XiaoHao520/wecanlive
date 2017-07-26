@@ -146,7 +146,8 @@ class Member(AbstractMember,
             )
             self.user.creditstartransactions_debit.create(
                 amount=10,
-                remark='完成元气任务的完善资料任务奖励'
+                remark='完成元气任务的完善资料任务奖励',
+                type=CreditStarTransaction.TYPE_EARNING,
             )
         super().save(*args, **kwargs)
 
@@ -589,12 +590,14 @@ class CreditCoinTransaction(AbstractTransactionModel):
     TYPE_RECHARGE = 'RECHARGE'
     TYPE_EXCHANGE = 'EXCHANGE'
     TYPE_BOX = 'BOX'
+    TYPE_BARRAGE = 'BARRAGE'
     TYPE_CHOICES = (
         (TYPE_ADMIN, '管理員發放'),
         (TYPE_LIVE_GIFT, '直播赠送'),
         (TYPE_RECHARGE, '充值'),
         (TYPE_EXCHANGE, '兌換'),
         (TYPE_BOX, '打開元氣寶盒'),
+        (TYPE_BARRAGE, '發送彈幕消費'),
     )
 
     type = models.CharField(
@@ -609,8 +612,26 @@ class CreditCoinTransaction(AbstractTransactionModel):
         db_table = 'core_credit_coin_transaction'
 
 
-class Badge(UserOwnedModel,
-            EntityModel):
+class BadgeRecord(UserOwnedModel):
+    badge = models.ForeignKey(
+        verbose_name='徽章',
+        to='Badge',
+        related_name='records',
+    )
+
+    date_created = models.DateTimeField(
+        verbose_name='獲得時間',
+        auto_now_add=True,
+    )
+
+    class Meta:
+        verbose_name = '徽章記錄'
+        verbose_name_plural = '徽章記錄'
+        db_table = 'core_badge_record'
+        unique_together = (('author', 'badge'),)
+
+
+class Badge(EntityModel):
     """ 徽章
     """
     icon = models.OneToOneField(
@@ -1345,10 +1366,31 @@ class LiveBarrage(UserOwnedModel,
         auto_now_add=True,
     )
 
+    credit_coin_transaction = models.OneToOneField(
+        verbose_name='扣除金幣記錄',
+        to='CreditCoinTransaction',
+        blank=True,
+        null=True,
+        related_name='barrage',
+    )
+
     class Meta:
         verbose_name = '直播弹幕'
         verbose_name_plural = '直播弹幕'
         db_table = 'core_live_barrage'
+
+    def save(self, *args, **kwargs):
+        if not self.credit_coin_transaction:
+            price = int(Option.get('coin_barrage_cost') or 1)
+            if self.author.member.get_coin_balance() < price:
+                raise ValidationError('金幣不足，無法發送彈幕')
+            self.credit_coin_transaction = CreditCoinTransaction.objects.create(
+                user_credit=self.author,
+                type=CreditCoinTransaction.TYPE_BARRAGE,
+                amount=price,
+                remark='在直播#{}中發送彈幕'.format(self.live.id),
+            )
+        super().save(*args, **kwargs)
 
 
 class LiveWatchLog(UserOwnedModel,
@@ -2073,7 +2115,7 @@ class RankRecord(UserOwnedModel):
         tomorrow_am5 = am5 + timedelta(days=1)
         weekday = now.weekday()
         monday = am5 - timedelta(days=weekday)
-        sunday = am5 + timedelta(days=7-weekday)
+        sunday = am5 + timedelta(days=7 - weekday)
         # 日榜重置
         if self.duration == self.DURATION_DATE and (now - am5).total_seconds() > 0 and (
                     now - am5).total_seconds() < 900:

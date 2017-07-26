@@ -872,6 +872,25 @@ class MemberViewSet(viewsets.ModelViewSet):
         # todo: 只要３个
         return Response(data=sorted(rank, key=lambda item: item['amount'], reverse=True))
 
+    @detail_route(methods=['GET'])
+    def get_gift_list(self, request, pk):
+        from urllib.parse import urljoin
+        results = map(
+            lambda prize: dict(
+                id=prize.id,
+                name=prize.name,
+                amount=int(prize.amount),
+                icon=urljoin(request.get_raw_uri(), prize.icon.image.url),
+            ),
+            m.Prize.objects.raw('''
+                select p.id, sum(pt.amount) amount
+                from core_prize p, core_prize_transaction pt
+                where pt.prize_id = p.id and pt.user_debit_id = {}
+                group by p.id
+            '''.format(pk))
+        )
+        return Response(data=list(results))
+
 
 class RobotViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
@@ -956,6 +975,16 @@ class BadgeViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.Badge.objects.all()
     serializer_class = s.BadgeSerializer
+    ordering = ['-pk']
+
+    def get_queryset(self):
+        return interceptor_get_queryset_kw_field(self)
+
+
+class BadgeRecordViewSet(viewsets.ModelViewSet):
+    filter_fields = '__all__'
+    queryset = m.BadgeRecord.objects.all()
+    serializer_class = s.BadgeRecordSerializer
     ordering = ['-pk']
 
     def get_queryset(self):
@@ -1862,3 +1891,10 @@ class AdminLogViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return interceptor_get_queryset_kw_field(self)
+
+
+class OptionViewSet(viewsets.ModelViewSet):
+    filter_fields = '__all__'
+    queryset = m.Option.objects.all()
+    serializer_class = s.OptionSerializer
+    ordering = ['-pk']
