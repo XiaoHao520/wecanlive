@@ -1032,8 +1032,13 @@ class StarBoxSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
 
 class StarBoxRecordSerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    coin_amount = serializers.ReadOnlyField(source="coin_transaction.amount")
+    diamond_amount = serializers.ReadOnlyField(source="diamond_transaction.amount")
+    prize_name = serializers.ReadOnlyField(source="prize_transaction.prize.name")
+    prize_amount = serializers.ReadOnlyField(source="prize_transaction.amount")
+
     class Meta:
-        model = m.CreditDiamondTransaction
+        model = m.StarBoxRecord
         fields = '__all__'
 
 

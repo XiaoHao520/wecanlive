@@ -340,15 +340,15 @@ class Member(AbstractMember,
             amount=models.Sum('amount')).get('amount') or 0
         return debit_star - credit_star
 
-    def get_star_prize_expend(self):
-        """元气礼物赠送的元气数量，观众背包礼物宝盒礼物使用，每500开一个礼盒
-        """
-
-        transitions_amount = self.user.prizetransitions_credit.filter(
-            prize__category__name='宝盒礼物'
-        ).all().aggregate(
-            amount=models.Sum('amount')).get('amount') or 0
-        return transitions_amount - self.user.starboxrecords_owned.count() * 500
+    # def get_star_prize_expend(self):
+    #     """元气礼物赠送的元气数量，观众背包礼物宝盒礼物使用，每500开一个礼盒
+    #     """
+    #
+    #     transitions_amount = self.user.prizetransitions_credit.filter(
+    #         prize__category__name='宝盒礼物'
+    #     ).all().aggregate(
+    #         amount=models.Sum('amount')).get('amount') or 0
+    #     return transitions_amount - self.user.starboxrecords_owned.count() * 500
 
     def get_level(self):
         """ 根据经验值获取用户等级
@@ -556,12 +556,14 @@ class CreditDiamondTransaction(AbstractTransactionModel):
     TYPE_EXCHANGE = 'EXCHANGE'
     TYPE_WITHDRAW = 'WITHDRAW'
     TYPE_ACTIVITY_EXPENSE = 'ACTIVITY_EXPENSE'
+    TYPE_BOX = 'BOX'
     TYPE_CHOICES = (
         (TYPE_ADMIN, '管理員發放'),
         (TYPE_LIVE_GIFT, '直播赠送'),
         (TYPE_EXCHANGE, '兌換'),
         (TYPE_WITHDRAW, '提現'),
         (TYPE_ACTIVITY_EXPENSE, '活動消費'),
+        (TYPE_BOX, '开启元气宝盒'),
     )
 
     type = models.CharField(
@@ -581,11 +583,13 @@ class CreditCoinTransaction(AbstractTransactionModel):
     TYPE_LIVE_GIFT = 'LIVE_GIFT'
     TYPE_RECHARGE = 'RECHARGE'
     TYPE_EXCHANGE = 'EXCHANGE'
+    TYPE_BOX = 'BOX'
     TYPE_CHOICES = (
         (TYPE_ADMIN, '管理員發放'),
         (TYPE_LIVE_GIFT, '直播赠送'),
         (TYPE_RECHARGE, '充值'),
         (TYPE_EXCHANGE, '兌換'),
+        (TYPE_BOX, '打開元氣寶盒'),
     )
 
     type = models.CharField(
@@ -1620,6 +1624,12 @@ class Prize(EntityModel):
         null=True,
     )
 
+    star_box_quantity = models.IntegerField(
+        verbose_name='元氣寶盒抽中數量',
+        default=0,
+        help_text='此禮物在元氣寶盒中出現時的贈送數量，０爲不會在元氣寶盒中出現'
+    )
+
     class Meta:
         verbose_name = '礼物'
         verbose_name_plural = '礼物'
@@ -2487,21 +2497,126 @@ class StarBoxRecord(UserOwnedModel):
         to='Live',
         related_name='star_box_records',
     )
-    star_box = models.ForeignKey(
-        verbose_name='星光宝盒',
-        to='StarBox',
-        related_name='records',
-    )
+
+    # star_box = models.ForeignKey(
+    #     verbose_name='星光宝盒',
+    #     to='StarBox',
+    #     related_name='records',
+    # )
 
     date_created = models.DateTimeField(
         verbose_name='获得时间',
         auto_now_add=True,
     )
 
+    receiver_star_index_transaction = models.OneToOneField(
+        verbose_name='主播元气指數记录',
+        to='CreditStarIndexReceiverTransaction',
+        related_name='star_box_records',
+        null=True,
+        blank=True,
+    )
+
+    sender_star_index_transaction = models.OneToOneField(
+        verbose_name='觀衆元气指數记录',
+        to='CreditStarIndexSenderTransaction',
+        related_name='star_box_records',
+        null=True,
+        blank=True,
+    )
+
+    prize_transaction = models.OneToOneField(
+        verbose_name='礼物记录',
+        to='PrizeTransaction',
+        related_name='star_box_record',
+        null=True,
+        blank=True,
+    )
+
+    coin_transaction = models.OneToOneField(
+        verbose_name='金幣记录',
+        to='CreditCoinTransaction',
+        related_name='star_box_record',
+        null=True,
+        blank=True,
+    )
+
+    diamond_transaction = models.OneToOneField(
+        verbose_name='鑽石记录',
+        to='CreditDiamondTransaction',
+        related_name='star_box_record',
+        null=True,
+        blank=True,
+    )
+
     class Meta:
         verbose_name = '星光宝盒记录'
         verbose_name_plural = '星光宝盒记录'
         db_table = 'core_star_box_record'
+
+    @staticmethod
+    def receiver_open_star_box(user, live):
+        """主播开星光宝盒
+        """
+        assert user.member.get_star_index_receiver_balance() > 500, '打開寶盒失敗:你的元氣指數不夠,請再努力直播!'
+
+        # 元气指数消耗
+        star_index_credit = CreditStarIndexReceiverTransaction.objects.create(
+            user_credit=user,
+            amount=500,
+            remark='主播打开元气宝盒',
+            type=CreditStarIndexReceiverTransaction.TYPE_BOX_EXPENSE,
+        )
+        # 随机奖励 0->金币，１->钻石，2->礼物
+        award = random.randint(0, 2)
+        coin_debit = None
+        diamond_debit = None
+        prize_debit = None
+        if award == 0:
+            # 金幣
+            amount = random.randint(int(Option.get('min_star_box_coin') or 100),
+                                    int(Option.get('max_star_box_coin') or 500))
+            coin_debit = CreditCoinTransaction.objects.create(
+                user_debit=user,
+                amount=amount,
+                remark='元气宝盒开启金币',
+                type=CreditCoinTransaction.TYPE_BOX
+            )
+        elif award == 1:
+            # 鑽石
+            amount = random.randint(int(Option.get('min_star_box_diamond') or 100),
+                                    int(Option.get('max_star_box_diamond') or 500))
+            diamond_debit = CreditDiamondTransaction.objects.create(
+                user_debit=user,
+                amount=amount,
+                remark='元气宝盒开启钻石',
+                type=CreditDiamondTransaction.TYPE_BOX
+            )
+        elif award == 2:
+            # 禮物
+            # todo:　以后生成系统配置项json要更改
+            prize = Prize.objects.filter(
+                category__name='宝盒礼物',
+            ).order_by('?').first()
+            amount = random.randint(1, 10)
+            prize_debit = PrizeTransaction.objects.create(
+                user_debit=user,
+                amount=amount,
+                remark='打開寶盒贈送禮物',
+                prize=prize,
+                type=PrizeTransaction.TYPE_STAR_BOX_GAIN,
+                source_tag=PrizeTransaction.SOURCE_TAG_STAR_BOX,
+            )
+
+        box_record = StarBoxRecord.objects.create(
+            author=user,
+            live=live,
+            receiver_star_index_transaction=star_index_credit,
+            coin_transaction=coin_debit,
+            diamond_transaction=diamond_debit,
+            prize_transaction=prize_debit,
+        )
+        return box_record
 
 
 class RedBagRecord(UserOwnedModel):
