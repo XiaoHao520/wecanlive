@@ -26,5 +26,5 @@ class AutomaticShelvesCronJob(CronJobBase):
             date_planned__gt=now,
         ).first()
         if not rank_record_target_plan:
-            date_planned = now + timedelta(hours=1)
+            date_planned = now + timedelta(minutes=15)
             m.PlannedTask.make('update_rank_record', date_planned)

@@ -2054,23 +2054,105 @@ class RankRecord(UserOwnedModel):
         verbose_name_plural = '排行榜記錄'
         db_table = 'core_rank_record'
 
+    def __str__(self):
+        return '{}:{}'.format(self.author, self.get_duration_display())
+
     def update(self):
-        #     TODO: 如果是一天的开始 or 一周的开始，分别重置日榜、周榜为0
-        self.receive_diamond_amount += PrizeOrder.objects.filter(
-            diamond_transaction__user_debit=self.author,
-        ).aggregate(amount=models.Sum('diamond_transaction__amount')).get('amount') or 0
+        now = datetime.now()
+        am5 = datetime(now.year, now.month, now.day, 5, 0)
+        tomorrow_am5 = am5 + timedelta(days=1)
+        weekday = now.weekday()
+        monday = am5 - timedelta(days=weekday)
+        sunday = am5 + timedelta(days=7-weekday)
+        # 日榜重置
+        if self.duration == self.DURATION_DATE and (now - am5).total_seconds() > 0 and (
+                    now - am5).total_seconds() < 900:
+            self.receive_diamond_amount = 0
+            self.send_diamond_amount = 0
+            self.star_index_amount = 0
+            self.save()
+        # 周榜重置
+        elif self.duration == self.DURATION_WEEK and weekday == 0 and (now - am5).total_seconds() > 0 and (
+                    now - am5).total_seconds() < 900:
+            self.receive_diamond_amount = 0
+            self.send_diamond_amount = 0
+            self.star_index_amount = 0
+            self.save()
+        elif self.duration == self.DURATION_TOTAL:
+            self.receive_diamond_amount = PrizeOrder.objects.filter(
+                diamond_transaction__user_debit=self.author,
+            ).aggregate(amount=models.Sum('diamond_transaction__amount')).get('amount') or 0
 
-        self.send_diamond_amount += PrizeOrder.objects.filter(
-            author=self.author,
-            diamond_transaction__id__gt=0,
-        ).aggregate(amount=models.Sum('diamond_transaction__amount')).get('amount') or 0
+            self.send_diamond_amount = PrizeOrder.objects.filter(
+                author=self.author,
+                diamond_transaction__id__gt=0,
+            ).aggregate(amount=models.Sum('diamond_transaction__amount')).get('amount') or 0
 
-        self.star_index_amount += CreditStarIndexReceiverTransaction.objects.filter(
-            user_credit=self.author,
-        ).aggregate(amount=models.Sum('amount')).get('amount') - CreditStarIndexSenderTransaction.objects.filter(
-            user_debit=self.author,
-        ).aggregate(amount=models.Sum('amount')).get('amount') or 0
-        self.save()
+            credit = self.author.creditstarindexreceivertransactions_credit.aggregate(
+                amount=models.Sum('amount')).get('amount') or 0
+            debit = self.author.creditstarindexreceivertransactions_debit.aggregate(
+                amount=models.Sum('amount')).get('amount') or 0
+            self.star_index_amount = debit - credit
+            self.save()
+        elif self.duration == self.DURATION_DATE:
+            self.receive_diamond_amount = PrizeOrder.objects.filter(
+                diamond_transaction__user_debit=self.author,
+                date_created__gt=am5,
+                date_created__lt=tomorrow_am5,
+            ).aggregate(amount=models.Sum('diamond_transaction__amount')).get('amount') or 0
+
+            self.send_diamond_amount = PrizeOrder.objects.filter(
+                author=self.author,
+                diamond_transaction__id__gt=0,
+                date_created__gt=am5,
+                date_created__lt=tomorrow_am5,
+            ).aggregate(amount=models.Sum('diamond_transaction__amount')).get('amount') or 0
+
+            credit = PrizeOrder.objects.filter(
+                author=self.author,
+                sender_star_index_transaction__id__gt=0,
+                date_created__gt=am5,
+                date_created__lt=tomorrow_am5,
+            ).aggregate(amount=models.Sum('sender_star_index_transaction__amount')).get('amount') or 0
+
+            debit = PrizeOrder.objects.filter(
+                author=self.author,
+                receiver_star_index_transaction__id__gt=0,
+                date_created__gt=am5,
+                date_created__lt=tomorrow_am5,
+            ).aggregate(amount=models.Sum('receiver_star_index_transaction__amount')).get('amount') or 0
+            self.star_index_amount = debit - credit
+            self.save()
+
+        elif self.duration == self.DURATION_WEEK:
+            self.receive_diamond_amount = PrizeOrder.objects.filter(
+                diamond_transaction__user_debit=self.author,
+                date_created__gt=monday,
+                date_created__lt=sunday,
+            ).aggregate(amount=models.Sum('diamond_transaction__amount')).get('amount') or 0
+
+            self.send_diamond_amount = PrizeOrder.objects.filter(
+                author=self.author,
+                diamond_transaction__id__gt=0,
+                date_created__gt=monday,
+                date_created__lt=sunday,
+            ).aggregate(amount=models.Sum('diamond_transaction__amount')).get('amount') or 0
+
+            credit = PrizeOrder.objects.filter(
+                author=self.author,
+                sender_star_index_transaction__id__gt=0,
+                date_created__gt=monday,
+                date_created__lt=sunday,
+            ).aggregate(amount=models.Sum('sender_star_index_transaction__amount')).get('amount') or 0
+
+            debit = PrizeOrder.objects.filter(
+                author=self.author,
+                receiver_star_index_transaction__id__gt=0,
+                date_created__gt=monday,
+                date_created__lt=sunday,
+            ).aggregate(amount=models.Sum('receiver_star_index_transaction__amount')).get('amount') or 0
+            self.star_index_amount = debit - credit
+            self.save()
 
     @staticmethod
     def make(member):
