@@ -95,6 +95,7 @@ class BankViewSet(viewsets.ModelViewSet):
 
 
 class ImageViewSet(viewsets.ModelViewSet):
+    filter_fields = ['author', 'name', 'is_active', 'id']
     queryset = m.ImageModel.objects.all()
     serializer_class = s.ImageSerializer
     ordering = ['-pk']
