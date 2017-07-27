@@ -1955,8 +1955,7 @@ class PrizeOrder(UserOwnedModel):
         assert watch_log, '用戶還沒有進入直播觀看，不能購買禮物贈送'
 
         total_price = count * prize.price
-
-        assert prize.get_balance(user, source_tag) <= count, '贈送失敗，禮物剩餘不足'
+        assert int(prize.get_balance(user, source_tag)) >= count, '贈送失敗，禮物剩餘不足'
         # 礼物流水
         receiver_prize_transaction = PrizeTransaction.objects.create(
             amount=count,
@@ -2555,18 +2554,33 @@ class StarBoxRecord(UserOwnedModel):
         db_table = 'core_star_box_record'
 
     @staticmethod
-    def receiver_open_star_box(user, live):
-        """主播开星光宝盒
+    def open_star_box(user, live, identity):
+        """开星光宝盒
+        identity = 'receiver' 主播開盒
+        identity = 'sender'   观众开盒
         """
-        assert user.member.get_star_index_receiver_balance() > 500, '打開寶盒失敗:你的元氣指數不夠,請再努力直播!'
-
+        receiver_star_credit = None
+        sender_star_credit = None
+        if identity == 'receiver':
+            assert user.member.get_star_index_receiver_balance() > 500, '打開寶盒失敗:你的元氣指數不夠,請再努力直播!'
+            receiver_star_credit = CreditStarIndexReceiverTransaction.objects.create(
+                user_credit=user,
+                amount=500,
+                remark='主播打开元气宝盒',
+                type=CreditStarIndexReceiverTransaction.TYPE_BOX_EXPENSE,
+            )
+        elif identity == 'sender':
+            assert user.member.get_star_index_sender_balance() > 500, '打開寶盒失敗:你的元氣指數不夠,請再努力直播!'
+            sender_star_credit = CreditStarIndexSenderTransaction.objects.create(
+                user_credit=user,
+                amount=500,
+                remark='觀衆開元氣寶盒',
+                type=CreditStarIndexSenderTransaction.TYPE_BOX_EXPENSE,
+            )
+        else:
+            return False
         # 元气指数消耗
-        star_index_credit = CreditStarIndexReceiverTransaction.objects.create(
-            user_credit=user,
-            amount=500,
-            remark='主播打开元气宝盒',
-            type=CreditStarIndexReceiverTransaction.TYPE_BOX_EXPENSE,
-        )
+
         # 随机奖励 0->金币，１->钻石，2->礼物
         award = random.randint(0, 2)
         coin_debit = None
@@ -2611,7 +2625,8 @@ class StarBoxRecord(UserOwnedModel):
         box_record = StarBoxRecord.objects.create(
             author=user,
             live=live,
-            receiver_star_index_transaction=star_index_credit,
+            receiver_star_index_transaction=receiver_star_credit,
+            sender_star_index_transaction=sender_star_credit,
             coin_transaction=coin_debit,
             diamond_transaction=diamond_debit,
             prize_transaction=prize_debit,
