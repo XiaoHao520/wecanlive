@@ -418,6 +418,14 @@ class Member(AbstractMember,
         for withdraw_record in WithdrawRecord.objects.filter(author=self.user, status=WithdrawRecord.STATUS_PENDING):
             withdraw_record.reject()
 
+    def get_first_live_date(self):
+        """用戶第一次直播的時間"""
+
+        if self.user.lives_owned.exists():
+            return self.user.lives_owned.order_by('-date_created').first().date_created
+        else:
+            return False
+
 
 class Robot(models.Model):
     """ 机器人
@@ -1453,17 +1461,18 @@ class LiveWatchLog(UserOwnedModel,
                          (self.date_leave - self.date_enter).days * 1440 or 1
 
         self.save()
+
         # 累計觀看時間
         wathch_mission_preferences = self.author.preferences.filter(key='watch_mission_time').first()
         mission_achivevments = self.author.starmissionachievements_owned.filter(
             type=StarMissionAchievement.TYPE_WATCH,
             date_created__gt=self.date_enter).order_by('-date_created')
         if mission_achivevments.exists():
-            print(datetime.now() - mission_achivevments.first().date_created)
             wathch_mission_preferences.value = int(wathch_mission_preferences.value) + \
                                                (datetime.now() - mission_achivevments.first().date_created).seconds
         else:
-            wathch_mission_preferences.value = int(wathch_mission_preferences.value) + (self.date_leave - self.date_enter).seconds
+            wathch_mission_preferences.value = int(wathch_mission_preferences.value) + (
+            self.date_leave - self.date_enter).seconds
         wathch_mission_preferences.save()
 
     def get_duration(self):

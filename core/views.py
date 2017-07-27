@@ -865,6 +865,33 @@ class MemberViewSet(viewsets.ModelViewSet):
         # todo: 只要３个
         return Response(data=sorted(rank, key=lambda item: item['amount'], reverse=True))
 
+    @detail_route(methods=['GET'])
+    def get_live_prize(self, request, pk):
+        user = m.User.objects.get(pk=pk)
+
+        prizes = m.Prize.objects.filter(
+            transactions__user_debit=user,
+            transactions__user_credit=user,
+        ).distinct().all()
+        data = []
+        for prize in prizes:
+            prize_transaction = m.PrizeTransaction.objects.filter(
+                user_debit=user,
+                user_credit=user,
+                prize=prize,
+            )
+            amount = prize_transaction.all().aggregate(amount=m.models.Sum('amount')).get('amount') or 0
+
+            first_pk = prize_transaction.order_by('pk').first().pk
+
+            item = dict(
+                prize=s.PrizeSerializer(prize).data,
+                amount=amount,
+                first_pk=first_pk,
+            )
+            data.append(item)
+        return Response(data=sorted(data, key=lambda item: item['first_pk'], reverse=True))
+
 
 class RobotViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
@@ -1072,6 +1099,9 @@ class LiveViewSet(viewsets.ModelViewSet):
         member_id = self.request.query_params.get('member')
         live_status = self.request.query_params.get('live_status')
         followed_by = self.request.query_params.get('followed_by')
+        up_liveing = self.request.query_params.get('up_liveing')
+        down_liveing = self.request.query_params.get('down_liveing')
+
         if member_id:
             member = m.Member.objects.filter(
                 user_id=member_id
@@ -1095,6 +1125,19 @@ class LiveViewSet(viewsets.ModelViewSet):
                 m.models.Q(author__member__in=users_following) |
                 m.models.Q(author__member__in=users_friend)
             )
+
+        if up_liveing:
+            qs = qs.filter(
+                id__gt=up_liveing,
+                date_end=None,
+            ).order_by('pk')
+
+        if down_liveing:
+            qs = qs.filter(
+                id__lt=down_liveing,
+                date_end=None,
+            ).order_by('-pk')
+
         return qs
 
     @detail_route(methods=['POST'])
@@ -1224,8 +1267,22 @@ class LiveViewSet(viewsets.ModelViewSet):
             type=m.StarMissionAchievement.TYPE_WATCH,
             date_created__date=datetime.now().date(),
         )
-        # 观看任务下次领取倒计时
 
+        # 當前用戶邀請好友當日的完成次數
+        today_invite_mission = m.StarMissionAchievement.objects.filter(
+            author=self.request.user,
+            type=m.StarMissionAchievement.TYPE_INVITE,
+            date_created__date=datetime.now().date(),
+        )
+
+        # 当前用户分享任务次数
+        today_share_mission = m.StarMissionAchievement.objects.filter(
+            author=self.request.user,
+            type=m.StarMissionAchievement.TYPE_SHARE,
+            date_created__date=datetime.now().date(),
+        )
+
+        # 观看任务下次领取倒计时
         watch_mission_time = 0
         # todo 每天要清0
         if m.UserPreference.objects.filter(user=self.request.user, key='watch_mission_time').exists():
@@ -1238,8 +1295,9 @@ class LiveViewSet(viewsets.ModelViewSet):
         else:
             m.UserPreference.set(self.request.user, 'watch_mission_time', 0)
 
-        print(watch_mission_time)
         data['today_watch_mission_count'] = today_watch_mission.count()
+        data['today_share_mission_count'] = today_share_mission.count()
+        data['today_invite_mission_count'] = today_invite_mission.count()
         data['information_mission_count'] = information_mission_count
         data['watch_mission_time'] = watch_mission_time
         return Response(data=data)
@@ -1630,12 +1688,14 @@ class StarMissionAchievementViewSet(viewsets.ModelViewSet):
             remark='完成直播間觀看任務',
             type='EARNING',
         )
+        # 重置观看任务时间
         preference = m.UserPreference.objects.filter(
             user=self.request.user,
             key='watch_mission_time',
         ).first()
         preference.value = 0
         preference.save()
+
         return Response(True)
 
 

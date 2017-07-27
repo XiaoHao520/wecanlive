@@ -468,6 +468,8 @@ class MemberSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
     contact_to_me = serializers.BooleanField(read_only=True)
 
+    first_live_date = serializers.ReadOnlyField(source='get_first_live_date')
+
     class Meta:
         model = m.Member
         # fields = '__all__'
