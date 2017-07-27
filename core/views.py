@@ -930,7 +930,6 @@ class CreditDiamondTransactionViewSet(viewsets.ModelViewSet):
             amount = m.CreditDiamondTransaction.objects.filter(
                 user_debit=request.user,
                 user_credit=user).all().aggregate(amount=models.Sum('amount')).get('amount') or 0
-            print(amount)
         return Response(data=data)
 
 
@@ -1226,10 +1225,23 @@ class LiveViewSet(viewsets.ModelViewSet):
             date_created__date=datetime.now().date(),
         )
         # 观看任务下次领取倒计时
-        last_watch_mission = today_watch_mission.order_by('-date_created').first()
 
+        watch_mission_time = 0
+        # todo 每天要清0
+        if m.UserPreference.objects.filter(user=self.request.user, key='watch_mission_time').exists():
+            mission_time = m.UserPreference.objects.filter(user=self.request.user,
+                                                           key='watch_mission_time').first().value
+            if int(mission_time) > 30 * 60:
+                watch_mission_time = 30 * 60
+            else:
+                watch_mission_time = mission_time
+        else:
+            m.UserPreference.set(self.request.user, 'watch_mission_time', 0)
+
+        print(watch_mission_time)
         data['today_watch_mission_count'] = today_watch_mission.count()
         data['information_mission_count'] = information_mission_count
+        data['watch_mission_time'] = watch_mission_time
         return Response(data=data)
 
     @detail_route(methods=['POST'])
@@ -1388,7 +1400,6 @@ class PrizeViewSet(viewsets.ModelViewSet):
                 prize=prize,
                 user_credit=None,
             ).all().aggregate(amount=m.models.Sum('amount')).get('amount') or 0
-            print(accept)
             send = me.prizetransactions_credit.filter(
                 prize=prize,
             ).exclude(
@@ -1619,6 +1630,12 @@ class StarMissionAchievementViewSet(viewsets.ModelViewSet):
             remark='完成直播間觀看任務',
             type='EARNING',
         )
+        preference = m.UserPreference.objects.filter(
+            user=self.request.user,
+            key='watch_mission_time',
+        ).first()
+        preference.value = 0
+        preference.save()
         return Response(True)
 
 

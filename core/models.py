@@ -1451,7 +1451,20 @@ class LiveWatchLog(UserOwnedModel,
         self.date_leave = datetime.now()
         self.duration += int((self.date_leave - self.date_enter).seconds / 60) + \
                          (self.date_leave - self.date_enter).days * 1440 or 1
+
         self.save()
+        # 累計觀看時間
+        wathch_mission_preferences = self.author.preferences.filter(key='watch_mission_time').first()
+        mission_achivevments = self.author.starmissionachievements_owned.filter(
+            type=StarMissionAchievement.TYPE_WATCH,
+            date_created__gt=self.date_enter).order_by('-date_created')
+        if mission_achivevments.exists():
+            print(datetime.now() - mission_achivevments.first().date_created)
+            wathch_mission_preferences.value = int(wathch_mission_preferences.value) + \
+                                               (datetime.now() - mission_achivevments.first().date_created).seconds
+        else:
+            wathch_mission_preferences.value = int(wathch_mission_preferences.value) + (self.date_leave - self.date_enter).seconds
+        wathch_mission_preferences.save()
 
     def get_duration(self):
         if self.duration:
