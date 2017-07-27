@@ -129,7 +129,21 @@ class Member(AbstractMember,
         verbose_name_plural = '会员'
         db_table = 'core_member'
 
+    def delete(self, *args, **kwargs):
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_staff:
+            AdminLog.make(user, AdminLog.TYPE_DELETE, self, '刪除會員')
+        super().delete(*args, **kwargs)
+
     def save(self, *args, **kwargs):
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_staff and self.id and not self.is_del:
+            AdminLog.make(user, AdminLog.TYPE_UPDATE, self, '修改會員')
+        elif user.is_staff and not self.is_del:
+            super().save(*args, **kwargs)
+            AdminLog.make(user, AdminLog.TYPE_CREATE, self, '新增會員')
         if self.user:
             self.load_tencent_sig()
 
@@ -468,6 +482,23 @@ class Robot(models.Model):
         verbose_name_plural = '机器人'
         db_table = 'core_robot'
 
+    def save(self, *args, **kwargs):
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_staff and self.id and not self.is_del:
+            AdminLog.make(user, AdminLog.TYPE_UPDATE, self, '修改機器人')
+        elif user.is_staff and not self.is_del:
+            super().save(*args, **kwargs)
+            AdminLog.make(user, AdminLog.TYPE_CREATE, self, '新增機器人')
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_staff:
+            AdminLog.make(user, AdminLog.TYPE_DELETE, self, '刪除機器人')
+        super().delete(*args, **kwargs)
+
 
 class CelebrityCategory(EntityModel):
     leader = models.ForeignKey(
@@ -721,6 +752,23 @@ class Badge(EntityModel):
         verbose_name_plural = '徽章'
         db_table = 'core_badge'
 
+    def save(self, *args, **kwargs):
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_staff and self.id and not self.is_del:
+            AdminLog.make(user, AdminLog.TYPE_UPDATE, self, '修改徽章')
+        elif user.is_staff and not self.is_del:
+            super().save(*args, **kwargs)
+            AdminLog.make(user, AdminLog.TYPE_CREATE, self, '新增徽章')
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_staff:
+            AdminLog.make(user, AdminLog.TYPE_DELETE, self, '刪除徽章')
+        super().delete(*args, **kwargs)
+
 
 class DailyCheckInLog(UserOwnedModel):
     date_created = models.DateTimeField(
@@ -869,7 +917,25 @@ class Family(UserOwnedModel,
         return FamilyMission.objects.filter(family=self).count()
 
     def save(self, *args, **kwargs):
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_staff and self.id and not self.is_del:
+            AdminLog.make(
+                user,
+                AdminLog.TYPE_UPDATE,
+                self,
+                '修改家族{}'.format(self.name),
+            )
+        elif user.is_staff and not self.is_del:
+            super().save(*args, **kwargs)
+            AdminLog.make(
+                user,
+                AdminLog.TYPE_CREATE,
+                self,
+                '新建家族{}'.format(self.name),
+            )
         super().save(*args, **kwargs)
+
         # WebIM 建群
         from tencent.webim import WebIM
         webim = WebIM(settings.TENCENT_WEBIM_APPID)
@@ -879,6 +945,18 @@ class Family(UserOwnedModel,
             type=WebIM.GROUP_TYPE_PRIVATE,
             group_id='family_{}'.format(self.id),
         )
+
+    def delete(self, *args, **kwargs):
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_staff:
+            AdminLog.make(
+                user,
+                AdminLog.TYPE_DELETE,
+                self,
+                '刪除家族{}'.format(self.name),
+            )
+        super().delete(*args, **kwargs)
 
 
 class FamilyMember(UserOwnedModel):
@@ -1158,6 +1236,23 @@ class LiveCategory(EntityModel):
         verbose_name_plural = '直播分类'
         db_table = 'core_live_category'
 
+    def save(self, *args, **kwargs):
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_staff and self.id and not self.is_del:
+            AdminLog.make(user, AdminLog.TYPE_UPDATE, self, '修改直播分類')
+        elif user.is_staff and not self.is_del:
+            super().save(*args, **kwargs)
+            AdminLog.make(user, AdminLog.TYPE_CREATE, self, '新增直播分類')
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_staff:
+            AdminLog.make(user, AdminLog.TYPE_DELETE, self, '刪除直播分類')
+        super().delete(*args, **kwargs)
+
 
 class Live(UserOwnedModel,
            EntityModel,
@@ -1223,6 +1318,13 @@ class Live(UserOwnedModel,
         db_table = 'core_live'
 
     def save(self, *args, **kwargs):
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_staff and self.id and not self.is_del:
+            AdminLog.make(user, AdminLog.TYPE_UPDATE, self, '修改直播')
+        elif user.is_staff and not self.is_del:
+            super().save(*args, **kwargs)
+            AdminLog.make(user, AdminLog.TYPE_CREATE, self, '新增直播')
         super().save(*args, **kwargs)
         # WebIM 建群
         from tencent.webim import WebIM
@@ -1233,6 +1335,12 @@ class Live(UserOwnedModel,
             type=WebIM.GROUP_TYPE_PRIVATE,
             group_id='live_{}'.format(self.id),
         )
+
+    def delete(self, *args, **kwargs):
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_staff:
+            AdminLog.make(user, AdminLog.TYPE_DELETE, self, '刪除直播')
 
     def get_comment_count(self):
         return self.comments.count()
@@ -1578,6 +1686,38 @@ class PrizeCategory(EntityModel):
     def get_count_prize(self):
         return self.prizes.all().count()
 
+    def save(self, *args, **kwargs):
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_staff and self.id and not self.is_del:
+            AdminLog.make(
+                user,
+                AdminLog.TYPE_UPDATE,
+                self,
+                '修改禮物分類',
+            )
+        elif user.is_staff and not self.is_del:
+            super().save(*args, **kwargs)
+            AdminLog.make(
+                user,
+                AdminLog.TYPE_CREATE,
+                self,
+                '新增禮物分類',
+            )
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_staff:
+            AdminLog.make(
+                user,
+                AdminLog.TYPE_DELETE,
+                self,
+                '刪除禮物分類',
+            )
+        super().delete(*args, **kwargs)
+
 
 class Prize(EntityModel):
     icon = models.OneToOneField(
@@ -1701,6 +1841,38 @@ class Prize(EntityModel):
         ).aggregate(amount=models.Sum('amount')).get('amount') or 0
         # 返回餘額
         return accept - send
+
+    def save(self, *args, **kwargs):
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_staff and self.id and not self.is_del:
+            AdminLog.make(
+                user,
+                AdminLog.TYPE_UPDATE,
+                self,
+                '修改禮物',
+            )
+        elif user.is_staff and not self.is_del:
+            super().save(*args, **kwargs)
+            AdminLog.make(
+                user,
+                AdminLog.TYPE_CREATE,
+                self,
+                '新增禮物',
+            )
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_staff:
+            AdminLog.make(
+                user,
+                AdminLog.TYPE_DELETE,
+                self,
+                '刪除禮物',
+            )
+        super().delete(*args, **kwargs)
 
 
 class PrizeTransaction(AbstractTransactionModel):
@@ -2635,6 +2807,38 @@ class Activity(EntityModel):
             return '貢獻值'
         return None
 
+    def save(self, *args, **kwargs):
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_staff and self.id and not self.is_del:
+            AdminLog.make(
+                user,
+                AdminLog.TYPE_UPDATE,
+                self,
+                '修改活動',
+            )
+        elif user.is_staff and not self.is_del:
+            super().save(*args, **kwargs)
+            AdminLog.make(
+                user,
+                AdminLog.TYPE_CREATE,
+                self,
+                '新增活動',
+            )
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_staff:
+            AdminLog.make(
+                user,
+                AdminLog.TYPE_DELETE,
+                self,
+                '刪除活動',
+            )
+        super().delete(*args, **kwargs)
+
     def settle(self):
         """ 结算当次活动，找出所有参与记录，然后统计满足条件的自动发放奖励
         :return:
@@ -2794,6 +2998,38 @@ class Movie(UserOwnedModel,
         verbose_name = '影片节目'
         verbose_name_plural = '影片节目'
         db_table = 'core_movie'
+
+    def save(self, *args, **kwargs):
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_staff and self.id and not self.is_del:
+            AdminLog.make(
+                user,
+                AdminLog.TYPE_UPDATE,
+                self,
+                '修改影片節目',
+            )
+        elif user.is_staff and not self.is_del:
+            super().save(*args, **kwargs)
+            AdminLog.make(
+                user,
+                AdminLog.TYPE_CREATE,
+                self,
+                '新增影片節目',
+            )
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_staff:
+            AdminLog.make(
+                user,
+                AdminLog.TYPE_DELETE,
+                self,
+                '刪除影片節目',
+            )
+        super().delete(*args, **kwargs)
 
 
 class StarBox(EntityModel):
@@ -3137,6 +3373,38 @@ class Banner(models.Model):
         verbose_name = '节目Banner'
         verbose_name_plural = '节目Banner'
         db_table = 'core_banner'
+
+    def save(self, *args, **kwargs):
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_staff and self.id and not self.is_del:
+            AdminLog.make(
+                user,
+                AdminLog.TYPE_UPDATE,
+                self,
+                '修改節目Banner',
+            )
+        elif user.is_staff and not self.is_del:
+            super().save(*args, **kwargs)
+            AdminLog.make(
+                user,
+                AdminLog.TYPE_CREATE,
+                self,
+                '新增節目Banner',
+            )
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_staff:
+            AdminLog.make(
+                user,
+                AdminLog.TYPE_DELETE,
+                self,
+                '刪除節目Banner',
+            )
+        super().delete(*args, **kwargs)
 
 
 class SensitiveWord(models.Model):

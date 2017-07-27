@@ -670,6 +670,18 @@ class Comment(HierarchicalModel,
         verbose_name_plural = '评论'
         db_table = 'base_comment'
 
+    def delete(self, *args, **kwargs):
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_staff:
+            AdminLog.make(
+                user,
+                AdminLog.TYPE_DELETE,
+                self,
+                '刪除评论',
+            )
+        super().delete(*args, **kwargs)
+
 
 class CommentableModel(models.Model):
     comments = models.ManyToManyField(
