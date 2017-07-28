@@ -1007,6 +1007,11 @@ class StatisticRuleSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
 
 class ActivitySerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    thumbnail_item = ImageSerializer(
+        source='thumbnail',
+        read_only=True,
+    )
+
     vote_way = serializers.ReadOnlyField()
 
     vote_count_award = serializers.ReadOnlyField()
