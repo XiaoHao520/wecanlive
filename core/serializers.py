@@ -159,6 +159,14 @@ class UserSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 #     class Meta:
 #         model = m.Tag
 #         fields = '__all__'
+
+
+class OptionSerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    class Meta:
+        model = m.Option
+        fields = '__all__'
+
+
 class AudioSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.AudioModel
@@ -564,6 +572,21 @@ class BadgeSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
     class Meta:
         model = m.Badge
+        fields = '__all__'
+
+
+class BadgeRecordSerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    badge_name = serializers.ReadOnlyField(
+        source='badge.name',
+    )
+
+    icon_url = serializers.ImageField(
+        source='badge.icon.image',
+        read_only=True,
+    )
+
+    class Meta:
+        model = m.BadgeRecord
         fields = '__all__'
 
 
@@ -998,6 +1021,8 @@ class ActivitySerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
     draw_condition_value = serializers.ReadOnlyField()
 
+    award_way = serializers.ReadOnlyField()
+
     class Meta:
         model = m.Activity
         fields = '__all__'
@@ -1140,4 +1165,34 @@ class UserMarkSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 class ContactSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.Contact
+        fields = '__all__'
+
+
+class RankRecordSerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    author_nickname = serializers.ReadOnlyField(source='author.member.nickname')
+
+    author_mobile = serializers.ReadOnlyField(source='author.member.mobile')
+
+    gender = serializers.ReadOnlyField(source='author.member.gender')
+
+    age = serializers.ReadOnlyField(source='author.member.age')
+
+    constellation = serializers.ReadOnlyField(source='author.member.constellation')
+
+    class Meta:
+        model = m.RankRecord
+        fields = '__all__'
+
+
+class AdminLogSerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    author_name = serializers.ReadOnlyField(source='author.first_name')
+
+    author_groups = serializers.ReadOnlyField(source='author.group_names')
+
+    author_account = serializers.ReadOnlyField(source='author.username')
+
+    target_type = serializers.ReadOnlyField(source='target_type.name')
+
+    class Meta:
+        model = m.AdminLog
         fields = '__all__'

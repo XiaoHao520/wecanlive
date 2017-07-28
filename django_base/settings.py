@@ -28,6 +28,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'django_fullclean',
     'rest_framework',
+    'django_cron',
     'django_filters',
     # Project app
     'django_base',

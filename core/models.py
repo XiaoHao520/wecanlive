@@ -146,7 +146,8 @@ class Member(AbstractMember,
             )
             self.user.creditstartransactions_debit.create(
                 amount=10,
-                remark='完成元气任务的完善资料任务奖励'
+                remark='完成元气任务的完善资料任务奖励',
+                type=CreditStarTransaction.TYPE_EARNING,
             )
         super().save(*args, **kwargs)
 
@@ -264,9 +265,14 @@ class Member(AbstractMember,
             diamond_transaction__id__gt=0,
         ).aggregate(amount=models.Sum('diamond_transaction__amount')).get('amount') or 0
 
+    # def debit_diamond(self):
+    #     return self.user.creditdiamondtransactions_debit.all().aggregate(
+    #         amount=models.Sum('amount')).get('amount') or 0
+
     def debit_diamond(self):
-        return self.user.creditdiamondtransactions_debit.all().aggregate(
-            amount=models.Sum('amount')).get('amount') or 0
+        return PrizeOrder.objects.filter(
+            diamond_transaction__user_debit=self.user,
+        ).aggregate(amount=models.Sum('diamond_transaction__amount')).get('amount') or 0
 
     # def credit_star_index(self):
     #     return self.user.creditstarindextransactions_credit.all().aggregate(
@@ -592,12 +598,14 @@ class CreditCoinTransaction(AbstractTransactionModel):
     TYPE_RECHARGE = 'RECHARGE'
     TYPE_EXCHANGE = 'EXCHANGE'
     TYPE_BOX = 'BOX'
+    TYPE_BARRAGE = 'BARRAGE'
     TYPE_CHOICES = (
         (TYPE_ADMIN, '管理員發放'),
         (TYPE_LIVE_GIFT, '直播赠送'),
         (TYPE_RECHARGE, '充值'),
         (TYPE_EXCHANGE, '兌換'),
         (TYPE_BOX, '打開元氣寶盒'),
+        (TYPE_BARRAGE, '發送彈幕消費'),
     )
 
     type = models.CharField(
@@ -612,8 +620,26 @@ class CreditCoinTransaction(AbstractTransactionModel):
         db_table = 'core_credit_coin_transaction'
 
 
-class Badge(UserOwnedModel,
-            EntityModel):
+class BadgeRecord(UserOwnedModel):
+    badge = models.ForeignKey(
+        verbose_name='徽章',
+        to='Badge',
+        related_name='records',
+    )
+
+    date_created = models.DateTimeField(
+        verbose_name='獲得時間',
+        auto_now_add=True,
+    )
+
+    class Meta:
+        verbose_name = '徽章記錄'
+        verbose_name_plural = '徽章記錄'
+        db_table = 'core_badge_record'
+        unique_together = (('author', 'badge'),)
+
+
+class Badge(EntityModel):
     """ 徽章
     """
     icon = models.OneToOneField(
@@ -1348,10 +1374,31 @@ class LiveBarrage(UserOwnedModel,
         auto_now_add=True,
     )
 
+    credit_coin_transaction = models.OneToOneField(
+        verbose_name='扣除金幣記錄',
+        to='CreditCoinTransaction',
+        blank=True,
+        null=True,
+        related_name='barrage',
+    )
+
     class Meta:
         verbose_name = '直播弹幕'
         verbose_name_plural = '直播弹幕'
         db_table = 'core_live_barrage'
+
+    def save(self, *args, **kwargs):
+        if not self.credit_coin_transaction:
+            price = int(Option.get('coin_barrage_cost') or 1)
+            if self.author.member.get_coin_balance() < price:
+                raise ValidationError('金幣不足，無法發送彈幕')
+            self.credit_coin_transaction = CreditCoinTransaction.objects.create(
+                user_credit=self.author,
+                type=CreditCoinTransaction.TYPE_BARRAGE,
+                amount=price,
+                remark='在直播#{}中發送彈幕'.format(self.live.id),
+            )
+        super().save(*args, **kwargs)
 
 
 class LiveWatchLog(UserOwnedModel,
@@ -2041,6 +2088,170 @@ class PrizeOrder(UserOwnedModel):
         return order
 
 
+class RankRecord(UserOwnedModel):
+    DURATION_DATE = 'DATE'
+    DURATION_WEEK = 'WEEK'
+    DURATION_TOTAL = 'TOTAL'
+    DURATION_CHOICES = (
+        (DURATION_DATE, '每日'),
+        (DURATION_WEEK, '每週'),
+        (DURATION_TOTAL, '統計'),
+    )
+
+    duration = models.CharField(
+        verbose_name='統計區間',
+        max_length=20,
+        choices=DURATION_CHOICES,
+    )
+
+    receive_diamond_amount = models.DecimalField(
+        verbose_name='收到钻石數量',
+        decimal_places=2,
+        max_digits=18,
+    )
+
+    send_diamond_amount = models.DecimalField(
+        verbose_name='送出钻石數量',
+        decimal_places=2,
+        max_digits=18,
+    )
+
+    star_index_amount = models.DecimalField(
+        verbose_name='元气指数',
+        decimal_places=2,
+        max_digits=18,
+    )
+
+    class Meta:
+        verbose_name = '排行榜記錄'
+        verbose_name_plural = '排行榜記錄'
+        db_table = 'core_rank_record'
+
+    def __str__(self):
+        return '{}:{}'.format(self.author, self.get_duration_display())
+
+    def update(self):
+        now = datetime.now()
+        am5 = datetime(now.year, now.month, now.day, 5, 0)
+        tomorrow_am5 = am5 + timedelta(days=1)
+        weekday = now.weekday()
+        monday = am5 - timedelta(days=weekday)
+        sunday = am5 + timedelta(days=7 - weekday)
+        # 日榜重置
+        if self.duration == self.DURATION_DATE and (now - am5).total_seconds() > 0 and (
+                    now - am5).total_seconds() < 900:
+            self.receive_diamond_amount = 0
+            self.send_diamond_amount = 0
+            self.star_index_amount = 0
+            self.save()
+        # 周榜重置
+        elif self.duration == self.DURATION_WEEK and weekday == 0 and (now - am5).total_seconds() > 0 and (
+                    now - am5).total_seconds() < 900:
+            self.receive_diamond_amount = 0
+            self.send_diamond_amount = 0
+            self.star_index_amount = 0
+            self.save()
+        elif self.duration == self.DURATION_TOTAL:
+            self.receive_diamond_amount = PrizeOrder.objects.filter(
+                diamond_transaction__user_debit=self.author,
+            ).aggregate(amount=models.Sum('diamond_transaction__amount')).get('amount') or 0
+
+            self.send_diamond_amount = PrizeOrder.objects.filter(
+                author=self.author,
+                diamond_transaction__id__gt=0,
+            ).aggregate(amount=models.Sum('diamond_transaction__amount')).get('amount') or 0
+
+            credit = self.author.creditstarindexreceivertransactions_credit.aggregate(
+                amount=models.Sum('amount')).get('amount') or 0
+            debit = self.author.creditstarindexreceivertransactions_debit.aggregate(
+                amount=models.Sum('amount')).get('amount') or 0
+            self.star_index_amount = debit - credit
+            self.save()
+        elif self.duration == self.DURATION_DATE:
+            self.receive_diamond_amount = PrizeOrder.objects.filter(
+                diamond_transaction__user_debit=self.author,
+                date_created__gt=am5,
+                date_created__lt=tomorrow_am5,
+            ).aggregate(amount=models.Sum('diamond_transaction__amount')).get('amount') or 0
+
+            self.send_diamond_amount = PrizeOrder.objects.filter(
+                author=self.author,
+                diamond_transaction__id__gt=0,
+                date_created__gt=am5,
+                date_created__lt=tomorrow_am5,
+            ).aggregate(amount=models.Sum('diamond_transaction__amount')).get('amount') or 0
+
+            credit = PrizeOrder.objects.filter(
+                author=self.author,
+                sender_star_index_transaction__id__gt=0,
+                date_created__gt=am5,
+                date_created__lt=tomorrow_am5,
+            ).aggregate(amount=models.Sum('sender_star_index_transaction__amount')).get('amount') or 0
+
+            debit = PrizeOrder.objects.filter(
+                author=self.author,
+                receiver_star_index_transaction__id__gt=0,
+                date_created__gt=am5,
+                date_created__lt=tomorrow_am5,
+            ).aggregate(amount=models.Sum('receiver_star_index_transaction__amount')).get('amount') or 0
+            self.star_index_amount = debit - credit
+            self.save()
+
+        elif self.duration == self.DURATION_WEEK:
+            self.receive_diamond_amount = PrizeOrder.objects.filter(
+                diamond_transaction__user_debit=self.author,
+                date_created__gt=monday,
+                date_created__lt=sunday,
+            ).aggregate(amount=models.Sum('diamond_transaction__amount')).get('amount') or 0
+
+            self.send_diamond_amount = PrizeOrder.objects.filter(
+                author=self.author,
+                diamond_transaction__id__gt=0,
+                date_created__gt=monday,
+                date_created__lt=sunday,
+            ).aggregate(amount=models.Sum('diamond_transaction__amount')).get('amount') or 0
+
+            credit = PrizeOrder.objects.filter(
+                author=self.author,
+                sender_star_index_transaction__id__gt=0,
+                date_created__gt=monday,
+                date_created__lt=sunday,
+            ).aggregate(amount=models.Sum('sender_star_index_transaction__amount')).get('amount') or 0
+
+            debit = PrizeOrder.objects.filter(
+                author=self.author,
+                receiver_star_index_transaction__id__gt=0,
+                date_created__gt=monday,
+                date_created__lt=sunday,
+            ).aggregate(amount=models.Sum('receiver_star_index_transaction__amount')).get('amount') or 0
+            self.star_index_amount = debit - credit
+            self.save()
+
+    @staticmethod
+    def make(member):
+        RankRecord.objects.create(
+            author=member.user,
+            duration=RankRecord.DURATION_DATE,
+            receive_diamond_amount=0,
+            send_diamond_amount=0,
+            star_index_amount=0,
+        )
+        RankRecord.objects.create(
+            author=member.user,
+            duration=RankRecord.DURATION_WEEK,
+            receive_diamond_amount=0,
+            send_diamond_amount=0,
+            star_index_amount=0,
+        )
+        RankRecord.objects.create(
+            author=member.user,
+            duration=RankRecord.DURATION_TOTAL,
+            receive_diamond_amount=0,
+            send_diamond_amount=0,
+            star_index_amount=0,
+        )
+
+
 class ExtraPrize(EntityModel):
     """ 赠送礼物
     购买礼物包超过N个金币，赠送给对应的用户一张壁纸
@@ -2342,6 +2553,108 @@ class Activity(EntityModel):
         if rule['condition_value']:
             return rule['condition_value']
         return 0
+
+    def award_way(self):
+        """
+        获奖方式
+        :return:
+        """
+        rule = json.loads(self.rules)
+        string = []
+        str_rank = ''
+        str_weight = ''
+        str_award = ''
+        if self.type == self.TYPE_VOTE:
+            for award_item in rule['awards']:
+                if award_item['from'] == award_item['to']:
+                    str_rank = '第{}名：'.format(award_item['from'])
+                else:
+                    str_rank = '第{}名 - 第{}名：'.format(award_item['from'], award_item['to'])
+                if award_item['award']['type'] == 'badge':
+                    badge = Badge.objects.filter(id=award_item['award']['value']).first()
+                    if badge:
+                        str_award = badge.name
+                elif award_item['award']['type'] == 'prize':
+                    prize = Prize.objects.filter(id=award_item['award']['value']).first()
+                    if prize:
+                        str_award = prize.name
+                else:
+                    str_award = '{}{}'.format(
+                        award_item['award']['value'],
+                        self.award_type_format(award_item['award']['type'])
+                    )
+                string.append(str_rank + str_award)
+            return string
+        if self.type == self.TYPE_WATCH:
+            if rule['award']['type'] == 'badge':
+                badge = Badge.objects.filter(id=rule['award']['value']).first()
+                if badge:
+                    str_award = badge.name
+            elif rule['award']['type'] == 'prize':
+                prize = Prize.objects.filter(id=rule['award']['value']).first()
+                if prize:
+                    str_award = prize.name
+            else:
+                str_award = '{}{}'.format(
+                    rule['award']['value'],
+                    self.award_type_format(rule['award']['type'])
+                )
+            string.append(str_award)
+            return string
+        if self.type == self.TYPE_DRAW:
+            for award_item in rule['awards']:
+                str_weight = '權重：({}) -  '.format(award_item['weight'])
+                if award_item['award']['type'] == 'badge':
+                    badge = Badge.objects.filter(id=award_item['award']['value']).first()
+                    if badge:
+                        str_award = badge.name
+                elif award_item['award']['type'] == 'prize':
+                    prize = Prize.objects.filter(id=award_item['award']['value']).first()
+                    if prize:
+                        str_award = prize.name
+                else:
+                    str_award = '  {}{}'.format(
+                        award_item['award']['value'],
+                        self.award_type_format(award_item['award']['type'])
+                    )
+                string.append(str_weight + str_award)
+            return string
+        if self.type == self.TYPE_DIAMOND:
+            for award_item in rule['awards']:
+                if award_item['from'] == award_item['to']:
+                    str_rank = '{}鑽石'.format(award_item['from'])
+                else:
+                    str_rank = '{} - {}鑽石：'.format(award_item['from'], award_item['to'])
+                if award_item['award']['type'] == 'badge':
+                    badge = Badge.objects.filter(id=award_item['award']['value']).first()
+                    if badge:
+                        str_award = badge.name
+                elif award_item['award']['type'] == 'prize':
+                    prize = Prize.objects.filter(id=award_item['award']['value']).first()
+                    if prize:
+                        str_award = prize.name
+                else:
+                    str_award = '  {}{}'.format(
+                        award_item['award']['value'],
+                        self.award_type_format(award_item['award']['type'])
+                    )
+                string.append(str_rank + str_award)
+            return string
+        return None
+
+    @staticmethod
+    def award_type_format(type):
+        if type == 'experience':
+            return '經驗值'
+        elif type == 'icoin':
+            return 'i幣'
+        elif type == 'coin':
+            return '金幣'
+        elif type == 'star':
+            return '元氣'
+        elif type == 'contribution':
+            return '貢獻值'
+        return None
 
     def settle(self):
         """ 结算当次活动，找出所有参与记录，然后统计满足条件的自动发放奖励

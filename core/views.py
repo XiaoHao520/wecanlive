@@ -95,6 +95,7 @@ class BankViewSet(viewsets.ModelViewSet):
 
 
 class ImageViewSet(viewsets.ModelViewSet):
+    filter_fields = ['author', 'name', 'is_active', 'id']
     queryset = m.ImageModel.objects.all()
     serializer_class = s.ImageSerializer
     ordering = ['-pk']
@@ -356,6 +357,10 @@ class UserViewSet(viewsets.ModelViewSet):
         # deal with the "remember me" option
         if request.data.get('remember', '') not in {True, '1'}:
             request.session.set_expiry(0)
+
+        # if user.is_superuser:
+        #     m.AdminLog.make(request.user, request.user,
+        #                     '管理员用户【{}】登录了系统'.format(request.user.username))
 
         login(request, user)
 
@@ -762,7 +767,9 @@ class MemberViewSet(viewsets.ModelViewSet):
 
         if rank_type and rank_type == 'rank_diamond':
             qs = m.Member.objects.annotate(
-                amount=m.models.Sum('user__prizeorders_owned__receiver_prize_transaction__amount')
+                amount=m.models.Sum(
+                    'user__creditdiamondtransactions_debit__prize_orders__diamond_transaction__amount'
+                )
             ).order_by('-amount')
         if rank_type and rank_type == 'rank_prize':
             qs = m.Member.objects.annotate(
@@ -892,6 +899,25 @@ class MemberViewSet(viewsets.ModelViewSet):
             data.append(item)
         return Response(data=sorted(data, key=lambda item: item['first_pk'], reverse=True))
 
+    @detail_route(methods=['GET'])
+    def get_gift_list(self, request, pk):
+        from urllib.parse import urljoin
+        results = map(
+            lambda prize: dict(
+                id=prize.id,
+                name=prize.name,
+                amount=int(prize.amount),
+                icon=urljoin(request.get_raw_uri(), prize.icon.image.url),
+            ),
+            m.Prize.objects.raw('''
+                select p.id, sum(pt.amount) amount
+                from core_prize p, core_prize_transaction pt
+                where pt.prize_id = p.id and pt.user_debit_id = {}
+                group by p.id
+            '''.format(pk))
+        )
+        return Response(data=list(results))
+
 
 class RobotViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
@@ -975,6 +1001,16 @@ class BadgeViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.Badge.objects.all()
     serializer_class = s.BadgeSerializer
+    ordering = ['-pk']
+
+    def get_queryset(self):
+        return interceptor_get_queryset_kw_field(self)
+
+
+class BadgeRecordViewSet(viewsets.ModelViewSet):
+    filter_fields = '__all__'
+    queryset = m.BadgeRecord.objects.all()
+    serializer_class = s.BadgeRecordSerializer
     ordering = ['-pk']
 
     def get_queryset(self):
@@ -1908,3 +1944,35 @@ class WithdrawRecordViewSet(viewsets.ModelViewSet):
             member.add_withdraw_blacklisted()
 
         return Response(data=True)
+
+
+class RankRecordViewSet(viewsets.ModelViewSet):
+    filter_fields = '__all__'
+    queryset = m.RankRecord.objects.all()
+    serializer_class = s.RankRecordSerializer
+    permission_classes = [p.IsAdminOrReadOnly]
+
+    def get_queryset(self):
+        qs = interceptor_get_queryset_kw_field(self)
+        rank_type = self.request.query_params.get('rank_type')
+        duration = self.request.query_params.get('duration')
+        if rank_type and duration:
+            qs = qs.filter(duration=duration).order_by('-{}'.format(rank_type))
+        return qs
+
+
+class AdminLogViewSet(viewsets.ModelViewSet):
+    filter_fields = '__all__'
+    queryset = m.AdminLog.objects.all()
+    serializer_class = s.AdminLogSerializer
+    ordering = ['-pk']
+
+    def get_queryset(self):
+        return interceptor_get_queryset_kw_field(self)
+
+
+class OptionViewSet(viewsets.ModelViewSet):
+    filter_fields = '__all__'
+    queryset = m.Option.objects.all()
+    serializer_class = s.OptionSerializer
+    ordering = ['-pk']
