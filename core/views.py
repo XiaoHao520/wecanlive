@@ -899,25 +899,6 @@ class MemberViewSet(viewsets.ModelViewSet):
             data.append(item)
         return Response(data=sorted(data, key=lambda item: item['first_pk'], reverse=True))
 
-    @detail_route(methods=['GET'])
-    def get_gift_list(self, request, pk):
-        from urllib.parse import urljoin
-        results = map(
-            lambda prize: dict(
-                id=prize.id,
-                name=prize.name,
-                amount=int(prize.amount),
-                icon=urljoin(request.get_raw_uri(), prize.icon.image.url),
-            ),
-            m.Prize.objects.raw('''
-                select p.id, sum(pt.amount) amount
-                from core_prize p, core_prize_transaction pt
-                where pt.prize_id = p.id and pt.user_debit_id = {}
-                group by p.id
-            '''.format(pk))
-        )
-        return Response(data=list(results))
-
 
 class RobotViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
@@ -1001,20 +982,58 @@ class BadgeViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.Badge.objects.all()
     serializer_class = s.BadgeSerializer
-    ordering = ['-pk']
+
+    # ordering = ['-pk']
 
     def get_queryset(self):
-        return interceptor_get_queryset_kw_field(self)
+        qs = interceptor_get_queryset_kw_field(self)
+
+        live_author = self.request.query_params.get('live_author')
+        next_diamond_badge = self.request.query_params.get('next_diamond_badge')
+
+        if live_author and next_diamond_badge:
+            live_author_diamond_count = m.User.objects.get(pk=live_author).member.diamond_count()
+            qs = qs.filter(
+                date_from__lt=datetime.now(),
+                date_to__gt=datetime.now(),
+                badge_item=m.Badge.ITEM_COUNT_RECEIVE_DIAMOND,
+                item_value__gt=live_author_diamond_count,
+            ).order_by('item_value')
+
+        return qs
 
 
 class BadgeRecordViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.BadgeRecord.objects.all()
     serializer_class = s.BadgeRecordSerializer
-    ordering = ['-pk']
+
+    # ordering = ['-pk']
 
     def get_queryset(self):
-        return interceptor_get_queryset_kw_field(self)
+        qs = interceptor_get_queryset_kw_field(self)
+        live_author = self.request.query_params.get('live_author')
+        if live_author:
+            qs = qs.extra(
+                select=dict(
+                    date_active='DATE_ADD(core_badge_record.date_created, INTERVAL core_badge.validity DAY)'
+                ),
+                where=[
+                    'DATE_ADD(core_badge_record.date_created, INTERVAL core_badge.validity DAY)>\'{}\''.format(
+                        datetime.now())
+                ]
+                # active=models.F('date_created')+timedelta(days=badge__validity)
+            ).filter(
+                # user_debit_id=F('user_credit_id')+F,
+                author__id=live_author,
+                badge__date_from__lt=datetime.now(),
+                badge__date_to__gt=datetime.now(),
+                # date_active__gt=datetime.now(),
+            )
+            print(qs)
+            # print(qs.query)
+
+        return qs
 
 
 class DailyCheckInLogViewSet(viewsets.ModelViewSet):

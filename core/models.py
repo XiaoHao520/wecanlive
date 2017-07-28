@@ -432,6 +432,25 @@ class Member(AbstractMember,
         else:
             return False
 
+    def add_diamond_badge(self):
+        """
+        增加主播收到鑽石徽章.
+        在觀衆送禮物時觸發
+        """
+        badges = Badge.objects.filter(
+            date_from__lt=datetime.now(),
+            date_to__gt=datetime.now(),
+            badge_item=Badge.ITEM_COUNT_RECEIVE_DIAMOND,
+            item_value__lt=self.diamond_count()
+        ).exclude(
+            records__author=self.user
+        ).all()
+        for badge in badges:
+            BadgeRecord.objects.create(
+                author=self.user,
+                badge=badge,
+            )
+
 
 class Robot(models.Model):
     """ 机器人
@@ -2007,6 +2026,9 @@ class PrizeOrder(UserOwnedModel):
             sender_star_index_transaction=sender_star_index_transaction,
         )
 
+        # 更新主播徽章
+        live.author.member.add_diamond_badge()
+
         return order
 
     @staticmethod
@@ -2084,6 +2106,9 @@ class PrizeOrder(UserOwnedModel):
             receiver_star_index_transaction=receiver_star_index_transaction,
             sender_star_index_transaction=sender_star_index_transaction,
         )
+
+        # 更新主播徽章
+        live.author.member.add_diamond_badge()
 
         return order
 
