@@ -439,6 +439,33 @@ class Member(AbstractMember,
         for withdraw_record in WithdrawRecord.objects.filter(author=self.user, status=WithdrawRecord.STATUS_PENDING):
             withdraw_record.reject()
 
+    def get_first_live_date(self):
+        """用戶第一次直播的時間"""
+
+        if self.user.lives_owned.exists():
+            return self.user.lives_owned.order_by('-date_created').first().date_created
+        else:
+            return False
+
+    def add_diamond_badge(self):
+        """
+        增加主播收到鑽石徽章.
+        在觀衆送禮物時觸發
+        """
+        badges = Badge.objects.filter(
+            date_from__lt=datetime.now(),
+            date_to__gt=datetime.now(),
+            badge_item=Badge.ITEM_COUNT_RECEIVE_DIAMOND,
+            item_value__lt=self.diamond_count()
+        ).exclude(
+            records__author=self.user
+        ).all()
+        for badge in badges:
+            BadgeRecord.objects.create(
+                author=self.user,
+                badge=badge,
+            )
+
 
 class Robot(models.Model):
     """ 机器人
@@ -1607,7 +1634,21 @@ class LiveWatchLog(UserOwnedModel,
         self.date_leave = datetime.now()
         self.duration += int((self.date_leave - self.date_enter).seconds / 60) + \
                          (self.date_leave - self.date_enter).days * 1440 or 1
+
         self.save()
+
+        # 累計觀看時間
+        wathch_mission_preferences = self.author.preferences.filter(key='watch_mission_time').first()
+        mission_achivevments = self.author.starmissionachievements_owned.filter(
+            type=StarMissionAchievement.TYPE_WATCH,
+            date_created__gt=self.date_enter).order_by('-date_created')
+        if mission_achivevments.exists():
+            wathch_mission_preferences.value = int(wathch_mission_preferences.value) + \
+                                               (datetime.now() - mission_achivevments.first().date_created).seconds
+        else:
+            wathch_mission_preferences.value = int(wathch_mission_preferences.value) + (
+            self.date_leave - self.date_enter).seconds
+        wathch_mission_preferences.save()
 
     def get_duration(self):
         if self.duration:
@@ -2141,6 +2182,9 @@ class PrizeOrder(UserOwnedModel):
             sender_star_index_transaction=sender_star_index_transaction,
         )
 
+        # 更新主播徽章
+        live.author.member.add_diamond_badge()
+
         return order
 
     @staticmethod
@@ -2158,8 +2202,7 @@ class PrizeOrder(UserOwnedModel):
         assert watch_log, '用戶還沒有進入直播觀看，不能購買禮物贈送'
 
         total_price = count * prize.price
-
-        assert prize.get_balance(user, source_tag) <= count, '贈送失敗，禮物剩餘不足'
+        assert int(prize.get_balance(user, source_tag)) >= count, '贈送失敗，禮物剩餘不足'
         # 礼物流水
         receiver_prize_transaction = PrizeTransaction.objects.create(
             amount=count,
@@ -2219,6 +2262,9 @@ class PrizeOrder(UserOwnedModel):
             receiver_star_index_transaction=receiver_star_index_transaction,
             sender_star_index_transaction=sender_star_index_transaction,
         )
+
+        # 更新主播徽章
+        live.author.member.add_diamond_badge()
 
         return order
 
@@ -3088,18 +3134,33 @@ class StarBoxRecord(UserOwnedModel):
         db_table = 'core_star_box_record'
 
     @staticmethod
-    def receiver_open_star_box(user, live):
-        """主播开星光宝盒
+    def open_star_box(user, live, identity):
+        """开星光宝盒
+        identity = 'receiver' 主播開盒
+        identity = 'sender'   观众开盒
         """
-        assert user.member.get_star_index_receiver_balance() > 500, '打開寶盒失敗:你的元氣指數不夠,請再努力直播!'
-
+        receiver_star_credit = None
+        sender_star_credit = None
+        if identity == 'receiver':
+            assert user.member.get_star_index_receiver_balance() > 500, '打開寶盒失敗:你的元氣指數不夠,請再努力直播!'
+            receiver_star_credit = CreditStarIndexReceiverTransaction.objects.create(
+                user_credit=user,
+                amount=500,
+                remark='主播打开元气宝盒',
+                type=CreditStarIndexReceiverTransaction.TYPE_BOX_EXPENSE,
+            )
+        elif identity == 'sender':
+            assert user.member.get_star_index_sender_balance() > 500, '打開寶盒失敗:你的元氣指數不夠,請再努力直播!'
+            sender_star_credit = CreditStarIndexSenderTransaction.objects.create(
+                user_credit=user,
+                amount=500,
+                remark='觀衆開元氣寶盒',
+                type=CreditStarIndexSenderTransaction.TYPE_BOX_EXPENSE,
+            )
+        else:
+            return False
         # 元气指数消耗
-        star_index_credit = CreditStarIndexReceiverTransaction.objects.create(
-            user_credit=user,
-            amount=500,
-            remark='主播打开元气宝盒',
-            type=CreditStarIndexReceiverTransaction.TYPE_BOX_EXPENSE,
-        )
+
         # 随机奖励 0->金币，１->钻石，2->礼物
         award = random.randint(0, 2)
         coin_debit = None
@@ -3144,7 +3205,8 @@ class StarBoxRecord(UserOwnedModel):
         box_record = StarBoxRecord.objects.create(
             author=user,
             live=live,
-            receiver_star_index_transaction=star_index_credit,
+            receiver_star_index_transaction=receiver_star_credit,
+            sender_star_index_transaction=sender_star_credit,
             coin_transaction=coin_debit,
             diamond_transaction=diamond_debit,
             prize_transaction=prize_debit,
