@@ -1091,6 +1091,20 @@ class FamilyMemberViewSet(viewsets.ModelViewSet):
             )
         return qs
 
+    @list_route(methods=['POST'])
+    def family_manage(self, request):
+        members = m.FamilyMember.objects.filter(
+            id__in=request.data.get('select'),
+            family__id=request.data.get('family'),
+        ).all()
+        for member in members:
+            if request.data.get('type') == 'manage':
+                member.role = m.FamilyMember.ROLE_ADMIN
+                member.save()
+            if request.data.get('type') == 'delete':
+                member.delete()
+        return Response(data=True)
+
 
 class FamilyArticleViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'

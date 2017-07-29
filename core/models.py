@@ -2029,6 +2029,9 @@ class PrizeOrder(UserOwnedModel):
         # 更新主播徽章
         live.author.member.add_diamond_badge()
 
+        # todo
+        # 檢測當日購買這個禮物類型夠不夠送桌布
+
         return order
 
     @staticmethod
@@ -2307,6 +2310,8 @@ class ExtraPrize(EntityModel):
         verbose_name = '附赠礼物'
         verbose_name_plural = '附赠礼物'
         db_table = 'core_extra_prize'
+
+    # todo 每次用戶购买礼物就检测当天购买这个礼物分类额度，发放礼物，注意重复发送
 
 
 class StatisticRule(EntityModel):
