@@ -1030,7 +1030,6 @@ class BadgeRecordViewSet(viewsets.ModelViewSet):
                 badge__date_to__gt=datetime.now(),
                 # date_active__gt=datetime.now(),
             )
-            print(qs)
             # print(qs.query)
 
         return qs
