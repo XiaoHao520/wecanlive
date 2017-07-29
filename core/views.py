@@ -1901,4 +1901,24 @@ class OptionViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.Option.objects.all()
     serializer_class = s.OptionSerializer
-    ordering = ['-pk']
+    permission_classes = [p.IsAdminOrReadOnly]
+
+    @list_route(methods=['GET'])
+    def all(self, request):
+        data = dict()
+        for opt in m.Option.objects.all():
+            data[opt.key] = opt.value
+        return Response(data=data)
+
+    @list_route(methods=['GET'])
+    def get(self, request):
+        return Response(data=m.Option.get(request.GET.get('name')))
+
+    @list_route(methods=['POST'], permission_classes=[p.IsAdminUser])
+    def set(self, request):
+        # print(request.data)
+        m.Option.set(
+            request.data.get('name'),
+            request.data.get('value'),
+        )
+        return Response(data=m.Option.get(request.data.get('name')))
