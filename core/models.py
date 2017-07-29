@@ -2970,6 +2970,22 @@ class Movie(UserOwnedModel,
         default='',
     )
 
+    TYPE_MOVIE = 'MOVIE'
+    TYPE_LIVE = 'LIVE'
+    TYPE_CHOICES = (
+        (TYPE_MOVIE, '影片'),
+        (TYPE_LIVE, '直播'),
+    )
+
+    type = models.CharField(
+        verbose_name='類型',
+        max_length=20,
+        choices=TYPE_CHOICES,
+        blank=True,
+        default='',
+        help_text='當影片分類爲熱門視頻時需要選擇',
+    )
+
     class Meta:
         verbose_name = '影片节目'
         verbose_name_plural = '影片节目'

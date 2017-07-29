@@ -1581,7 +1581,11 @@ class MovieViewSet(viewsets.ModelViewSet):
     ordering = ['-pk']
 
     def get_queryset(self):
-        return interceptor_get_queryset_kw_field(self)
+        qs = interceptor_get_queryset_kw_field(self)
+        category = self.request.query_params.get('category')
+        if category:
+            qs = qs.filter(category=category)
+        return qs
 
 
 class StarBoxViewSet(viewsets.ModelViewSet):

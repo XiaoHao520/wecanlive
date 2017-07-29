@@ -1050,6 +1050,11 @@ class VisitLogSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
 
 class MovieSerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    thumbnail_item = ImageSerializer(
+        source='thumbnail',
+        read_only=True,
+    )
+
     class Meta:
         model = m.Movie
         fields = '__all__'
