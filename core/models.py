@@ -531,6 +531,37 @@ class Robot(models.Model):
 
 
 class CelebrityCategory(EntityModel):
+    TYPE_LIVE = 'LIVE'
+    TYPE_ACTIVITY = 'ACTIVITY'
+    TYPE_CHOICES = (
+        (TYPE_LIVE, '直播'),
+        (TYPE_ACTIVITY, '活動'),
+    )
+
+    type = models.CharField(
+        verbose_name='分類類別',
+        max_length=20,
+        choices=TYPE_CHOICES,
+        blank=True,
+        null=True,
+    )
+
+    live_category = models.ForeignKey(
+        verbose_name='直播分類',
+        to='LiveCategory',
+        related_name='celebrity_categories',
+        null=True,
+        blank=True,
+    )
+
+    activity = models.ForeignKey(
+        verbose_name='活動',
+        to='Activity',
+        related_name='celebrity_categories',
+        null=True,
+        blank=True,
+    )
+
     leader = models.ForeignKey(
         verbose_name='当前获得者',
         to=User,
@@ -543,6 +574,19 @@ class CelebrityCategory(EntityModel):
         verbose_name = '众星云集分类'
         verbose_name_plural = '众星云集分类'
         db_table = 'core_celebrity_category'
+
+    def get_category(self):
+        if self.type == self.TYPE_LIVE and self.live_category:
+            return dict(
+                category_id=self.live_category.id,
+                category_name=self.live_category.name,
+            )
+        elif self.type == self.TYPE_ACTIVITY and self.activity:
+            return dict(
+                category_id=self.activity.id,
+                category_name=self.activity.name,
+            )
+        return dict(category_id=None, category_name=None)
 
 
 class CreditStarTransaction(AbstractTransactionModel):

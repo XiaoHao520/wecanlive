@@ -529,6 +529,10 @@ class RobotSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
 
 class CelebrityCategorySerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    leader_nickname = serializers.ReadOnlyField(source='leader.member.nickname')
+
+    category = serializers.ReadOnlyField(source='get_category')
+
     class Meta:
         model = m.CelebrityCategory
         fields = '__all__'
