@@ -1723,7 +1723,8 @@ class LiveWatchLog(UserOwnedModel,
 class ActiveEvent(UserOwnedModel,
                   AbstractMessageModel,
                   CommentableModel,
-                  UserMarkableModel):
+                  UserMarkableModel,
+                  InformableModel):
     """ 个人动态
     理论上只发图文，但是支持完整的消息格式
     用户可以点赞，使用 UserMark 的 subject=like
