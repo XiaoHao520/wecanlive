@@ -852,6 +852,13 @@ class DailyCheckInLog(UserOwnedModel):
         auto_now_add=True,
     )
 
+    prize_coin_transaction = models.OneToOneField(
+        verbose_name='奖励金币流水记录',
+        to='CreditCoinTransaction',
+        null=True,
+        blank=True,
+    )
+
     prize_star_transaction = models.OneToOneField(
         verbose_name='奖励星星流水记录',
         to='CreditStarTransaction',

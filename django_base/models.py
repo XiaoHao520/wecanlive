@@ -1160,6 +1160,9 @@ class Option(models.Model):
         opt.value = val or ''
         opt.save()
 
+    def __str__(self):
+        return '{}: {}'.format(self.key, self.value)
+
 
 class Contact(UserOwnedModel):
     """
