@@ -3400,6 +3400,30 @@ class Inform(UserOwnedModel,
         verbose_name_plural = '举报'
         db_table = 'core_inform'
 
+    def get_accused_object(self):
+        if self.lives.first():
+            return self.lives.first()
+        elif self.activeevents.first():
+            return self.activeevents.first()
+        return None
+
+    def accused_person(self):
+        accused_object = self.get_accused_object()
+        return dict(
+            accused_id=accused_object.author.id,
+            accused_mobile=accused_object.author.member.mobile,
+        )
+
+    def accused_object_info(self):
+        accused_object = self.get_accused_object()
+        if not accused_object:
+            return None
+        return dict(
+            object_id=accused_object.id,
+            object_type=type(accused_object)._meta.model_name,
+            object_name=accused_object.name if hasattr(accused_object, 'name') else accused_object.author.member.nickname,
+        )
+
 
 class Feedback(AbstractMessageModel,
                UserOwnedModel):

@@ -1102,6 +1102,14 @@ class LevelOptionSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
 
 class InformSerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    author_nickname = serializers.ReadOnlyField(source='author.member.nickname')
+
+    author_mobile = serializers.ReadOnlyField(source='author.member.mobile')
+
+    accused_person = serializers.ReadOnlyField()
+
+    accused_object_info = serializers.ReadOnlyField()
+
     class Meta:
         model = m.Inform
         fields = '__all__'
