@@ -618,6 +618,7 @@ class CreditCoinTransaction(AbstractTransactionModel):
     TYPE_EXCHANGE = 'EXCHANGE'
     TYPE_BOX = 'BOX'
     TYPE_BARRAGE = 'BARRAGE'
+    TYPE_FAMILY_MODIFY = 'FAMILY_MODIFY'
     TYPE_CHOICES = (
         (TYPE_ADMIN, '管理員發放'),
         (TYPE_LIVE_GIFT, '直播赠送'),
@@ -625,6 +626,7 @@ class CreditCoinTransaction(AbstractTransactionModel):
         (TYPE_EXCHANGE, '兌換'),
         (TYPE_BOX, '打開元氣寶盒'),
         (TYPE_BARRAGE, '發送彈幕消費'),
+        (TYPE_FAMILY_MODIFY, '家族長修改頭銜'),
     )
 
     type = models.CharField(
@@ -969,6 +971,11 @@ class FamilyMember(UserOwnedModel):
         choices=ROLE_CHOICES,
     )
 
+    is_ban = models.BooleanField(
+        verbose_name='是否禁言',
+        default=False,
+    )
+
     class Meta:
         verbose_name = '家族成员'
         verbose_name_plural = '家族成员'
@@ -1021,6 +1028,30 @@ class FamilyMember(UserOwnedModel):
         for watch_log in watch_logs:
             total_prize += watch_log.get_total_prize()
         return total_prize
+
+    @staticmethod
+    def modify_member_title(user, member_select, title, family):
+        """修改家族頭銜
+            @:param member_select 要修改的成員ID数组
+                    title         修改的头衔
+        """
+        members = FamilyMember.objects.filter(
+            id__in=member_select
+        )
+        amount = int(Option.get('family_modify_title_coin') or 10) * members.count()
+        assert user.id == family.author.id, '你不是家族族長不能修改'
+        assert int(user.member.get_coin_balance()) > amount, '金幣餘額不足'
+        CreditCoinTransaction.objects.create(
+            user_credit=user,
+            amount=amount,
+            type=CreditCoinTransaction.TYPE_FAMILY_MODIFY,
+            remark='家族長修改頭銜',
+        )
+        for member in members.all():
+            member.title = title
+            member.save()
+
+        return True
 
 
 class FamilyArticle(UserOwnedModel,
@@ -1160,10 +1191,27 @@ class FamilyMission(UserOwnedModel,
         null=True,
     )
 
+    content = models.TextField(
+        verbose_name='内容(規則)',
+        blank=True,
+        default='',
+    )
+
+    logo = models.OneToOneField(
+        verbose_name='任务海报',
+        to=ImageModel,
+        related_name='family_mission',
+        null=True,
+        blank=True,
+    )
+
     class Meta:
         verbose_name = '家族任务'
         verbose_name_plural = '家族任务'
         db_table = 'core_family_mission'
+
+    def is_end(self):
+        return datetime.now().date() > self.date_end
 
 
 class FamilyMissionAchievement(UserOwnedModel):
@@ -1538,7 +1586,7 @@ class LiveWatchLog(UserOwnedModel,
                                                (datetime.now() - mission_achivevments.first().date_created).seconds
         else:
             wathch_mission_preferences.value = int(wathch_mission_preferences.value) + (
-            self.date_leave - self.date_enter).seconds
+                self.date_leave - self.date_enter).seconds
         wathch_mission_preferences.save()
 
     def get_duration(self):
@@ -2311,7 +2359,7 @@ class ExtraPrize(EntityModel):
         verbose_name_plural = '附赠礼物'
         db_table = 'core_extra_prize'
 
-    # todo 每次用戶购买礼物就检测当天购买这个礼物分类额度，发放礼物，注意重复发送
+        # todo 每次用戶购买礼物就检测当天购买这个礼物分类额度，发放礼物，注意重复发送
 
 
 class StatisticRule(EntityModel):

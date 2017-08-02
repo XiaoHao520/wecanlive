@@ -664,6 +664,13 @@ class FamilyMissionSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
     author_mobile = serializers.ReadOnlyField(source='author.member.mobile')
 
+    logo_item = ImageSerializer(
+        source='logo',
+        read_only=True,
+    )
+
+    is_end = serializers.ReadOnlyField()
+
     class Meta:
         model = m.FamilyMission
         fields = '__all__'
