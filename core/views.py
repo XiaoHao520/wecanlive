@@ -1632,6 +1632,16 @@ class ActivityViewSet(viewsets.ModelViewSet):
         return qs
 
 
+class ActivityPageViewSet(viewsets.ModelViewSet):
+    filter_fields = '__all__'
+    queryset = m.ActivityPage.objects.all()
+    serializer_class = s.ActivityPageSerializer
+    ordering = ['-pk']
+
+    def get_queryset(self):
+        return interceptor_get_queryset_kw_field(self)
+
+
 class ActivityParticipationViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.ActivityParticipation.objects.all()

@@ -2919,7 +2919,7 @@ class Activity(EntityModel):
         """
 
 
-class ActivityPage(models.Model):
+class ActivityPage(EntityModel):
     banner = models.ForeignKey(
         verbose_name='海报',
         to=ImageModel,

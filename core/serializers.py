@@ -1037,6 +1037,19 @@ class ActivitySerializer(QueryFieldsMixin, serializers.ModelSerializer):
         fields = '__all__'
 
 
+class ActivityPageSerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    banner_item = ImageSerializer(
+        source='banner',
+        read_only=True,
+    )
+
+    activity_type = serializers.ReadOnlyField(source='activity.type')
+
+    class Meta:
+        model = m.ActivityPage
+        fields = '__all__'
+
+
 class ActivityParticipationSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.ActivityParticipation
@@ -1077,6 +1090,8 @@ class StarBoxRecordSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     diamond_amount = serializers.ReadOnlyField(source="diamond_transaction.amount")
     prize_name = serializers.ReadOnlyField(source="prize_transaction.prize.name")
     prize_amount = serializers.ReadOnlyField(source="prize_transaction.amount")
+    author_mobile = serializers.ReadOnlyField(source='author.member.mobile')
+    author_nickname = serializers.ReadOnlyField(source='author.member.nickname')
 
     class Meta:
         model = m.StarBoxRecord

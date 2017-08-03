@@ -11,6 +11,7 @@ WE CAN LIVE 直播平台
 | 文章-举报规则         | article_inform_rules            | 富文本   |                                    |
 | 文章-VIP规则          | article_vip_rules               | 富文本   |                                    |
 | 等级规则              | level_rules                     | JSON     | 五种等级的升级级差关系             |
+| 家族等级规则          | family_level_rules              | JSON     | 家族升级所需贡献值
 | VIP规则               | vip_rules                       | JSON     | 后台VIP管理的VIP权限矩阵以及LOGO   |
 | 机器人规则            | robot_rules                     | JSON     |                                    |
 | 签到星星奖励          | daily_sign_award_stars          | JSON     | [1,2,3,4]为连续签到奖励的星星数量  |
