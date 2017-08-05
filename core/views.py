@@ -1044,6 +1044,21 @@ class DailyCheckInLogViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return interceptor_get_queryset_kw_field(self)
 
+    @list_route(methods=['POST'])
+    def daily_checkin(self, request):
+        today_daily = m.DailyCheckInLog.objects.filter(
+            author=self.request.user,
+            date_created__date=datetime.now().date(),
+        ).exists()
+        if today_daily:
+            return response_fail('今天已經簽到了')
+        daily_check = m.DailyCheckInLog.check_in(self.request.user)
+        print(daily_check)
+        return Response(data=dict(
+            daily_check=s.DailyCheckInLogSerializer(daily_check['daily_check']).data,
+            continue_daily_check=s.DailyCheckInLogSerializer(daily_check['continue_daily_check']).data,
+        ))
+
 
 class FamilyViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
@@ -1126,7 +1141,7 @@ class FamilyMemberViewSet(viewsets.ModelViewSet):
         user = self.request.user
         title = request.data.get('title')
         family = m.Family.objects.get(pk=request.data.get('family'))
-        m.FamilyMember.modify_member_title(user, select, title,family)
+        m.FamilyMember.modify_member_title(user, select, title, family)
         return Response(data=True)
 
 
@@ -2045,3 +2060,17 @@ class OptionViewSet(viewsets.ModelViewSet):
     queryset = m.Option.objects.all()
     serializer_class = s.OptionSerializer
     ordering = ['-pk']
+
+    @list_route(methods=['GET'])
+    def get_guide_image(self, request):
+        option=[]
+        if m.Option.get('guide_page'):
+            option = json.loads(m.Option.get('guide_page'))
+        images = m.ImageModel.objects.filter(
+            id__in=option,
+        ).all()
+        data = []
+        for image in images:
+            data.append(image.url())
+
+        return Response(data=data)

@@ -37,4 +37,5 @@ WE CAN LIVE 直播平台
 | 元气宝盒随机礼物列表   | star_box_prize_list             | JSON     | 打开元气宝盒随机礼物列表和数量     |
 | 家族修改头衔消耗金币   | family_modify_title_coin        | 整数     | 家族长修改头衔每次消耗金币         |
 | 家族任务元件          | family_mission_element          | JSON     | 家族任务元件 数值为0是禁用         |
-| 家族任务奖励元件      |  family_award_element   | JSON      | 家族任务奖励元件                 |
+| 家族任务奖励元件      |  family_award_element            | JSON     | 家族任务奖励元件                 |
+| 引导页图片            |  guide_page                     | JSON     | 引导页图片                       |

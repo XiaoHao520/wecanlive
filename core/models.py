@@ -451,6 +451,14 @@ class Member(AbstractMember,
                 badge=badge,
             )
 
+    def is_checkin_daily(self):
+        """
+        今天是否已经签到
+        """
+        return self.user.dailycheckinlogs_owned.filter(
+            date_created__date=datetime.now().date()
+        ).exists()
+
 
 class Robot(models.Model):
     """ 机器人
@@ -518,10 +526,12 @@ class CreditStarTransaction(AbstractTransactionModel):
     TYPE_LIVE_GIFT = 'LIVE_GIFT'
     TYPE_EARNING = 'EARNING'
     TYPE_ADMIN = 'ADMIN'
+    TYPE_DAILY = 'DAILY'
     TYPE_CHOICES = (
         (TYPE_LIVE_GIFT, '直播赠送'),
         (TYPE_EARNING, '任務獲得'),
         (TYPE_ADMIN, '後臺補償'),
+        (TYPE_DAILY, '签到获得'),
     )
 
     type = models.CharField(
@@ -619,6 +629,7 @@ class CreditCoinTransaction(AbstractTransactionModel):
     TYPE_BOX = 'BOX'
     TYPE_BARRAGE = 'BARRAGE'
     TYPE_FAMILY_MODIFY = 'FAMILY_MODIFY'
+    TYPE_DAILY = 'DAILY'
     TYPE_CHOICES = (
         (TYPE_ADMIN, '管理員發放'),
         (TYPE_LIVE_GIFT, '直播赠送'),
@@ -627,6 +638,7 @@ class CreditCoinTransaction(AbstractTransactionModel):
         (TYPE_BOX, '打開元氣寶盒'),
         (TYPE_BARRAGE, '發送彈幕消費'),
         (TYPE_FAMILY_MODIFY, '家族長修改頭銜'),
+        (TYPE_DAILY, '每日签到获得'),
     )
 
     type = models.CharField(
@@ -764,6 +776,19 @@ class DailyCheckInLog(UserOwnedModel):
         blank=True,
     )
 
+    coin_transaction = models.OneToOneField(
+        verbose_name='奖励金币记录',
+        to='CreditCoinTransaction',
+        related_name='daily_check_in_log',
+        null=True,
+        blank=True,
+    )
+
+    is_continue = models.BooleanField(
+        verbose_name='连签奖励',
+        default=False,
+    )
+
     class Meta:
         verbose_name = '每日签到'
         verbose_name_plural = '每日签到'
@@ -775,8 +800,91 @@ class DailyCheckInLog(UserOwnedModel):
         :param user:
         :return:
         """
-        # TODO: 1. 同一天不能重复签到
-        # TODO: 2. 签到之后要计算发放相应的奖励
+
+        daily_option = json.loads(Option.get('daily_sign_award'))
+        # 每日签到奖励
+        award_list = daily_option['daily_seven_days']
+        # 连签配置
+        continue_award = daily_option['daily_for_days']
+        # 今天簽到獎勵
+        today_daily_award = award_list[datetime.now().weekday()]
+        daily_check = None
+        continue_daily_check = None
+        coin_transaction = None
+        star_transaction = None
+        if today_daily_award['type'] == 'star':
+            star_transaction = CreditStarTransaction.objects.create(
+                user_debit=user,
+                amount=today_daily_award['value'],
+                remark='每日签到获得',
+                type=CreditStarTransaction.TYPE_DAILY,
+            )
+        elif today_daily_award['type'] == 'coin':
+            coin_transaction = CreditCoinTransaction.objects.create(
+                user_debit=user,
+                amount=today_daily_award['value'],
+                remark='每日签到获得',
+                type=CreditCoinTransaction.TYPE_DAILY,
+            )
+        daily_check = DailyCheckInLog.objects.create(
+            author=user,
+            prize_star_transaction=star_transaction,
+            coin_transaction=coin_transaction,
+        )
+
+        # 连签要求天数
+        continue_check = DailyCheckInLog.objects.filter(
+            author=user,
+            is_continue=True,
+        ).order_by('-date_created')
+        last_continue_check_date = None
+        if continue_check.exists():
+            last_continue_check_date = continue_check.first().date_created
+        else:
+            last_continue_check_date = DailyCheckInLog.objects.filter(
+                author=user,
+            ).order_by('date_created').first().date_created
+
+        continue_days = continue_award['days']
+        continue_success = True
+        while continue_days > 0:
+            continue_days -= 1
+            daily = DailyCheckInLog.objects.filter(
+                author=user,
+                date_created__date=(datetime.now() - timedelta(days=continue_days)).date(),
+                date_created__date__gt=last_continue_check_date.date(),
+            ).exists()
+            if not daily:
+                continue_success = False
+        # 连签奖励
+        if continue_success:
+            continue_coin_transaction = None
+            continue_star_transaction = None
+            if continue_award['type'] == 'star':
+                continue_star_transaction = CreditStarTransaction.objects.create(
+                    user_debit=user,
+                    amount=continue_award['value'],
+                    remark='连续签到获得',
+                    type=CreditStarTransaction.TYPE_DAILY,
+                )
+            elif continue_award['type'] == 'coin':
+                continue_coin_transaction = CreditCoinTransaction.objects.create(
+                    user_debit=user,
+                    amount=continue_award['value'],
+                    remark='连续签到获得',
+                    type=CreditCoinTransaction.TYPE_DAILY,
+                )
+            continue_daily_check = DailyCheckInLog.objects.create(
+                author=user,
+                prize_star_transaction=continue_star_transaction,
+                coin_transaction=continue_coin_transaction,
+                is_continue=True,
+            )
+
+        return dict(
+            daily_check=daily_check,
+            continue_daily_check=continue_daily_check,
+        )
 
 
 class Family(UserOwnedModel,
@@ -847,6 +955,11 @@ class Family(UserOwnedModel,
         default='',
     )
 
+    is_verify = models.BooleanField(
+        verbose_name='是否需要验证',
+        default=True,
+    )
+
     class Meta:
         verbose_name = '家族'
         verbose_name_plural = '家族'
@@ -908,6 +1021,28 @@ class Family(UserOwnedModel,
             type=WebIM.GROUP_TYPE_PRIVATE,
             group_id='family_{}'.format(self.id),
         )
+
+    def get_family_mission_cd(self):
+        """
+        家族任务冷却时间，返回秒
+        """
+        last_mission = self.missions.filter(
+        ).order_by('-date_created')
+
+        if last_mission.exists():
+            last_mission_created = last_mission.first().date_created
+            option = json.loads(Option.get('family_mission_cd'))
+            next_mission_created = last_mission_created + timedelta(days=option['days']) + timedelta(
+                hours=option['hours']) + timedelta(
+                minutes=option['minutes'])
+
+            if next_mission_created < datetime.now():
+                return 0
+            else:
+                return (next_mission_created - datetime.now()).seconds + \
+                       (next_mission_created - datetime.now()).days * 24 * 60 * 60
+        else:
+            return 0
 
 
 class FamilyMember(UserOwnedModel):
