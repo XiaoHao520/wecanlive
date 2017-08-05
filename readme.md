@@ -35,3 +35,6 @@ WE CAN LIVE 直播平台
 | 元气宝盒钻石最大值     | max_star_box_diamond            | 整数     | 打开元气宝盒如果是钻石的最大值
 | 元气宝盒钻石最小值     | min_star_box_diamond            | 整数     | 打开元气宝盒如果是钻石的最小值
 | 元气宝盒随机礼物列表   | star_box_prize_list             | JSON     | 打开元气宝盒随机礼物列表和数量
+| VIP Logo設置          | vip_logo                        | JSON     | [1,2,3]等爲圖片id
+| VIP 進場特效          | vip_special_effects             | JSON     | [1,2]爲圖片id VIP進入時播放的特效
+| VIP 回饋禮包設定       | vip_rebate                      | JSON     | VIP 回饋禮包
