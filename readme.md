@@ -11,6 +11,7 @@ WE CAN LIVE 直播平台
 | 文章-举报规则         | article_inform_rules            | 富文本   |                                    |
 | 文章-VIP规则          | article_vip_rules               | 富文本   |                                    |
 | 等级规则              | level_rules                     | JSON     | 五种等级的升级级差关系             |
+| 家族等级规则          | family_level_rules              | JSON     | 家族升级所需贡献值
 | VIP规则               | vip_rules                       | JSON     | 后台VIP管理的VIP权限矩阵以及LOGO   |
 | 机器人规则            | robot_rules                     | JSON     |                                    |
 | 签到星星奖励          | daily_sign_award_stars          | JSON     | [1,2,3,4]为连续签到奖励的星星数量  |
@@ -34,3 +35,6 @@ WE CAN LIVE 直播平台
 | 元气宝盒钻石最大值     | max_star_box_diamond            | 整数     | 打开元气宝盒如果是钻石的最大值
 | 元气宝盒钻石最小值     | min_star_box_diamond            | 整数     | 打开元气宝盒如果是钻石的最小值
 | 元气宝盒随机礼物列表   | star_box_prize_list             | JSON     | 打开元气宝盒随机礼物列表和数量
+| VIP Logo設置          | vip_logo                        | JSON     | [1,2,3]等爲圖片id
+| VIP 進場特效          | vip_special_effects             | JSON     | [1,2]爲圖片id VIP進入時播放的特效
+| VIP 回饋禮包設定       | vip_rebate                      | JSON     | VIP 回饋禮包

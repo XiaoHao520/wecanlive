@@ -1632,6 +1632,16 @@ class ActivityViewSet(viewsets.ModelViewSet):
         return qs
 
 
+class ActivityPageViewSet(viewsets.ModelViewSet):
+    filter_fields = '__all__'
+    queryset = m.ActivityPage.objects.all()
+    serializer_class = s.ActivityPageSerializer
+    ordering = ['-pk']
+
+    def get_queryset(self):
+        return interceptor_get_queryset_kw_field(self)
+
+
 class ActivityParticipationViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.ActivityParticipation.objects.all()
@@ -1669,7 +1679,11 @@ class MovieViewSet(viewsets.ModelViewSet):
     ordering = ['-pk']
 
     def get_queryset(self):
-        return interceptor_get_queryset_kw_field(self)
+        qs = interceptor_get_queryset_kw_field(self)
+        category = self.request.query_params.get('category')
+        if category:
+            qs = qs.filter(category=category)
+        return qs
 
 
 class StarBoxViewSet(viewsets.ModelViewSet):
@@ -1771,7 +1785,27 @@ class InformViewSet(viewsets.ModelViewSet):
     ordering = ['-pk']
 
     def get_queryset(self):
-        return interceptor_get_queryset_kw_field(self)
+        qs = interceptor_get_queryset_kw_field(self)
+        # 后台筛选被举报人 ID、账号时，同时能筛选 直播 和 动态
+        for key in self.request.query_params:
+            value = self.request.query_params[key]
+            if key == 'la_lives__author__id':
+                key2 = 'la_activeevents__author__id'
+                field = key[3:]
+                field2 = key2[3:]
+                qs = qs.filter(
+                    m.models.Q(**{field + '__contains': value}) |
+                    m.models.Q(**{field2 + '__contains': value})
+                )
+            if key == 'la_lives__author__member__mobile':
+                key2 = 'la_activeevents__author__member__mobile'
+                field = key[3:]
+                field2 = key2[3:]
+                qs = qs.filter(
+                    m.models.Q(**{field + '__contains': value}) |
+                    m.models.Q(**{field2 + '__contains': value})
+                )
+        return qs
 
 
 class FeedbackViewSet(viewsets.ModelViewSet):
@@ -1994,4 +2028,24 @@ class OptionViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.Option.objects.all()
     serializer_class = s.OptionSerializer
-    ordering = ['-pk']
+    permission_classes = [p.IsAdminOrReadOnly]
+
+    @list_route(methods=['GET'])
+    def all(self, request):
+        data = dict()
+        for opt in m.Option.objects.all():
+            data[opt.key] = opt.value
+        return Response(data=data)
+
+    @list_route(methods=['GET'])
+    def get(self, request):
+        return Response(data=m.Option.get(request.GET.get('name')))
+
+    @list_route(methods=['POST'], permission_classes=[p.IsAdminUser])
+    def set(self, request):
+        # print(request.data)
+        m.Option.set(
+            request.data.get('name'),
+            request.data.get('value'),
+        )
+        return Response(data=m.Option.get(request.data.get('name')))

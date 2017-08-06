@@ -1121,7 +1121,7 @@ class Option(models.Model):
         verbose_name='选项名称', max_length=100, blank=True, default='')
 
     value = models.CharField(
-        verbose_name='选项值', max_length=1000,
+        verbose_name='选项值', max_length=2250,
         blank=True, default='')
 
     class Meta:
@@ -1159,6 +1159,9 @@ class Option(models.Model):
               cls.objects.create(key=key, value='')
         opt.value = val or ''
         opt.save()
+
+    def __str__(self):
+        return '{}: {}'.format(self.key, self.value)
 
 
 class Contact(UserOwnedModel):

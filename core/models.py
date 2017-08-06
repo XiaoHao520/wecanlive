@@ -531,6 +531,37 @@ class Robot(models.Model):
 
 
 class CelebrityCategory(EntityModel):
+    TYPE_LIVE = 'LIVE'
+    TYPE_ACTIVITY = 'ACTIVITY'
+    TYPE_CHOICES = (
+        (TYPE_LIVE, '直播'),
+        (TYPE_ACTIVITY, '活動'),
+    )
+
+    type = models.CharField(
+        verbose_name='分類類別',
+        max_length=20,
+        choices=TYPE_CHOICES,
+        blank=True,
+        null=True,
+    )
+
+    live_category = models.ForeignKey(
+        verbose_name='直播分類',
+        to='LiveCategory',
+        related_name='celebrity_categories',
+        null=True,
+        blank=True,
+    )
+
+    activity = models.ForeignKey(
+        verbose_name='活動',
+        to='Activity',
+        related_name='celebrity_categories',
+        null=True,
+        blank=True,
+    )
+
     leader = models.ForeignKey(
         verbose_name='当前获得者',
         to=User,
@@ -543,6 +574,19 @@ class CelebrityCategory(EntityModel):
         verbose_name = '众星云集分类'
         verbose_name_plural = '众星云集分类'
         db_table = 'core_celebrity_category'
+
+    def get_category(self):
+        if self.type == self.TYPE_LIVE and self.live_category:
+            return dict(
+                category_id=self.live_category.id,
+                category_name=self.live_category.name,
+            )
+        elif self.type == self.TYPE_ACTIVITY and self.activity:
+            return dict(
+                category_id=self.activity.id,
+                category_name=self.activity.name,
+            )
+        return dict(category_id=None, category_name=None)
 
 
 class CreditStarTransaction(AbstractTransactionModel):
@@ -806,6 +850,13 @@ class DailyCheckInLog(UserOwnedModel):
     date_created = models.DateTimeField(
         verbose_name='签到时间',
         auto_now_add=True,
+    )
+
+    prize_coin_transaction = models.OneToOneField(
+        verbose_name='奖励金币流水记录',
+        to='CreditCoinTransaction',
+        null=True,
+        blank=True,
     )
 
     prize_star_transaction = models.OneToOneField(
@@ -1672,7 +1723,8 @@ class LiveWatchLog(UserOwnedModel,
 class ActiveEvent(UserOwnedModel,
                   AbstractMessageModel,
                   CommentableModel,
-                  UserMarkableModel):
+                  UserMarkableModel,
+                  InformableModel):
     """ 个人动态
     理论上只发图文，但是支持完整的消息格式
     用户可以点赞，使用 UserMark 的 subject=like
@@ -2867,7 +2919,7 @@ class Activity(EntityModel):
         """
 
 
-class ActivityPage(models.Model):
+class ActivityPage(EntityModel):
     banner = models.ForeignKey(
         verbose_name='海报',
         to=ImageModel,
@@ -3014,6 +3066,22 @@ class Movie(UserOwnedModel,
         choices=CATEGORY_CHOICES,
         blank=True,
         default='',
+    )
+
+    TYPE_MOVIE = 'MOVIE'
+    TYPE_LIVE = 'LIVE'
+    TYPE_CHOICES = (
+        (TYPE_MOVIE, '影片'),
+        (TYPE_LIVE, '直播'),
+    )
+
+    type = models.CharField(
+        verbose_name='類型',
+        max_length=20,
+        choices=TYPE_CHOICES,
+        blank=True,
+        default='',
+        help_text='當影片分類爲熱門視頻時需要選擇',
     )
 
     class Meta:
@@ -3331,6 +3399,30 @@ class Inform(UserOwnedModel,
         verbose_name = '举报'
         verbose_name_plural = '举报'
         db_table = 'core_inform'
+
+    def get_accused_object(self):
+        if self.lives.first():
+            return self.lives.first()
+        elif self.activeevents.first():
+            return self.activeevents.first()
+        return None
+
+    def accused_person(self):
+        accused_object = self.get_accused_object()
+        return dict(
+            accused_id=accused_object.author.id,
+            accused_mobile=accused_object.author.member.mobile,
+        )
+
+    def accused_object_info(self):
+        accused_object = self.get_accused_object()
+        if not accused_object:
+            return None
+        return dict(
+            object_id=accused_object.id,
+            object_type=type(accused_object)._meta.model_name,
+            object_name=accused_object.name if hasattr(accused_object, 'name') else accused_object.author.member.nickname,
+        )
 
 
 class Feedback(AbstractMessageModel,
