@@ -466,6 +466,14 @@ class Member(AbstractMember,
                 badge=badge,
             )
 
+    def is_checkin_daily(self):
+        """
+        今天是否已经签到
+        """
+        return self.user.dailycheckinlogs_owned.filter(
+            date_created__date=datetime.now().date()
+        ).exists()
+
 
 class Robot(models.Model):
     """ 机器人
@@ -596,10 +604,12 @@ class CreditStarTransaction(AbstractTransactionModel):
     TYPE_LIVE_GIFT = 'LIVE_GIFT'
     TYPE_EARNING = 'EARNING'
     TYPE_ADMIN = 'ADMIN'
+    TYPE_DAILY = 'DAILY'
     TYPE_CHOICES = (
         (TYPE_LIVE_GIFT, '直播赠送'),
         (TYPE_EARNING, '任務獲得'),
         (TYPE_ADMIN, '後臺補償'),
+        (TYPE_DAILY, '签到获得'),
     )
 
     type = models.CharField(
@@ -696,6 +706,8 @@ class CreditCoinTransaction(AbstractTransactionModel):
     TYPE_EXCHANGE = 'EXCHANGE'
     TYPE_BOX = 'BOX'
     TYPE_BARRAGE = 'BARRAGE'
+    TYPE_FAMILY_MODIFY = 'FAMILY_MODIFY'
+    TYPE_DAILY = 'DAILY'
     TYPE_CHOICES = (
         (TYPE_ADMIN, '管理員發放'),
         (TYPE_LIVE_GIFT, '直播赠送'),
@@ -703,6 +715,8 @@ class CreditCoinTransaction(AbstractTransactionModel):
         (TYPE_EXCHANGE, '兌換'),
         (TYPE_BOX, '打開元氣寶盒'),
         (TYPE_BARRAGE, '發送彈幕消費'),
+        (TYPE_FAMILY_MODIFY, '家族長修改頭銜'),
+        (TYPE_DAILY, '每日签到获得'),
     )
 
     type = models.CharField(
@@ -866,6 +880,19 @@ class DailyCheckInLog(UserOwnedModel):
         blank=True,
     )
 
+    coin_transaction = models.OneToOneField(
+        verbose_name='奖励金币记录',
+        to='CreditCoinTransaction',
+        related_name='daily_check_in_log',
+        null=True,
+        blank=True,
+    )
+
+    is_continue = models.BooleanField(
+        verbose_name='连签奖励',
+        default=False,
+    )
+
     class Meta:
         verbose_name = '每日签到'
         verbose_name_plural = '每日签到'
@@ -877,8 +904,91 @@ class DailyCheckInLog(UserOwnedModel):
         :param user:
         :return:
         """
-        # TODO: 1. 同一天不能重复签到
-        # TODO: 2. 签到之后要计算发放相应的奖励
+
+        daily_option = json.loads(Option.get('daily_sign_award'))
+        # 每日签到奖励
+        award_list = daily_option['daily_seven_days']
+        # 连签配置
+        continue_award = daily_option['daily_for_days']
+        # 今天簽到獎勵
+        today_daily_award = award_list[datetime.now().weekday()]
+        daily_check = None
+        continue_daily_check = None
+        coin_transaction = None
+        star_transaction = None
+        if today_daily_award['type'] == 'star':
+            star_transaction = CreditStarTransaction.objects.create(
+                user_debit=user,
+                amount=today_daily_award['value'],
+                remark='每日签到获得',
+                type=CreditStarTransaction.TYPE_DAILY,
+            )
+        elif today_daily_award['type'] == 'coin':
+            coin_transaction = CreditCoinTransaction.objects.create(
+                user_debit=user,
+                amount=today_daily_award['value'],
+                remark='每日签到获得',
+                type=CreditCoinTransaction.TYPE_DAILY,
+            )
+        daily_check = DailyCheckInLog.objects.create(
+            author=user,
+            prize_star_transaction=star_transaction,
+            coin_transaction=coin_transaction,
+        )
+
+        # 连签要求天数
+        continue_check = DailyCheckInLog.objects.filter(
+            author=user,
+            is_continue=True,
+        ).order_by('-date_created')
+        last_continue_check_date = None
+        if continue_check.exists():
+            last_continue_check_date = continue_check.first().date_created
+        else:
+            last_continue_check_date = DailyCheckInLog.objects.filter(
+                author=user,
+            ).order_by('date_created').first().date_created
+
+        continue_days = continue_award['days']
+        continue_success = True
+        while continue_days > 0:
+            continue_days -= 1
+            daily = DailyCheckInLog.objects.filter(
+                author=user,
+                date_created__date=(datetime.now() - timedelta(days=continue_days)).date(),
+                date_created__date__gt=last_continue_check_date.date(),
+            ).exists()
+            if not daily:
+                continue_success = False
+        # 连签奖励
+        if continue_success:
+            continue_coin_transaction = None
+            continue_star_transaction = None
+            if continue_award['type'] == 'star':
+                continue_star_transaction = CreditStarTransaction.objects.create(
+                    user_debit=user,
+                    amount=continue_award['value'],
+                    remark='连续签到获得',
+                    type=CreditStarTransaction.TYPE_DAILY,
+                )
+            elif continue_award['type'] == 'coin':
+                continue_coin_transaction = CreditCoinTransaction.objects.create(
+                    user_debit=user,
+                    amount=continue_award['value'],
+                    remark='连续签到获得',
+                    type=CreditCoinTransaction.TYPE_DAILY,
+                )
+            continue_daily_check = DailyCheckInLog.objects.create(
+                author=user,
+                prize_star_transaction=continue_star_transaction,
+                coin_transaction=continue_coin_transaction,
+                is_continue=True,
+            )
+
+        return dict(
+            daily_check=daily_check,
+            continue_daily_check=continue_daily_check,
+        )
 
 
 class Family(UserOwnedModel,
@@ -947,6 +1057,11 @@ class Family(UserOwnedModel,
         null=True,
         blank=True,
         default='',
+    )
+
+    is_verify = models.BooleanField(
+        verbose_name='是否需要验证',
+        default=True,
     )
 
     class Meta:
@@ -1033,6 +1148,28 @@ class Family(UserOwnedModel,
             )
         super().delete(*args, **kwargs)
 
+    def get_family_mission_cd(self):
+        """
+        家族任务冷却时间，返回秒
+        """
+        last_mission = self.missions.filter(
+        ).order_by('-date_created')
+
+        if last_mission.exists():
+            last_mission_created = last_mission.first().date_created
+            option = json.loads(Option.get('family_mission_cd'))
+            next_mission_created = last_mission_created + timedelta(days=option['days']) + timedelta(
+                hours=option['hours']) + timedelta(
+                minutes=option['minutes'])
+
+            if next_mission_created < datetime.now():
+                return 0
+            else:
+                return (next_mission_created - datetime.now()).seconds + \
+                       (next_mission_created - datetime.now()).days * 24 * 60 * 60
+        else:
+            return 0
+
 
 class FamilyMember(UserOwnedModel):
     family = models.ForeignKey(
@@ -1095,6 +1232,11 @@ class FamilyMember(UserOwnedModel):
         choices=ROLE_CHOICES,
     )
 
+    is_ban = models.BooleanField(
+        verbose_name='是否禁言',
+        default=False,
+    )
+
     class Meta:
         verbose_name = '家族成员'
         verbose_name_plural = '家族成员'
@@ -1147,6 +1289,30 @@ class FamilyMember(UserOwnedModel):
         for watch_log in watch_logs:
             total_prize += watch_log.get_total_prize()
         return total_prize
+
+    @staticmethod
+    def modify_member_title(user, member_select, title, family):
+        """修改家族頭銜
+            @:param member_select 要修改的成員ID数组
+                    title         修改的头衔
+        """
+        members = FamilyMember.objects.filter(
+            id__in=member_select
+        )
+        amount = int(Option.get('family_modify_title_coin') or 10) * members.count()
+        assert user.id == family.author.id, '你不是家族族長不能修改'
+        assert int(user.member.get_coin_balance()) > amount, '金幣餘額不足'
+        CreditCoinTransaction.objects.create(
+            user_credit=user,
+            amount=amount,
+            type=CreditCoinTransaction.TYPE_FAMILY_MODIFY,
+            remark='家族長修改頭銜',
+        )
+        for member in members.all():
+            member.title = title
+            member.save()
+
+        return True
 
 
 class FamilyArticle(UserOwnedModel,
@@ -1286,10 +1452,27 @@ class FamilyMission(UserOwnedModel,
         null=True,
     )
 
+    content = models.TextField(
+        verbose_name='内容(規則)',
+        blank=True,
+        default='',
+    )
+
+    logo = models.OneToOneField(
+        verbose_name='任务海报',
+        to=ImageModel,
+        related_name='family_mission',
+        null=True,
+        blank=True,
+    )
+
     class Meta:
         verbose_name = '家族任务'
         verbose_name_plural = '家族任务'
         db_table = 'core_family_mission'
+
+    def is_end(self):
+        return datetime.now().date() > self.date_end
 
 
 class FamilyMissionAchievement(UserOwnedModel):
@@ -1698,7 +1881,7 @@ class LiveWatchLog(UserOwnedModel,
                                                (datetime.now() - mission_achivevments.first().date_created).seconds
         else:
             wathch_mission_preferences.value = int(wathch_mission_preferences.value) + (
-            self.date_leave - self.date_enter).seconds
+                self.date_leave - self.date_enter).seconds
         wathch_mission_preferences.save()
 
     def get_duration(self):
@@ -2237,6 +2420,9 @@ class PrizeOrder(UserOwnedModel):
         # 更新主播徽章
         live.author.member.add_diamond_badge()
 
+        # todo
+        # 檢測當日購買這個禮物類型夠不夠送桌布
+
         return order
 
     @staticmethod
@@ -2515,6 +2701,8 @@ class ExtraPrize(EntityModel):
         verbose_name = '附赠礼物'
         verbose_name_plural = '附赠礼物'
         db_table = 'core_extra_prize'
+
+        # todo 每次用戶购买礼物就检测当天购买这个礼物分类额度，发放礼物，注意重复发送
 
 
 class StatisticRule(EntityModel):

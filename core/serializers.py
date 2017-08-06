@@ -279,6 +279,11 @@ class UserDetailedSerializer(QueryFieldsMixin, serializers.ModelSerializer):
         source='member.get_followed_count',
     )
 
+    # 是否签到
+    is_checkin_daily = serializers.ReadOnlyField(
+        source='member.is_checkin_daily',
+    )
+
     # institution_validation_status = serializers.ReadOnlyField()
 
     # institution_validations = InstitutionValidationSerializer(
@@ -595,6 +600,12 @@ class BadgeRecordSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
 
 class DailyCheckInLogSerializer(QueryFieldsMixin, serializers.ModelSerializer):
+
+    coin_amount = serializers.ReadOnlyField(source='coin_transaction.amount')
+
+    star_amount = serializers.ReadOnlyField(source='prize_star_transaction.amount')
+
+
     class Meta:
         model = m.DailyCheckInLog
         fields = '__all__'
@@ -621,6 +632,8 @@ class FamilySerializer(QueryFieldsMixin, serializers.ModelSerializer):
     count_family_mission = serializers.ReadOnlyField(source='get_count_family_mission')
 
     count_family_article = serializers.ReadOnlyField(source='get_count_family_article')
+
+    family_mission_cd = serializers.ReadOnlyField(source='get_family_mission_cd')
 
     class Meta:
         model = m.Family
@@ -667,6 +680,13 @@ class FamilyMissionSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     author_nickname = serializers.ReadOnlyField(source='author.member.nickname')
 
     author_mobile = serializers.ReadOnlyField(source='author.member.mobile')
+
+    logo_item = ImageSerializer(
+        source='logo',
+        read_only=True,
+    )
+
+    is_end = serializers.ReadOnlyField()
 
     class Meta:
         model = m.FamilyMission
