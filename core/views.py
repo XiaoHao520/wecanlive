@@ -1059,7 +1059,7 @@ class BadgeRecordViewSet(viewsets.ModelViewSet):
                 ]
                 # active=models.F('date_created')+timedelta(days=badge__validity)
             ).filter(
-                # user_debit_id=F('user_credit_id')+F,
+                # user_debit_id=F('user_credit_id'),
                 author__id=live_author,
                 badge__date_from__lt=datetime.now(),
                 badge__date_to__gt=datetime.now(),
@@ -2152,7 +2152,7 @@ class OptionViewSet(viewsets.ModelViewSet):
 
     @list_route(methods=['GET'])
     def get_guide_image(self, request):
-        option=[]
+        option = []
         if m.Option.get('guide_page'):
             option = json.loads(m.Option.get('guide_page'))
         images = m.ImageModel.objects.filter(
