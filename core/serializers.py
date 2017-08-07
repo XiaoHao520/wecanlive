@@ -534,6 +534,10 @@ class RobotSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
 
 class CelebrityCategorySerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    leader_nickname = serializers.ReadOnlyField(source='leader.member.nickname')
+
+    category = serializers.ReadOnlyField(source='get_category')
+
     class Meta:
         model = m.CelebrityCategory
         fields = '__all__'
@@ -1027,6 +1031,11 @@ class StatisticRuleSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
 
 class ActivitySerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    thumbnail_item = ImageSerializer(
+        source='thumbnail',
+        read_only=True,
+    )
+
     vote_way = serializers.ReadOnlyField()
 
     vote_count_award = serializers.ReadOnlyField()
@@ -1045,6 +1054,19 @@ class ActivitySerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
     class Meta:
         model = m.Activity
+        fields = '__all__'
+
+
+class ActivityPageSerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    banner_item = ImageSerializer(
+        source='banner',
+        read_only=True,
+    )
+
+    activity_type = serializers.ReadOnlyField(source='activity.type')
+
+    class Meta:
+        model = m.ActivityPage
         fields = '__all__'
 
 
@@ -1067,6 +1089,11 @@ class VisitLogSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
 
 class MovieSerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    thumbnail_item = ImageSerializer(
+        source='thumbnail',
+        read_only=True,
+    )
+
     class Meta:
         model = m.Movie
         fields = '__all__'
@@ -1083,6 +1110,8 @@ class StarBoxRecordSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     diamond_amount = serializers.ReadOnlyField(source="diamond_transaction.amount")
     prize_name = serializers.ReadOnlyField(source="prize_transaction.prize.name")
     prize_amount = serializers.ReadOnlyField(source="prize_transaction.amount")
+    author_mobile = serializers.ReadOnlyField(source='author.member.mobile')
+    author_nickname = serializers.ReadOnlyField(source='author.member.nickname')
 
     class Meta:
         model = m.StarBoxRecord
@@ -1108,6 +1137,14 @@ class LevelOptionSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
 
 class InformSerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    author_nickname = serializers.ReadOnlyField(source='author.member.nickname')
+
+    author_mobile = serializers.ReadOnlyField(source='author.member.mobile')
+
+    accused_person = serializers.ReadOnlyField()
+
+    accused_object_info = serializers.ReadOnlyField()
+
     class Meta:
         model = m.Inform
         fields = '__all__'
