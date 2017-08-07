@@ -1356,10 +1356,68 @@ class FamilyMissionAchievement(UserOwnedModel):
         related_name='achievements',
     )
 
+    ##
+
+    STATUS_START = 'START'
+    STATUS_ACHIEVE = 'ACHIEVE'
+    STATUS_FINISH = 'FINISH'
+    STATUS_CHOICES = (
+        (STATUS_START, '领取任务'),
+        (STATUS_ACHIEVE, '完成任务未领取奖励'),
+        (STATUS_FINISH, '完成任务已领取奖励'),
+    )
+
+    status = models.CharField(
+        verbose_name='任务状态',
+        max_length=20,
+        choices=STATUS_CHOICES,
+        null=True,
+        blank=True,
+    )
+
+    coin_transaction = models.OneToOneField(
+        verbose_name='奖励金币记录',
+        to='CreditCoinTransaction',
+        related_name='family_mission_achievement',
+        null=True,
+        blank=True,
+    )
+
+    prize_star_transaction = models.OneToOneField(
+        verbose_name='奖励星星流水记录',
+        to='CreditStarTransaction',
+        null=True,
+        blank=True,
+    )
+
+    prize_transaction = models.OneToOneField(
+        verbose_name='獎勵礼物记录',
+        to='PrizeTransaction',
+        related_name='family_mission_achievement',
+        null=True,
+        blank=True,
+    )
+
+    badge_record = models.OneToOneField(
+        verbose_name='奖励勋章记录',
+        to='BadgeRecord',
+        null=True,
+        blank=True,
+    )
+
+    # todo i币 经验 贡献值 跑马灯内容
+
+
     class Meta:
         verbose_name = '家族任务成就'
         verbose_name_plural = '家族任务成就'
         db_table = 'core_family_mission_achievement'
+
+    def save(self, *args, **kwargs):
+        if not self.id:
+            assert not self.mission.family.author == self.author, '家族長不能領取任務'
+
+        super().save(*args, **kwargs)
 
 
 class LiveCategory(EntityModel):
