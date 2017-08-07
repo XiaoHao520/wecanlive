@@ -1056,7 +1056,6 @@ class BadgeRecordViewSet(viewsets.ModelViewSet):
                 badge__date_to__gt=datetime.now(),
                 # date_active__gt=datetime.now(),
             )
-            print(qs)
             # print(qs.query)
 
         return qs
@@ -1070,6 +1069,21 @@ class DailyCheckInLogViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return interceptor_get_queryset_kw_field(self)
+
+    @list_route(methods=['POST'])
+    def daily_checkin(self, request):
+        today_daily = m.DailyCheckInLog.objects.filter(
+            author=self.request.user,
+            date_created__date=datetime.now().date(),
+        ).exists()
+        if today_daily:
+            return response_fail('今天已經簽到了')
+        daily_check = m.DailyCheckInLog.check_in(self.request.user)
+        print(daily_check)
+        return Response(data=dict(
+            daily_check=s.DailyCheckInLogSerializer(daily_check['daily_check']).data,
+            continue_daily_check=s.DailyCheckInLogSerializer(daily_check['continue_daily_check']).data,
+        ))
 
 
 class FamilyViewSet(viewsets.ModelViewSet):
@@ -1110,13 +1124,51 @@ class FamilyMemberViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         qs = interceptor_get_queryset_kw_field(self)
         family_id = self.request.query_params.get('family')
+        search = self.request.query_params.get('search')
         if family_id:
             family = m.Family.objects.get(id=family_id)
             qs = qs.filter(
                 family=family,
                 status=m.FamilyMember.STATUS_APPROVED,
             )
+        if search:
+            qs = qs.filter(
+                author__member__nickname__contains=search,
+            )
         return qs
+
+    @list_route(methods=['POST'])
+    def family_manage(self, request):
+        type = request.data.get('type')
+        members = m.FamilyMember.objects.filter(
+            id__in=request.data.get('select'),
+            family__id=request.data.get('family'),
+        ).all()
+        for member in members:
+            if type == 'manage':
+                member.role = m.FamilyMember.ROLE_ADMIN
+                member.save()
+            if type == 'normal':
+                member.role = m.FamilyMember.ROLE_NORMAL
+                member.save()
+            if type == 'delete':
+                member.delete()
+            if type == 'ban':
+                member.is_ban = True
+                member.save()
+            if type == 'unban':
+                member.is_ban = False
+                member.save()
+        return Response(data=True)
+
+    @list_route(methods=['POST'])
+    def modify_member_title(self, request):
+        select = request.data.get('select')
+        user = self.request.user
+        title = request.data.get('title')
+        family = m.Family.objects.get(pk=request.data.get('family'))
+        m.FamilyMember.modify_member_title(user, select, title, family)
+        return Response(data=True)
 
 
 class FamilyArticleViewSet(viewsets.ModelViewSet):
@@ -1132,6 +1184,19 @@ class FamilyArticleViewSet(viewsets.ModelViewSet):
             family = m.Family.objects.get(id=family_id)
             qs = qs.filter(family=family)
         return qs
+
+    @list_route(methods=['POST'])
+    def batch_delete(self, request):
+        # 批量刪除家族公告
+        select = request.data.get('select')
+        articles = m.FamilyArticle.objects.filter(
+            id__in=select,
+        ).all()
+
+        for article in articles:
+            article.delete()
+
+        return Response(data=True)
 
 
 class FamilyMissionViewSet(viewsets.ModelViewSet):
@@ -2075,3 +2140,17 @@ class OptionViewSet(viewsets.ModelViewSet):
             request.data.get('value'),
         )
         return Response(data=m.Option.get(request.data.get('name')))
+
+    @list_route(methods=['GET'])
+    def get_guide_image(self, request):
+        option=[]
+        if m.Option.get('guide_page'):
+            option = json.loads(m.Option.get('guide_page'))
+        images = m.ImageModel.objects.filter(
+            id__in=option,
+        ).all()
+        data = []
+        for image in images:
+            data.append(image.url())
+
+        return Response(data=data)
