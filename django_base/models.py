@@ -866,7 +866,7 @@ class Broadcast(AbstractMessageModel):
         for user in self.get_recipients():
             self.messages.create(
                 receiver=user,
-                name=self.name,
+                # name=self.name,
                 content=self.content,
                 params=self.params,
             )

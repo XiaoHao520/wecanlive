@@ -113,6 +113,15 @@ class ImageViewSet(viewsets.ModelViewSet):
 
         return qs
 
+    @list_route(methods=['POST'])
+    def get_guide_page(self, request):
+        guide_page_arr = request.data.get('guide_page_arr')
+        data = []
+        if guide_page_arr:
+            for guide_page_id in guide_page_arr:
+                data.append(s.ImageSerializer(m.ImageModel.objects.get(pk=guide_page_id)).data)
+        return Response(data=data)
+
 
 class AudioViewSet(viewsets.ModelViewSet):
     queryset = m.AudioModel.objects.all()
@@ -276,7 +285,6 @@ class BroadcastViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         # 保存的时候自动发送
-        print('i am create')
         broadcast = serializer.save()
         broadcast.send()
 
@@ -290,12 +298,13 @@ class BroadcastViewSet(viewsets.ModelViewSet):
                 livewatchlogs_owned__date_leave__lt=m.models.F('livewatchlogs_owned__date_enter')),
             livewatchlogs_owned__id__gt=0,
         ).distinct().all()
-        # TODO: users不能直接在这里插入
-        m.Broadcast.objects.create(
+        broadcast = m.Broadcast.objects.create(
             target=m.Broadcast.TARGET_LIVE,
-            users=users,
             content=content,
         )
+        for user in users:
+            broadcast.users.add(user)
+        broadcast.send()
         return Response(True)
 
 
