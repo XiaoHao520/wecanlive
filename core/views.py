@@ -267,10 +267,36 @@ class BroadcastViewSet(viewsets.ModelViewSet):
     serializer_class = s.BroadcastSerializer
     ordering = ['-pk']
 
+    def get_queryset(self):
+        qs = interceptor_get_queryset_kw_field(self)
+        target = self.request.query_params.get('target')
+        if target:
+            qs = qs.filter(target=target)
+        return qs
+
     def perform_create(self, serializer):
         # 保存的时候自动发送
+        print('i am create')
         broadcast = serializer.save()
         broadcast.send()
+
+    @list_route(methods=['POST'])
+    def create_live_broadcast(self, request):
+        content = request.data.get('content')
+        print(content)
+        users = m.User.objects.filter(
+            m.models.Q(livewatchlogs_owned__date_leave=None) |
+            m.models.Q(
+                livewatchlogs_owned__date_leave__lt=m.models.F('livewatchlogs_owned__date_enter')),
+            livewatchlogs_owned__id__gt=0,
+        ).distinct().all()
+        # TODO: users不能直接在这里插入
+        m.Broadcast.objects.create(
+            target=m.Broadcast.TARGET_LIVE,
+            users=users,
+            content=content,
+        )
+        return Response(True)
 
 
 class UserViewSet(viewsets.ModelViewSet):
