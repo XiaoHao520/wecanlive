@@ -521,10 +521,10 @@ class Robot(models.Model):
     def save(self, *args, **kwargs):
         from django_base.middleware import get_request
         user = get_request().user
-        if user.is_staff and self.id and not self.is_del:
+        if user.is_staff and self.id:
             super().save(*args, **kwargs)
             AdminLog.make(user, AdminLog.TYPE_UPDATE, self, '修改機器人')
-        elif user.is_staff and not self.is_del:
+        elif user.is_staff:
             super().save(*args, **kwargs)
             AdminLog.make(user, AdminLog.TYPE_CREATE, self, '新增機器人')
         else:
@@ -2173,10 +2173,10 @@ class Prize(EntityModel):
         from django_base.middleware import get_request
         user = get_request().user
         if user.is_staff and self.id and not self.is_del:
-            AdminLog.make(user,AdminLog.TYPE_UPDATE,self,'修改禮物')
+            AdminLog.make(user, AdminLog.TYPE_UPDATE, self, '修改禮物')
         elif user.is_staff and not self.is_del:
             super().save(*args, **kwargs)
-            AdminLog.make(user,AdminLog.TYPE_CREATE,self,'新增禮物')
+            AdminLog.make(user, AdminLog.TYPE_CREATE, self, '新增禮物')
         else:
             super().save(*args, **kwargs)
 
@@ -3437,27 +3437,6 @@ class StarBoxRecord(UserOwnedModel):
         identity = 'receiver' 主播開盒
         identity = 'sender'   观众开盒
         """
-        receiver_star_credit = None
-        sender_star_credit = None
-        if identity == 'receiver':
-            assert user.member.get_star_index_receiver_balance() > 500, '打開寶盒失敗:你的元氣指數不夠,請再努力直播!'
-            receiver_star_credit = CreditStarIndexReceiverTransaction.objects.create(
-                user_credit=user,
-                amount=500,
-                remark='主播打开元气宝盒',
-                type=CreditStarIndexReceiverTransaction.TYPE_BOX_EXPENSE,
-            )
-        elif identity == 'sender':
-            assert user.member.get_star_index_sender_balance() > 500, '打開寶盒失敗:你的元氣指數不夠,請再努力直播!'
-            sender_star_credit = CreditStarIndexSenderTransaction.objects.create(
-                user_credit=user,
-                amount=500,
-                remark='觀衆開元氣寶盒',
-                type=CreditStarIndexSenderTransaction.TYPE_BOX_EXPENSE,
-            )
-        else:
-            return False
-        # 元气指数消耗
 
         # 随机奖励 0->金币，１->钻石，2->礼物
         award = random.randint(0, 2)
@@ -3490,6 +3469,7 @@ class StarBoxRecord(UserOwnedModel):
             prize = Prize.objects.filter(
                 category__name='宝盒礼物',
             ).order_by('?').first()
+            assert prize, '沒有寶盒禮物列表，請重新抽獎'
             amount = random.randint(1, 10)
             prize_debit = PrizeTransaction.objects.create(
                 user_debit=user,
@@ -3499,6 +3479,28 @@ class StarBoxRecord(UserOwnedModel):
                 type=PrizeTransaction.TYPE_STAR_BOX_GAIN,
                 source_tag=PrizeTransaction.SOURCE_TAG_STAR_BOX,
             )
+
+        # 元气指数消耗
+        receiver_star_credit = None
+        sender_star_credit = None
+        if identity == 'receiver':
+            assert user.member.get_star_index_receiver_balance() > 500, '打開寶盒失敗:你的元氣指數不夠,請再努力直播!'
+            receiver_star_credit = CreditStarIndexReceiverTransaction.objects.create(
+                user_credit=user,
+                amount=500,
+                remark='主播打开元气宝盒',
+                type=CreditStarIndexReceiverTransaction.TYPE_BOX_EXPENSE,
+            )
+        elif identity == 'sender':
+            assert user.member.get_star_index_sender_balance() > 500, '打開寶盒失敗:你的元氣指數不夠,請再努力直播!'
+            sender_star_credit = CreditStarIndexSenderTransaction.objects.create(
+                user_credit=user,
+                amount=500,
+                remark='觀衆開元氣寶盒',
+                type=CreditStarIndexSenderTransaction.TYPE_BOX_EXPENSE,
+            )
+        else:
+            return False
 
         box_record = StarBoxRecord.objects.create(
             author=user,
@@ -3667,7 +3669,8 @@ class Inform(UserOwnedModel,
         return dict(
             object_id=accused_object.id,
             object_type=type(accused_object)._meta.model_name,
-            object_name=accused_object.name if hasattr(accused_object, 'name') else accused_object.author.member.nickname,
+            object_name=accused_object.name if hasattr(accused_object,
+                                                       'name') else accused_object.author.member.nickname,
         )
 
 
@@ -3745,10 +3748,10 @@ class Banner(models.Model):
     def save(self, *args, **kwargs):
         from django_base.middleware import get_request
         user = get_request().user
-        if user.is_staff and self.id and not self.is_del:
+        if user.is_staff and self.id:
             super().save(*args, **kwargs)
             AdminLog.make(user, AdminLog.TYPE_UPDATE, self, '修改節目Banner')
-        elif user.is_staff and not self.is_del:
+        elif user.is_staff:
             super().save(*args, **kwargs)
             AdminLog.make(user, AdminLog.TYPE_CREATE, self, '新增節目Banner')
         else:
