@@ -1053,7 +1053,6 @@ class DailyCheckInLogViewSet(viewsets.ModelViewSet):
         if today_daily:
             return response_fail('今天已經簽到了')
         daily_check = m.DailyCheckInLog.check_in(self.request.user)
-        print(daily_check)
         return Response(data=dict(
             daily_check=s.DailyCheckInLogSerializer(daily_check['daily_check']).data,
             continue_daily_check=s.DailyCheckInLogSerializer(daily_check['continue_daily_check']).data,
@@ -2125,6 +2124,6 @@ class OptionViewSet(viewsets.ModelViewSet):
         ).all()
         data = []
         for image in images:
-            data.append(image.url())
+            data.append(s.ImageSerializer(image).data['image'])
 
         return Response(data=data)

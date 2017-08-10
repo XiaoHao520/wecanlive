@@ -459,7 +459,7 @@ class MemberSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     count_live = serializers.ReadOnlyField(source='get_live_count')
     last_live_end = serializers.ReadOnlyField(source='get_last_live_end')
     is_following = serializers.BooleanField(source='is_followed_by_current_user', read_only=True)
-    age = serializers.ReadOnlyField(source='get_age')
+    # age = serializers.ReadOnlyField(source='get_age')
 
     credit_diamond = serializers.ReadOnlyField()
     debit_diamond = serializers.ReadOnlyField()

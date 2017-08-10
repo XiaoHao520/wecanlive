@@ -139,7 +139,9 @@ class Member(AbstractMember,
     def save(self, *args, **kwargs):
         from django_base.middleware import get_request
         user = get_request().user
-        if user.is_staff and self.id and not self.is_del:
+        print(self.age)
+        print(self.constellation)
+        if user.is_staff and self.user and not self.is_del:
             super().save(*args, **kwargs)
             AdminLog.make(user, AdminLog.TYPE_UPDATE, self, '修改會員')
         elif user.is_staff and not self.is_del:
@@ -405,10 +407,12 @@ class Member(AbstractMember,
 
     def is_living(self):
         # 是否在直播
-        live = self.user.lives_owned.filter(date_end=None)
-        # return live.exists() ? live.fist().id : False
+        live = self.user.lives_owned.filter().order_by('-date_created')
         if live.exists():
-            return live.order_by('-pk').first().id
+            if live.first().date_end:
+                return False
+            else:
+                return live.first().id
         else:
             return False
 
@@ -1540,8 +1544,8 @@ class FamilyMissionAchievement(UserOwnedModel):
         db_table = 'core_family_mission_achievement'
 
     def save(self, *args, **kwargs):
-        if not self.id:
-            assert not self.mission.family.author == self.author, '家族長不能領取任務'
+        # if not self.id:
+        #     assert not self.mission.family.author == self.author, '家族長不能領取任務'
 
         super().save(*args, **kwargs)
 
@@ -2173,10 +2177,10 @@ class Prize(EntityModel):
         from django_base.middleware import get_request
         user = get_request().user
         if user.is_staff and self.id and not self.is_del:
-            AdminLog.make(user,AdminLog.TYPE_UPDATE,self,'修改禮物')
+            AdminLog.make(user, AdminLog.TYPE_UPDATE, self, '修改禮物')
         elif user.is_staff and not self.is_del:
             super().save(*args, **kwargs)
-            AdminLog.make(user,AdminLog.TYPE_CREATE,self,'新增禮物')
+            AdminLog.make(user, AdminLog.TYPE_CREATE, self, '新增禮物')
         else:
             super().save(*args, **kwargs)
 
@@ -3667,7 +3671,8 @@ class Inform(UserOwnedModel,
         return dict(
             object_id=accused_object.id,
             object_type=type(accused_object)._meta.model_name,
-            object_name=accused_object.name if hasattr(accused_object, 'name') else accused_object.author.member.nickname,
+            object_name=accused_object.name if hasattr(accused_object,
+                                                       'name') else accused_object.author.member.nickname,
         )
 
 
