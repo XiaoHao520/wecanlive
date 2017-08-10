@@ -965,6 +965,10 @@ class PrizeOrderSerializer(QueryFieldsMixin, serializers.ModelSerializer):
         read_only=True,
     )
 
+    prize_marquee_size = serializers.ReadOnlyField(
+        source='prize.marquee_size'
+    )
+
     prize_price = serializers.ReadOnlyField(
         source='prize.price',
     )
