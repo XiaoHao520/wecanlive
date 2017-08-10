@@ -2179,10 +2179,8 @@ class Prize(EntityModel):
         if user.is_staff and self.id and not self.is_del:
             AdminLog.make(user, AdminLog.TYPE_UPDATE, self, '修改禮物')
         elif user.is_staff and not self.is_del:
-            super().save(*args, **kwargs)
             AdminLog.make(user, AdminLog.TYPE_CREATE, self, '新增禮物')
-        else:
-            super().save(*args, **kwargs)
+        super().save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):
         from django_base.middleware import get_request
