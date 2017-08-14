@@ -806,6 +806,21 @@ class Broadcast(AbstractMessageModel):
         default=STATUS_DRAFT,
     )
 
+    TARGET_LIVE = 'TARGET_LIVE'
+    TARGET_SYSTEM = 'TARGET_SYSTEM'
+    TARGET_CHOICES = (
+        (TARGET_LIVE, '直播间消息'),
+        (TARGET_SYSTEM, '系统消息'),
+    )
+
+    target = models.CharField(
+        verbose_name='目标用户',
+        max_length=20,
+        choices=TARGET_CHOICES,
+        blank=True,
+        null=True,
+    )
+
     groups = models.ManyToManyField(
         verbose_name='推送组',
         to=Group,
@@ -852,7 +867,7 @@ class Broadcast(AbstractMessageModel):
         for user in self.get_recipients():
             self.messages.create(
                 receiver=user,
-                name=self.name,
+                # name=self.name,
                 content=self.content,
                 params=self.params,
             )

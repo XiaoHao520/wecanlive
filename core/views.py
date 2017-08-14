@@ -113,6 +113,15 @@ class ImageViewSet(viewsets.ModelViewSet):
 
         return qs
 
+    @list_route(methods=['POST'])
+    def get_guide_page(self, request):
+        guide_page_arr = request.data.get('guide_page_arr')
+        data = []
+        if guide_page_arr:
+            for guide_page_id in guide_page_arr:
+                data.append(s.ImageSerializer(m.ImageModel.objects.get(pk=guide_page_id)).data)
+        return Response(data=data)
+
 
 class AudioViewSet(viewsets.ModelViewSet):
     queryset = m.AudioModel.objects.all()
@@ -291,10 +300,36 @@ class BroadcastViewSet(viewsets.ModelViewSet):
     serializer_class = s.BroadcastSerializer
     ordering = ['-pk']
 
+    def get_queryset(self):
+        qs = interceptor_get_queryset_kw_field(self)
+        target = self.request.query_params.get('target')
+        if target:
+            qs = qs.filter(target=target)
+        return qs
+
     def perform_create(self, serializer):
         # 保存的时候自动发送
         broadcast = serializer.save()
         broadcast.send()
+
+    @list_route(methods=['POST'])
+    def create_live_broadcast(self, request):
+        content = request.data.get('content')
+        print(content)
+        users = m.User.objects.filter(
+            m.models.Q(livewatchlogs_owned__date_leave=None) |
+            m.models.Q(
+                livewatchlogs_owned__date_leave__lt=m.models.F('livewatchlogs_owned__date_enter')),
+            livewatchlogs_owned__id__gt=0,
+        ).distinct().all()
+        broadcast = m.Broadcast.objects.create(
+            target=m.Broadcast.TARGET_LIVE,
+            content=content,
+        )
+        for user in users:
+            broadcast.users.add(user)
+        broadcast.send()
+        return Response(True)
 
 
 class UserViewSet(viewsets.ModelViewSet):
