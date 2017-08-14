@@ -1009,9 +1009,12 @@ class MemberViewSet(viewsets.ModelViewSet):
         return Response(data=True)
 
     @list_route(methods=['POST'])
-    def add_member_blacklist(self, request):
+    def set_member_blacklist(self, request):
         member = m.User.objects.get(id=request.data.get('member')).member
-
+        is_black = False
+        if request.data.get('is_black') and request.data.get('is_black') == '1':
+            is_black = True
+        member.set_blacklist_by(self.request.user, is_black)
         return Response(data=True)
 
 
@@ -2109,6 +2112,24 @@ class ContactViewSet(viewsets.ModelViewSet):
         qs = interceptor_get_queryset_kw_field(self)
 
         return qs
+
+    @list_route(methods=['POST'])
+    def set_disturb(self, request):
+        disturb = request.data.get('disturb')
+        contact = m.Contact.objects.filter(author=self.request.user,
+                                           user__id=request.data.get('member'))
+        if not contact.exists():
+            return response_fail('你們還不是好友關係')
+        setting = contact.first().settings.filter(key='is_not_disturb')
+        if setting.exists():
+            setting.value = disturb
+        else:
+            contact.first().settings.create(
+                key='is_not_disturb',
+                value=disturb,
+            )
+
+        return Response(data=True)
 
 
 class AccountTransactionViewSet(viewsets.ModelViewSet):

@@ -487,6 +487,26 @@ class Member(AbstractMember,
             date_created__date=datetime.now().date()
         ).exists()
 
+    def set_blacklist_by(self, user, is_black=True):
+        """ 設置user的黑名單增加self
+        :param user: 黑名單作者
+        :param is_black: True 設置到黑名單，False 取消黑名單
+        :return:
+        """
+        self.set_marked_by(user, 'blacklist', is_black)
+
+    def is_not_disturb(self):
+        """我是否設置self爲免打擾
+        要有好友关系并且在关系设置is_not_disturb为True"""
+        me = get_request().user
+        contact = Contact.objects.filter(author=me, user=self.user)
+        if contact.exists():
+            setting = contact.first().settings.filter(key='is_not_disturb')
+            print(setting.first().value)
+            if setting.exists() and setting.first().value == True:
+                return True
+        return False
+
 
 class Robot(models.Model):
     """ 机器人
