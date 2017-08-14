@@ -502,8 +502,7 @@ class Member(AbstractMember,
         contact = Contact.objects.filter(author=me, user=self.user)
         if contact.exists():
             setting = contact.first().settings.filter(key='is_not_disturb')
-            print(setting.first().value)
-            if setting.exists() and setting.first().value == True:
+            if setting.exists() and setting.first().value == '1':
                 return True
         return False
 

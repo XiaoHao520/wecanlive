@@ -485,7 +485,7 @@ class MemberSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
     username = serializers.ReadOnlyField(source='user.username')
 
-    # is_not_disturb = serializers.ReadOnlyField()
+    is_not_disturb = serializers.ReadOnlyField()
     class Meta:
         model = m.Member
         # fields = '__all__'

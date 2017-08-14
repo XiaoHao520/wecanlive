@@ -449,7 +449,7 @@ class UserViewSet(viewsets.ModelViewSet):
     @list_route(methods=['GET'])
     def current(self, request):
         if request.user.is_anonymous():
-            return response_fail('')
+            return response_fail('需要登录', silent=True)
         data = s.UserDetailedSerializer(request.user).data
         if hasattr(request.user, 'member'):
             data['tencent_sig'] = request.user.member.tencent_sig
@@ -2122,7 +2122,9 @@ class ContactViewSet(viewsets.ModelViewSet):
             return response_fail('你們還不是好友關係')
         setting = contact.first().settings.filter(key='is_not_disturb')
         if setting.exists():
-            setting.value = disturb
+            setting_is_not_disturb = setting.first()
+            setting_is_not_disturb.value = disturb
+            setting_is_not_disturb.save()
         else:
             contact.first().settings.create(
                 key='is_not_disturb',
