@@ -483,6 +483,7 @@ class MemberSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
     first_live_date = serializers.ReadOnlyField(source='get_first_live_date')
 
+    username = serializers.ReadOnlyField(source='user.username')
     class Meta:
         model = m.Member
         # fields = '__all__'

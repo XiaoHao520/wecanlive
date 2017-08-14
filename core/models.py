@@ -82,6 +82,7 @@ class InformableModel(models.Model):
 
 
 class Member(AbstractMember,
+             InformableModel,
              UserMarkableModel):
     """ 会员
     注意：用户的追踪状态通过 UserMark 的 subject=follow 类型实现
@@ -139,8 +140,6 @@ class Member(AbstractMember,
     def save(self, *args, **kwargs):
         from django_base.middleware import get_request
         user = get_request().user
-        print(self.age)
-        print(self.constellation)
         if user.is_staff and self.user and not self.is_del:
             super().save(*args, **kwargs)
             AdminLog.make(user, AdminLog.TYPE_UPDATE, self, '修改會員')
@@ -166,6 +165,16 @@ class Member(AbstractMember,
                 remark='完成元气任务的完善资料任务奖励',
                 type=CreditStarTransaction.TYPE_EARNING,
             )
+        # if not self.pk:
+        #     from tencent.webim import WebIM
+        #     webim = WebIM(settings.TENCENT_WEBIM_APPID)
+        #     create = webim.create_group(
+        #         self.user.username,
+        #         self.user.username,
+        #         type=WebIM.GROUP_TYPE_PRIVATE,
+        #         group_id=self.user.username,
+        #     )
+
         super().save(*args, **kwargs)
 
     def load_tencent_sig(self, force=False):
@@ -1544,8 +1553,8 @@ class FamilyMissionAchievement(UserOwnedModel):
         db_table = 'core_family_mission_achievement'
 
     def save(self, *args, **kwargs):
-        # if not self.id:
-        #     assert not self.mission.family.author == self.author, '家族長不能領取任務'
+        if not self.id:
+            assert not self.mission.family.author == self.author, '家族長不能領取任務'
 
         super().save(*args, **kwargs)
 

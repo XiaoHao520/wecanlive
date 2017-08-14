@@ -24,6 +24,7 @@ def patch_methods(model_class):
             obj = getattr(cls, k)
             if not k.startswith('_') and callable(obj):
                 setattr(model_class, k, obj)
+
     return do_patch
 
 

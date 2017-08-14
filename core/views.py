@@ -167,8 +167,16 @@ class MessageViewSet(viewsets.ModelViewSet):
         ))
 
         family = self.request.query_params.get('family')
+        chat = self.request.query_params.get('chat')
+
         if family:
             qs = qs.filter(families__id=family).order_by('date_created')
+        if chat:
+            qs = qs.filter(
+                m.models.Q(sender__id=chat, receiver=self.request.user) |
+                m.models.Q(sender=self.request.user, receiver__id=chat)
+            ).order_by('date_created')
+
         return qs
 
     @list_route(methods=['POST'])
@@ -180,6 +188,22 @@ class MessageViewSet(viewsets.ModelViewSet):
             m.Message.create_message(object, message_type)
         else:
             m.Message.create_message(object, message_type)
+        return Response(data=True)
+
+    @list_route(methods=['POST'])
+    def read_message(self, request):
+        last_id = request.data.get('last_id')
+        sender = m.User.objects.get(id=request.data.get('sender'))
+        messages = m.Message.objects.filter(
+            sender=sender,
+            receiver=self.request.user,
+            id__gt=last_id,
+            is_read=False,
+        ).all()
+        for message in messages:
+            message.is_read = True
+            message.save()
+
         return Response(data=True)
 
 
@@ -898,6 +922,62 @@ class MemberViewSet(viewsets.ModelViewSet):
             )
             data.append(item)
         return Response(data=sorted(data, key=lambda item: item['first_pk'], reverse=True))
+
+    @list_route(methods=['GET'])
+    def get_chat_list(self, request):
+        """ 获取聊天列表
+        所有和自己发过消息的人的列表
+        附加最近发布过的消息，按照从新到旧的顺序排列
+        :return:
+        """
+        me = request.user
+        sql = '''
+        select u.*, max(m.date_created) last_date
+        from auth_user u, base_message m
+        where u.id = m.sender_id and m.receiver_id = %s
+          or u.id = m.receiver_id and m.sender_id = %s
+        group by u.id
+        order by max(m.date_created) desc
+        '''
+
+        users = m.User.objects.raw(sql, [me.id, me.id])
+        data = []
+
+        for user in users:
+            message = m.Message.objects.filter(
+                m.models.Q(sender=user, receiver=me) |
+                m.models.Q(sender=me, receiver=user)
+            ).order_by('-date_created').first()
+            unread_count = m.Message.objects.filter(
+                sender=user,
+                receiver=me,
+                is_read=False,
+            ).count()
+            data.append(dict(
+                id=user.id,
+                nickname=user.member.nickname,
+                message_date=message.date_created,
+                message_countent=message.content,
+                avatar=s.ImageSerializer(user.member.avatar).data['image'],
+            ))
+
+        return Response(data=data)
+
+    @list_route(methods=['POST'])
+    def member_inform(self, request):
+        # 舉報用戶
+        member = m.User.objects.get(id=request.data.get('member')).member
+        member.informs.create(
+            author=self.request.user,
+            reason=request.data.get('content'),
+        )
+        return Response(data=True)
+
+    @list_route(methods=['POST'])
+    def add_member_blacklist(self, request):
+        member = m.User.objects.get(id=request.data.get('member')).member
+
+        return Response(data=True)
 
 
 class RobotViewSet(viewsets.ModelViewSet):
@@ -1987,10 +2067,13 @@ class ContactViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.Contact.objects.all()
     serializer_class = s.ContactSerializer
-    ordering = ['-pk']
+
+    # ordering = ['-pk']
 
     def get_queryset(self):
-        return interceptor_get_queryset_kw_field(self)
+        qs = interceptor_get_queryset_kw_field(self)
+
+        return qs
 
 
 class AccountTransactionViewSet(viewsets.ModelViewSet):
