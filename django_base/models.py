@@ -807,9 +807,15 @@ class Broadcast(AbstractMessageModel):
 
     TARGET_LIVE = 'TARGET_LIVE'
     TARGET_SYSTEM = 'TARGET_SYSTEM'
+    TARGET_SYSTEM_FAMILYS = 'TARGET_SYSTEM_FAMILYS'
+    TARGET_SYSTEM_NOT_FAMILYS = 'TARGET_SYSTEM_NOT_FAMILYS'
+    TARGET_ACTIVITY = 'TARGET_ACTIVITY'
     TARGET_CHOICES = (
         (TARGET_LIVE, '直播间消息'),
         (TARGET_SYSTEM, '系统消息'),
+        (TARGET_ACTIVITY, '活動消息'),
+        (TARGET_SYSTEM_FAMILYS, '系統消息（家族成員）'),
+        (TARGET_SYSTEM_NOT_FAMILYS, '系統消息（非家族成員）'),
     )
 
     target = models.CharField(

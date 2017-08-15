@@ -307,6 +307,31 @@ class BroadcastViewSet(viewsets.ModelViewSet):
         broadcast.send()
         return Response(True)
 
+    @list_route(methods=['POST'])
+    def create_system_broadcast(self, request):
+        content = request.data.get('content')
+        target = request.data.get('target')
+        print(content)
+        print(target)
+        if target == m.Broadcast.TARGET_SYSTEM:
+            users = m.User.objects.all()
+        elif target == m.Broadcast.TARGET_SYSTEM_FAMILYS:
+            users = m.User.objects.filter(
+                familymembers_owned__gt=0,
+            ).distinct().all()
+        elif target == m.Broadcast.TARGET_SYSTEM_NOT_FAMILYS:
+            users = m.User.objects.exclude(
+                familymembers_owned__gt=0,
+            ).distinct().all()
+        broadcast = m.Broadcast.objects.create(
+            target=target,
+            content=content,
+        )
+        for user in users:
+            broadcast.users.add(user)
+        broadcast.send()
+        return Response(True)
+
 
 class UserViewSet(viewsets.ModelViewSet):
     """ User
@@ -933,6 +958,13 @@ class MemberViewSet(viewsets.ModelViewSet):
             )
             data.append(item)
         return Response(data=sorted(data, key=lambda item: item['first_pk'], reverse=True))
+
+    @list_route(methods=['POST'])
+    def update_search_history(self, request):
+        keyword = request.data.get('keyword')
+        if keyword:
+            self.request.user.member.update_search_history(keyword)
+        return Response(data=True)
 
 
 class RobotViewSet(viewsets.ModelViewSet):
