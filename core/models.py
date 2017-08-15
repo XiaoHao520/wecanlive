@@ -515,6 +515,20 @@ class Member(AbstractMember,
                 return True
         return False
 
+    def update_search_history(self, key):
+        """
+        更新搜索历史
+        :param key:
+        :return:
+        """
+        search_history = self.search_history.split(',')
+        if key in search_history:
+            search_history.remove(key)
+        search_history.insert(0, key)
+        string = ','.join(search_history)
+        self.search_history = string
+        self.save()
+
 
 class Robot(models.Model):
     """ 机器人
@@ -1669,6 +1683,16 @@ class Live(UserOwnedModel,
     like_count = models.IntegerField(
         verbose_name='点赞数量',
         default=0,
+    )
+
+    is_index_recommended = models.BooleanField(
+        verbose_name='是否为首次推荐',
+        default=False,
+    )
+
+    is_hot_recommended = models.BooleanField(
+        verbose_name='是否为热门推荐',
+        default=False,
     )
 
     class Meta:

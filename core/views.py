@@ -177,6 +177,7 @@ class MessageViewSet(viewsets.ModelViewSet):
 
         family = self.request.query_params.get('family')
         chat = self.request.query_params.get('chat')
+        target = self.request.query_params.get('target')
 
         if family:
             qs = qs.filter(families__id=family).order_by('date_created')
@@ -185,7 +186,16 @@ class MessageViewSet(viewsets.ModelViewSet):
                 m.models.Q(sender__id=chat, receiver=self.request.user) |
                 m.models.Q(sender=self.request.user, receiver__id=chat)
             ).order_by('date_created')
-
+        if target and target == 'activity':
+            qs = qs.filter(
+                broadcast__target=m.Broadcast.TARGET_ACTIVITY,
+            ).order_by('date_created')
+        if target and target == 'system':
+            qs = qs.filter(
+                m.models.Q(broadcast__target=m.Broadcast.TARGET_SYSTEM) |
+                m.models.Q(broadcast__target=m.Broadcast.TARGET_SYSTEM_FAMILYS) |
+                m.models.Q(broadcast__target=m.Broadcast.TARGET_SYSTEM_NOT_FAMILYS)
+            ).order_by('date_created')
         return qs
 
     @list_route(methods=['POST'])
@@ -324,6 +334,31 @@ class BroadcastViewSet(viewsets.ModelViewSet):
         ).distinct().all()
         broadcast = m.Broadcast.objects.create(
             target=m.Broadcast.TARGET_LIVE,
+            content=content,
+        )
+        for user in users:
+            broadcast.users.add(user)
+        broadcast.send()
+        return Response(True)
+
+    @list_route(methods=['POST'])
+    def create_system_broadcast(self, request):
+        content = request.data.get('content')
+        target = request.data.get('target')
+        print(content)
+        print(target)
+        if target == m.Broadcast.TARGET_SYSTEM:
+            users = m.User.objects.all()
+        elif target == m.Broadcast.TARGET_SYSTEM_FAMILYS:
+            users = m.User.objects.filter(
+                familymembers_owned__gt=0,
+            ).distinct().all()
+        elif target == m.Broadcast.TARGET_SYSTEM_NOT_FAMILYS:
+            users = m.User.objects.exclude(
+                familymembers_owned__gt=0,
+            ).distinct().all()
+        broadcast = m.Broadcast.objects.create(
+            target=target,
             content=content,
         )
         for user in users:
@@ -1025,6 +1060,13 @@ class MemberViewSet(viewsets.ModelViewSet):
         if request.data.get('is_black') and request.data.get('is_black') == '1':
             is_black = True
         member.set_blacklist_by(self.request.user, is_black)
+        return Response(data=True)
+
+    @list_route(methods=['POST'])
+    def update_search_history(self, request):
+        keyword = request.data.get('keyword')
+        if keyword:
+            self.request.user.member.update_search_history(keyword)
         return Response(data=True)
 
 
