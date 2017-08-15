@@ -827,7 +827,7 @@ class Broadcast(AbstractMessageModel):
 
     target = models.CharField(
         verbose_name='目标用户',
-        max_length=20,
+        max_length=30,
         choices=TARGET_CHOICES,
         blank=True,
         null=True,

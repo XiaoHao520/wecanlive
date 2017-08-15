@@ -312,9 +312,15 @@ class BroadcastViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = interceptor_get_queryset_kw_field(self)
-        target = self.request.query_params.get('target')
-        if target:
+        target = self.request.query_params.get('target_type')
+        if target == 'TARGET_LIVE':
             qs = qs.filter(target=target)
+        elif target == 'TARGET_SYSTEM':
+            qs = qs.filter(
+                m.models.Q(target='TARGET_SYSTEM') |
+                m.models.Q(target='TARGET_SYSTEM_FAMILYS') |
+                m.models.Q(target='TARGET_SYSTEM_NOT_FAMILYS')
+            )
         return qs
 
     def perform_create(self, serializer):
