@@ -683,6 +683,12 @@ class Comment(HierarchicalModel,
             )
         super().delete(*args, **kwargs)
 
+    def get_activeevent_img(self):
+        if self.activeevents.first():
+            return self.activeevents.first().images.first().image.url
+        else:
+            return False
+
 
 class CommentableModel(models.Model):
     comments = models.ManyToManyField(
@@ -1275,6 +1281,11 @@ class UserMark(UserOwnedModel):
     object_id = models.PositiveIntegerField()
     object = GenericForeignKey('content_type', 'object_id')
 
+    date_created = models.DateTimeField(
+        verbose_name='记录时间',
+        auto_now_add=True,
+    )
+
     subject = models.CharField(
         verbose_name='标记类型',
         max_length=20,
@@ -1289,6 +1300,17 @@ class UserMark(UserOwnedModel):
     def __str__(self):
         return '{} - Content type:{}- id:{} - 类型:{}'.format(self.author, self.content_type, self.object_id,
                                                             self.subject)
+
+    def get_activeevent_img(self):
+        if self.content_type == ContentType.objects.get(model='activeevent'):
+            from core.models import ActiveEvent
+            activeevent = ActiveEvent.objects.get(pk=self.object_id)
+            if activeevent.images.exists():
+                return activeevent.images.first().image.url
+            else:
+                return False
+        else:
+            return False
 
 
 class UserMarkableModel(models.Model):

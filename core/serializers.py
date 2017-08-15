@@ -459,6 +459,8 @@ class MemberSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     count_live = serializers.ReadOnlyField(source='get_live_count')
     last_live_end = serializers.ReadOnlyField(source='get_last_live_end')
     is_following = serializers.BooleanField(source='is_followed_by_current_user', read_only=True)
+
+    following_start_date = serializers.ReadOnlyField(source='get_following_start_date')
     # age = serializers.ReadOnlyField(source='get_age')
 
     credit_diamond = serializers.ReadOnlyField()
@@ -486,6 +488,7 @@ class MemberSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     username = serializers.ReadOnlyField(source='user.username')
 
     is_not_disturb = serializers.ReadOnlyField()
+
     class Meta:
         model = m.Member
         # fields = '__all__'
@@ -603,11 +606,9 @@ class BadgeRecordSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
 
 class DailyCheckInLogSerializer(QueryFieldsMixin, serializers.ModelSerializer):
-
     coin_amount = serializers.ReadOnlyField(source='coin_transaction.amount')
 
     star_amount = serializers.ReadOnlyField(source='prize_star_transaction.amount')
-
 
     class Meta:
         model = m.DailyCheckInLog
@@ -1207,6 +1208,10 @@ class CommentSerializer(QueryFieldsMixin, serializers.ModelSerializer):
         source='comment_watch_status',
     )
 
+    activeevent_img = serializers.ReadOnlyField(
+        source='get_activeevent_img'
+    )
+
     class Meta:
         model = m.Comment
         fields = '__all__'
@@ -1219,6 +1224,10 @@ class UserMarkSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
     author_nickname = serializers.ReadOnlyField(
         source='author.member.nickname'
+    )
+
+    activeevent_img = serializers.ReadOnlyField(
+        source='get_activeevent_img'
     )
 
     class Meta:

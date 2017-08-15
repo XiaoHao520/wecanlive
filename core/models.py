@@ -253,6 +253,15 @@ class Member(AbstractMember,
         """
         return self.get_followed().count()
 
+    def get_following_start_date(self):
+        """获得用户开始跟踪的时间，如果没跟踪返回false"""
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.member.is_followed_by(self.user):
+            return UserMark.objects.filter(author=self.user, subject='follow', object_id=user.id).first().date_created
+        else:
+            return False
+
     def get_contacts(self):
         """ 獲取聯繫人列表
         :return:

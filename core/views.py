@@ -136,7 +136,7 @@ class MessageViewSet(viewsets.ModelViewSet):
     class Filter(FilterSet):
         # 系统消息
         is_from_system = filters.BooleanFilter(
-            name='author',
+            name='sender',
             lookup_expr='isnull',
         )
         # 客服消息
@@ -877,6 +877,16 @@ class MemberViewSet(viewsets.ModelViewSet):
             else not member.is_followed_by_current_user()
         member.set_followed_by(request.user, is_follow)
         return u.response_success('')
+
+    @detail_route(methods=['POST'])
+    def cancel_follow(self, request, pk):
+        me = m.Member.objects.get(pk=pk)
+        member = request.data.get('member')
+        follow_mark = m.UserMark.objects.filter(author=me.user, subject='follow', object_id=member)
+        if follow_mark.exists():
+            follow_mark.first().delete()
+
+        return Response(data=True)
 
     @detail_route(methods=['GET'])
     def get_contact_list(self, request, pk):
@@ -2050,12 +2060,22 @@ class CommentViewSet(viewsets.ModelViewSet):
         qs = interceptor_get_queryset_kw_field(self)
         activeevent_id = self.request.query_params.get('activeevent')
         live_id = self.request.query_params.get('live')
+        own_activeevent_comment = self.request.query_params.get('own_activeevent_comment')
+
+        me = self.request.user
         if activeevent_id:
             qs = qs.filter(activeevents__id=activeevent_id,
                            is_active=True, ).order_by('-date_created')
         if live_id:
             qs = qs.filter(livewatchlogs__live__id=live_id,
                            is_active=True, ).order_by('-date_created')
+
+        if own_activeevent_comment:
+            activeevents = me.activeevents_owned.all()
+            qs = qs.filter(
+                activeevents__id__in=[activeevent.id for activeevent in activeevents],
+            ).order_by('-date_created')
+
         return qs
 
     @list_route(methods=['POST'])
@@ -2098,6 +2118,18 @@ class UserMarkViewSet(viewsets.ModelViewSet):
                 subject='like',
                 content_type=m.ContentType.objects.get(model='activeevent'),
             ).order_by('-date_created')
+
+        own_like_list = self.request.query_params.get('own_like_list')
+        # 个人被点赞的usermark列表
+        me = self.request.user
+        if own_like_list:
+            activeevents = me.activeevents_owned.all()
+            qs = qs.filter(
+                object_id__in=[activeevent.id for activeevent in activeevents],
+                subject='like',
+                content_type=m.ContentType.objects.get(model='activeevent'),
+            ).order_by('-date_created')
+
         return qs
 
 
