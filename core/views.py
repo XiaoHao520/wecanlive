@@ -317,9 +317,7 @@ class BroadcastViewSet(viewsets.ModelViewSet):
     def create_system_broadcast(self, request):
         content = request.data.get('content')
         target = request.data.get('target')
-        print(content)
-        print(target)
-        if target == m.Broadcast.TARGET_SYSTEM:
+        if target == m.Broadcast.TARGET_SYSTEM or target == m.Broadcast.TARGET_ACTIVITY:
             users = m.User.objects.all()
         elif target == m.Broadcast.TARGET_SYSTEM_FAMILYS:
             users = m.User.objects.filter(
@@ -328,6 +326,13 @@ class BroadcastViewSet(viewsets.ModelViewSet):
         elif target == m.Broadcast.TARGET_SYSTEM_NOT_FAMILYS:
             users = m.User.objects.exclude(
                 familymembers_owned__gt=0,
+            ).distinct().all()
+        elif target == m.Broadcast.TARGET_LIVE:
+            users = m.User.objects.filter(
+                m.models.Q(livewatchlogs_owned__date_leave=None) |
+                m.models.Q(
+                    livewatchlogs_owned__date_leave__lt=m.models.F('livewatchlogs_owned__date_enter')),
+                livewatchlogs_owned__id__gt=0,
             ).distinct().all()
         broadcast = m.Broadcast.objects.create(
             target=target,
