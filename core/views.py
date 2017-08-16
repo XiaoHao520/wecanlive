@@ -222,6 +222,39 @@ class MessageViewSet(viewsets.ModelViewSet):
         for message in messages:
             message.is_read = True
             message.save()
+        return Response(data=True)
+
+    @list_route(methods=['POST'])
+    def read_system_message(self, request):
+        last_id = request.data.get('last_id')
+        target = request.data.get('target')
+        messages = []
+        if target == 'system':
+            messages = m.Message.objects.filter(
+                m.models.Q(broadcast__target=m.Broadcast.TARGET_SYSTEM,
+                           sender=None,
+                           receiver=self.request.user,
+                           is_read=False, ) |
+                m.models.Q(broadcast__target=m.Broadcast.TARGET_SYSTEM_NOT_FAMILYS,
+                           sender=None,
+                           receiver=self.request.user,
+                           is_read=False, ) |
+                m.models.Q(broadcast__target=m.Broadcast.TARGET_SYSTEM_FAMILYS,
+                           sender=None,
+                           receiver=self.request.user,
+                           is_read=False, )
+            )
+        elif target == 'activity':
+            messages = m.Message.objects.filter(
+                sender=None,
+                receiver=self.request.user,
+                is_read=False,
+                broadcast__target=m.Broadcast.TARGET_ACTIVITY,
+            )
+
+        for message in messages:
+            message.is_read = True
+            message.save()
 
         return Response(data=True)
 
@@ -1073,6 +1106,12 @@ class MemberViewSet(viewsets.ModelViewSet):
         keyword = request.data.get('keyword')
         if keyword:
             self.request.user.member.update_search_history(keyword)
+        return Response(data=True)
+
+    @list_route(methods=['GET'])
+    def get_system_message_list(self, request):
+        # 获得系统消息列表
+
         return Response(data=True)
 
 
