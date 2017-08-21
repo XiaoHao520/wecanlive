@@ -460,7 +460,7 @@ class MemberSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     last_live_end = serializers.ReadOnlyField(source='get_last_live_end')
     is_following = serializers.BooleanField(source='is_followed_by_current_user', read_only=True)
 
-    following_start_date = serializers.ReadOnlyField(source='get_following_start_date')
+    # following_start_date = serializers.ReadOnlyField(source='get_following_start_date')
     # age = serializers.ReadOnlyField(source='get_age')
 
     credit_diamond = serializers.ReadOnlyField()
@@ -488,6 +488,8 @@ class MemberSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     username = serializers.ReadOnlyField(source='user.username')
 
     is_not_disturb = serializers.ReadOnlyField()
+
+    is_blacklist = serializers.ReadOnlyField()
 
     class Meta:
         model = m.Member
@@ -1091,6 +1093,22 @@ class NotificationsSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
 
 class VisitLogSerializer(QueryFieldsMixin, serializers.ModelSerializer):
+
+    author_avatar = serializers.ReadOnlyField(source='author.member.avatar.image.url')
+    author_nickname = serializers.ReadOnlyField(source='author.member.nickname')
+    author_gender = serializers.ReadOnlyField(source='author.member.gender')
+    author_age = serializers.ReadOnlyField(source='author.member.age')
+    author_constellation = serializers.ReadOnlyField(source='author.member.constellation')
+    author_signature = serializers.ReadOnlyField(source='author.member.signature')
+
+    contact_form_me = serializers.ReadOnlyField(source='author.member.contact_form_me')
+
+    contact_to_me = serializers.ReadOnlyField(source='author.member.contact_to_me')
+
+    # todo 距离 时间
+    time_ago = serializers.ReadOnlyField()
+
+
     class Meta:
         model = m.VisitLog
         fields = '__all__'
@@ -1229,6 +1247,10 @@ class UserMarkSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     activeevent_img = serializers.ReadOnlyField(
         source='get_activeevent_img'
     )
+
+    is_following = serializers.BooleanField(source='author.member.is_followed_by_current_user', read_only=True)
+
+
 
     class Meta:
         model = m.UserMark

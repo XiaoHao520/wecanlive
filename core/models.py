@@ -125,6 +125,13 @@ class Member(AbstractMember,
         help_text='默认过期时间为180天'
     )
 
+    check_member_history = models.TextField(
+        verbose_name='查看谁看过我列表记录',
+        null=True,
+        blank=True,
+        help_text='当天内查看非好友会员的id'
+    )
+
     class Meta:
         verbose_name = '会员'
         verbose_name_plural = '会员'
@@ -241,6 +248,16 @@ class Member(AbstractMember,
             user__usermarks_owned__subject='follow',
         )
 
+    def get_blacklist(self):
+        """获取会员标记黑名单列表"""
+        return Member.get_objects_marked_by(self.user, 'blacklist')
+
+    def is_blacklist(self):
+        """判斷user是否標記self爲黑名單"""
+        from django_base.middleware import get_request
+        user = get_request().user
+        return self.is_marked_by(user, 'blacklist')
+
     def get_follow_count(self):
         """ 獲取跟蹤數
         :return:
@@ -253,14 +270,14 @@ class Member(AbstractMember,
         """
         return self.get_followed().count()
 
-    def get_following_start_date(self):
-        """获得用户开始跟踪的时间，如果没跟踪返回false"""
-        from django_base.middleware import get_request
-        user = get_request().user
-        if user.member.is_followed_by(self.user):
-            return UserMark.objects.filter(author=self.user, subject='follow', object_id=user.id).first().date_created
-        else:
-            return False
+    # def get_following_start_date(self):
+    #     """获得用户开始跟踪的时间，如果没跟踪返回false"""
+    #     from django_base.middleware import get_request
+    #     user = get_request().user
+    #     if user.member.is_followed_by(self.user):
+    #         return UserMark.objects.filter(author=self.user, subject='follow', object_id=user.id).first().date_created
+    #     else:
+    #         return False
 
     def get_contacts(self):
         """ 獲取聯繫人列表
@@ -505,7 +522,7 @@ class Member(AbstractMember,
         self.set_marked_by(user, 'blacklist', is_black)
 
     def is_not_disturb(self):
-        """我是否設置self爲免打擾
+        """me是否設置self爲免打擾
         要有好友关系并且在关系设置is_not_disturb为True"""
         me = get_request().user
         contact = Contact.objects.filter(author=me, user=self.user)
@@ -528,6 +545,35 @@ class Member(AbstractMember,
         string = ','.join(search_history)
         self.search_history = string
         self.save()
+
+    def update_check_member_history(self, member):
+        """
+        更新我查看 ‘看过我的人’列表中非好友会员记录，
+        如果为会员可以无限查看，
+        如果不是会员，只能看非好友关系的人一天十个
+        """
+        contact_form_me = Contact.objects.filter(
+            author=self.user,
+            user=member.user,
+        ).exists()
+        contact_to_me = Contact.objects.filter(
+            author=member.user,
+            user=self.user,
+        ).exists()
+        if contact_form_me and contact_to_me:
+            return member
+        check_history = self.check_member_history.split(',')
+        if len(check_history) >= 10 and not str(member.user.id) in check_history \
+                and self.get_vip_level() < 5 and self.get_level() < 5:
+            # 查看已经超过10个并且没有会员等级
+            return False
+        if str(member.user.id) in check_history:
+            check_history.remove(str(member.user.id))
+        check_history.insert(0, str(member.user.id))
+        string = ','.join(check_history)
+        self.check_member_history = string
+        self.save()
+        return member
 
 
 class Robot(models.Model):
@@ -1636,6 +1682,7 @@ class Live(UserOwnedModel,
     category = models.ForeignKey(
         verbose_name='直播分类',
         to='LiveCategory',
+        related_name='lives',
         blank=True,
         null=True,
     )
@@ -3316,14 +3363,17 @@ class VisitLog(UserOwnedModel,
         :return:
         """
         log, created = VisitLog.objects.get_or_create(
-            author=guest,
-            user=host,
+            author=guest.user,
+            user=host.user,
         )
         log.date_created = datetime.now()
         log.geo_lat = guest.geo_lat
         log.geo_lng = guest.geo_lng
         log.geo_label = guest.geo_label
         log.save()
+
+    def time_ago(self):
+        return int((datetime.now() - self.date_last_visit).seconds / 60)
 
     class Meta:
         verbose_name = '访客记录'

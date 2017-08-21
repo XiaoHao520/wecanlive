@@ -28,3 +28,11 @@ class AutomaticShelvesCronJob(CronJobBase):
         if not rank_record_target_plan:
             date_planned = now + timedelta(minutes=15)
             m.PlannedTask.make('update_rank_record', date_planned)
+
+        update_member_check_history_plan = m.PlannedTask.objects.filter(
+            method='update_member_check_history',
+            date_planned__gt=now,
+        ).first()
+        if not update_member_check_history_plan:
+            date_planned = datetime(now.year, now.month, now.day) + timedelta(days=1)
+            m.PlannedTask.make('update_member_check_history', date_planned)

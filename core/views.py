@@ -884,12 +884,19 @@ class MemberViewSet(viewsets.ModelViewSet):
         member_id = self.request.query_params.get('member')
         is_follow = self.request.query_params.get('is_follow')
         is_followed = self.request.query_params.get('is_followed')
+        is_blacklist = self.request.query_params.get('is_blacklist')
+        new_member = self.request.query_params.get('new_member')
+        follow_recommended = self.request.query_params.get('follow_recommended')
+
         if member_id:
             member = m.Member.objects.filter(user_id=member_id).first()
             if member and is_follow:
                 qs = member.get_follow()
             elif member and is_followed:
                 qs = member.get_followed()
+
+        if is_blacklist:
+            qs = self.request.user.member.get_blacklist()
 
         invite = self.request.query_params.get('invite')
         if invite:
@@ -920,6 +927,26 @@ class MemberViewSet(viewsets.ModelViewSet):
             qs = qs.filter(is_withdraw_blacklisted=True)
         elif is_withdraw_blacklisted == 'false':
             qs = qs.exclude(is_withdraw_blacklisted=True)
+
+        if new_member:
+            from django.db.models import Count
+            qs = qs.annotate(
+                live_count=Count('user__lives_owned')
+            ).filter(
+                live_count__lte=3,
+                live_count__gt=0,
+            ).order_by('live_count', '-date_created')
+
+        if follow_recommended:
+            me = self.request.user.member
+            follow = me.get_follow().all()
+            qs = qs.filter(
+                is_follow_recommended=True
+            ).exclude(
+                user=self.request.user
+            ).exclude(
+                user__in=[member.user for member in follow],
+            )
 
         return qs
 
@@ -1111,8 +1138,100 @@ class MemberViewSet(viewsets.ModelViewSet):
     @list_route(methods=['GET'])
     def get_system_message_list(self, request):
         # 获得系统消息列表
+        # 最新系統信息
+        system_message = m.Message.objects.filter(
+            m.models.Q(broadcast__target=m.Broadcast.TARGET_SYSTEM,
+                       sender=None, receiver=self.request.user, ) |
+            m.models.Q(broadcast__target=m.Broadcast.TARGET_SYSTEM_NOT_FAMILYS,
+                       sender=None, receiver=self.request.user, ) |
+            m.models.Q(broadcast__target=m.Broadcast.TARGET_SYSTEM_FAMILYS,
+                       sender=None, receiver=self.request.user, )
+        ).order_by('-date_created')
+        last_system_message = None
+        if system_message.exists():
+            last_system_message = dict(
+                date_created=system_message.first().date_created,
+                content=system_message.first().content,
+                is_read=system_message.first().is_read,
+            )
+        # 最新活動信息
+        activity_message = m.Message.objects.filter(
+            sender=None,
+            receiver=self.request.user,
+            broadcast__target=m.Broadcast.TARGET_ACTIVITY,
+        ).order_by('-date_created')
+        last_active_message = None
+        if activity_message.exists():
+            last_active_message = dict(
+                date_created=activity_message.first().date_created,
+                content=activity_message.first().content,
+                is_read=activity_message.first().is_read,
 
+            )
+        # 最新动态通知
+        last_activeevent_message = None
+        like_usermark_date = None
+        active_comment_date = None
+        activeevents = self.request.user.activeevents_owned.all()
+        like_usermark = m.UserMark.objects.filter(
+            object_id__in=[activeevent.id for activeevent in activeevents],
+            subject='like',
+            content_type=m.ContentType.objects.get(model='activeevent'),
+        ).order_by('-date_created').first()
+        active_comment = m.Comment.objects.filter(
+            activeevents__id__in=[activeevent.id for activeevent in activeevents],
+        ).order_by('-date_created').first()
+        if like_usermark:
+            like_usermark_date = like_usermark.date_created
+        if active_comment:
+            active_comment_date = active_comment.date_created
+
+        if active_comment_date > like_usermark_date:
+            last_activeevent_message = dict(
+                date_created=active_comment.date_created,
+                content=active_comment.content,
+                is_read=True,
+            )
+        else:
+            last_activeevent_message = dict(
+                date_created=like_usermark.date_created,
+                content='{}給你點了一個贊'.format(like_usermark.author.member.nickname),
+                is_read=True,
+            )
+
+        # 最新跟踪信息
+        follow_user_mark = m.UserMark.objects.filter(
+            object_id=self.request.user.id,
+            subject='follow',
+            content_type=m.ContentType.objects.get(model='member')
+        ).order_by('-date_created')
+        last_follow_message = None
+        if follow_user_mark.exists():
+            last_follow_message = dict(
+                date_created=follow_user_mark.first().date_created,
+                content='{}.追蹤了你'.format(follow_user_mark.first().author.member.nickname),
+                is_read=True,
+            )
+        return Response(data=dict(
+            last_system_message=last_system_message,
+            last_active_message=last_active_message,
+            last_follow_message=last_follow_message,
+            last_activeevent_message=last_activeevent_message,
+        ))
+
+    @list_route(methods=['GET'])
+    def get_prize_emoji(self, request):
         return Response(data=True)
+
+    @list_route(methods=['GET'])
+    def check_view_member(self, request):
+        # 查看谁看过我的列表中的会员卡
+        me = self.request.user.member
+        member = m.User.objects.get(pk=request.query_params.get('member_id')).member
+        results = me.update_check_member_history(member)
+        if not results:
+            return response_fail('', 50001, silent=True)
+        return Response(data=s.MemberSerializer(results).data)
 
 
 class RobotViewSet(viewsets.ModelViewSet):
@@ -1419,7 +1538,12 @@ class LiveCategoryViewSet(viewsets.ModelViewSet):
     ordering = ['-pk']
 
     def get_queryset(self):
-        return interceptor_get_queryset_kw_field(self)
+        from django.db.models import Count
+        qs = interceptor_get_queryset_kw_field(self)
+        order = self.request.query_params.get('order')
+        if order and order == 'live_count':
+            qs = qs.annotate(live_count=Count('lives')).order_by('live_count')
+        return qs
 
 
 class LiveViewSet(viewsets.ModelViewSet):
@@ -1702,6 +1826,7 @@ class ActiveEventViewSet(viewsets.ModelViewSet):
         qs = interceptor_get_queryset_kw_field(self)
         member_id = self.request.query_params.get('member')
         followed_by = self.request.query_params.get('followed_by')
+        hot = self.request.query_params.get('hot')
         if member_id:
             member = m.Member.objects.filter(
                 user_id=member_id
@@ -1715,6 +1840,12 @@ class ActiveEventViewSet(viewsets.ModelViewSet):
             qs = qs.filter(
                 m.models.Q(author__member__in=users_following) |
                 m.models.Q(author__member__in=users_friend)
+            )
+        if hot:
+            # 热门动态
+            # m.ContentType.objects.get(model='activeevent').id
+            qs = qs.extra(
+                select=dict()
             )
         return qs
 
@@ -1827,16 +1958,16 @@ class PrizeViewSet(viewsets.ModelViewSet):
                 ))
         return Response(data=data)
 
-    @list_route(methods=['GET'])
-    def get_user_prize_emoji(self, request):
-        # todo 获得当前用户送过的礼物没过期的表情包
-        prize = m.Prize.objects.filter(
-            date_sticker_begin__lt=datetime.now(),
-            date_sticker_end__gt=datetime.now(),
-            orders__author=request.user,
-        ).exclude(stickers=None)
-
-        return Response(data=True)
+        # @list_route(methods=['GET'])
+        # def get_user_prize_emoji(self, request):
+        #     # todo 获得当前用户送过的礼物没过期的表情包
+        #     prize = m.Prize.objects.filter(
+        #         date_sticker_begin__lt=datetime.now(),
+        #         date_sticker_end__gt=datetime.now(),
+        #         orders__author=request.user,
+        #     ).exclude(stickers=None)
+        #
+        #     return Response(data=True)
 
 
 class PrizeTransactionViewSet(viewsets.ModelViewSet):
@@ -1945,10 +2076,27 @@ class VisitLogViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.VisitLog.objects.all()
     serializer_class = s.VisitLogSerializer
-    ordering = ['-pk']
+
+    # ordering = ['-pk']
 
     def get_queryset(self):
-        return interceptor_get_queryset_kw_field(self)
+        qs = interceptor_get_queryset_kw_field(self)
+        latest = self.request.query_params.get('latest')
+        if latest:
+            latest_time = datetime.now() - timedelta(hours=24)
+            # 24小时内
+            qs = qs.filter(
+                date_last_visit__gt=latest_time,
+                user=self.request.user,
+            ).order_by('-date_last_visit')
+        return qs
+
+    @list_route(methods=['post'])
+    def visit(self, request):
+        guest = m.User.objects.get(id=request.data.get('guest')).member
+        host = m.User.objects.get(id=request.data.get('host')).member
+        m.VisitLog.visit(guest, host)
+        return Response(data=True)
 
 
 class MovieViewSet(viewsets.ModelViewSet):
@@ -2216,6 +2364,16 @@ class UserMarkViewSet(viewsets.ModelViewSet):
                 subject='like',
                 content_type=m.ContentType.objects.get(model='activeevent'),
             ).order_by('-date_created')
+
+        # 被关注列表
+        is_followed = self.request.query_params.get('is_followed')
+        if is_followed:
+            qs = qs.filter(
+                object_id=me.id,
+                subject='follow',
+                content_type=m.ContentType.objects.get(model='member'),
+            ).order_by('-date_created')
+            # print(qs)
 
         return qs
 

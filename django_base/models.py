@@ -1318,6 +1318,9 @@ class UserMark(UserOwnedModel):
         else:
             return False
 
+    def is_following(self):
+        return self.author.member.isfollow
+
 
 class UserMarkableModel(models.Model):
     marks = GenericRelation(UserMark)
@@ -1620,6 +1623,13 @@ class PlannedTask(models.Model):
                 RankRecord.make(member)
             for rank_record in rank_records:
                 rank_record.update()
+
+    @staticmethod
+    def update_member_check_history():
+        from core.models import Member
+        for member in Member.objects.all():
+            member.check_member_history = None
+            member.save()
 
 
 class AdminLog(UserOwnedModel):
