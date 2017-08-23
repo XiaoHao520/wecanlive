@@ -82,6 +82,7 @@ class InformableModel(models.Model):
 
 
 class Member(AbstractMember,
+             InformableModel,
              UserMarkableModel):
     """ 会员
     注意：用户的追踪状态通过 UserMark 的 subject=follow 类型实现
@@ -124,6 +125,23 @@ class Member(AbstractMember,
         help_text='默认过期时间为180天'
     )
 
+    check_member_history = models.TextField(
+        verbose_name='查看谁看过我列表记录',
+        null=True,
+        blank=True,
+        help_text='当天内查看非好友会员的id'
+    )
+
+    experience = models.IntegerField(
+        verbose_name='经验值',
+        default=0,
+    )
+
+    vip_level = models.IntegerField(
+        verbose_name='VIP等级',
+        default=0,
+    )
+
     class Meta:
         verbose_name = '会员'
         verbose_name_plural = '会员'
@@ -139,8 +157,6 @@ class Member(AbstractMember,
     def save(self, *args, **kwargs):
         from django_base.middleware import get_request
         user = get_request().user
-        print(self.age)
-        print(self.constellation)
         if user.is_staff and self.user and not self.is_del:
             super().save(*args, **kwargs)
             AdminLog.make(user, AdminLog.TYPE_UPDATE, self, '修改會員')
@@ -231,6 +247,16 @@ class Member(AbstractMember,
             user__usermarks_owned__object_id=self.pk,
             user__usermarks_owned__subject='follow',
         )
+
+    def get_blacklist(self):
+        """获取会员标记黑名单列表"""
+        return Member.get_objects_marked_by(self.user, 'blacklist')
+
+    def is_blacklist(self):
+        """判斷user是否標記self爲黑名單"""
+        from django_base.middleware import get_request
+        user = get_request().user
+        return self.is_marked_by(user, 'blacklist')
 
     def get_follow_count(self):
         """ 獲取跟蹤數
@@ -377,6 +403,56 @@ class Member(AbstractMember,
         """ 根据经验值获取用户等级
         :return:
         """
+        import json
+        # 获取等级规则
+        level_rules = json.loads(Option.objects.filter(key='level_rules').first().value)
+
+        # 获取经验
+        memberExp = Member.objects.filter(user=self.user.id).first().experience
+
+        # 根据经验获取等级，等级以对象的形式传送
+        memberLevel = {}
+        cc={'a':'a'}
+        if 'level_1' in level_rules:
+            amount=0 #经验总值
+            n=0 # 等级
+            for item in level_rules['level_1']:
+                startLevel=str(item['key']).split('_')[1]
+                endLevel=str(item['key']).split('_')[3]
+                preAmount=amount
+                amount+=(int(endLevel)-int(startLevel)+1)*item['value']
+                if memberExp<amount:
+                    n+=(memberExp-preAmount)//item['value']
+                    memberLevel={
+                        'topLevel':1, # 图案等级
+                        'subLevel':n,
+                        'currentLevelExp':(memberExp-preAmount)%item['value'], # 当前等级拥有经验
+                        'upgradeExp':item['value'], #升级所需经验
+                        'bigLevelExp':amount #图案等级经验总值
+                    }
+                    return memberLevel
+                n=int(endLevel)
+            if 'level_more' in level_rules:# 如果等级不为星星的时候
+                topLevel=2 # 图案等级
+                for item in level_rules['level_more']:
+                    preAmount=amount
+                    amount += 100 * item['value']
+                    if memberExp<amount:
+                        subLevel=(memberExp-preAmount)//item['value']+1
+                        memberLevel={
+                            'topLevel':topLevel,
+                            'subLevel':subLevel,
+                            'currentLevelExp': (memberExp - preAmount) % item['value'],  # 当前等级拥有经验
+                            'upgradeExp': item['value'],  # 升级所需经验
+                            'bigLevelExp': amount  # 图案等级经验总值
+                        }
+                        return memberLevel
+                    topLevel+=1
+            else:
+                raise ValueError('level_rules 没有定义好 ： \'level_more\'')
+        else:
+            raise ValueError('level_rules 没有定义好 ： \'level_1\'')
+
         # TODO: 未实现
         return 1
 
@@ -384,6 +460,7 @@ class Member(AbstractMember,
         """ 获取用户 VIP 等级
         :return:
         """
+
         # TODO: 未实现
         return 1
 
@@ -478,6 +555,25 @@ class Member(AbstractMember,
             date_created__date=datetime.now().date()
         ).exists()
 
+    def set_blacklist_by(self, user, is_black=True):
+        """ 設置user的黑名單增加self
+        :param user: 黑名單作者
+        :param is_black: True 設置到黑名單，False 取消黑名單
+        :return:
+        """
+        self.set_marked_by(user, 'blacklist', is_black)
+
+    def is_not_disturb(self):
+        """me是否設置self爲免打擾
+        要有好友关系并且在关系设置is_not_disturb为True"""
+        me = get_request().user
+        contact = Contact.objects.filter(author=me, user=self.user)
+        if contact.exists():
+            setting = contact.first().settings.filter(key='is_not_disturb')
+            if setting.exists() and setting.first().value == '1':
+                return True
+        return False
+
     def update_search_history(self, key):
         """
         更新搜索历史
@@ -491,6 +587,35 @@ class Member(AbstractMember,
         string = ','.join(search_history)
         self.search_history = string
         self.save()
+
+    def update_check_member_history(self, member):
+        """
+        更新我查看 ‘看过我的人’列表中非好友会员记录，
+        如果为会员可以无限查看，
+        如果不是会员，只能看非好友关系的人一天十个
+        """
+        contact_form_me = Contact.objects.filter(
+            author=self.user,
+            user=member.user,
+        ).exists()
+        contact_to_me = Contact.objects.filter(
+            author=member.user,
+            user=self.user,
+        ).exists()
+        if contact_form_me and contact_to_me:
+            return member
+        check_history = self.check_member_history.split(',')
+        if len(check_history) >= 10 and not str(member.user.id) in check_history \
+                and self.get_vip_level() < 5 and self.get_level() < 5:
+            # 查看已经超过10个并且没有会员等级
+            return False
+        if str(member.user.id) in check_history:
+            check_history.remove(str(member.user.id))
+        check_history.insert(0, str(member.user.id))
+        string = ','.join(check_history)
+        self.check_member_history = string
+        self.save()
+        return member
 
 
 class Robot(models.Model):
@@ -539,10 +664,10 @@ class Robot(models.Model):
     def save(self, *args, **kwargs):
         from django_base.middleware import get_request
         user = get_request().user
-        if user.is_staff and self.id:
+        if user.is_staff and self.id and not self.is_del:
             super().save(*args, **kwargs)
             AdminLog.make(user, AdminLog.TYPE_UPDATE, self, '修改機器人')
-        elif user.is_staff:
+        elif user.is_staff and not self.is_del:
             super().save(*args, **kwargs)
             AdminLog.make(user, AdminLog.TYPE_CREATE, self, '新增機器人')
         else:
@@ -1558,8 +1683,8 @@ class FamilyMissionAchievement(UserOwnedModel):
         db_table = 'core_family_mission_achievement'
 
     def save(self, *args, **kwargs):
-        # if not self.id:
-        #     assert not self.mission.family.author == self.author, '家族長不能領取任務'
+        if not self.id:
+            assert not self.mission.family.author == self.author, '家族長不能領取任務'
 
         super().save(*args, **kwargs)
 
@@ -1599,6 +1724,7 @@ class Live(UserOwnedModel,
     category = models.ForeignKey(
         verbose_name='直播分类',
         to='LiveCategory',
+        related_name='lives',
         blank=True,
         null=True,
     )
@@ -2008,6 +2134,11 @@ class ActiveEvent(UserOwnedModel,
         default=True,
     )
 
+    like_count = models.IntegerField(
+        verbose_name='点赞数',
+        default=0,
+    )
+
     class Meta:
         verbose_name = '个人动态'
         verbose_name_plural = '个人动态'
@@ -2033,6 +2164,10 @@ class ActiveEvent(UserOwnedModel,
     def get_preview(self):
         if self.images.first():
             return self.images.first()
+
+    def update_like_count(self):
+        self.like_count = self.get_like_count()
+        self.save()
 
 
 class PrizeCategory(EntityModel):
@@ -2203,10 +2338,8 @@ class Prize(EntityModel):
         if user.is_staff and self.id and not self.is_del:
             AdminLog.make(user, AdminLog.TYPE_UPDATE, self, '修改禮物')
         elif user.is_staff and not self.is_del:
-            super().save(*args, **kwargs)
             AdminLog.make(user, AdminLog.TYPE_CREATE, self, '新增禮物')
-        else:
-            super().save(*args, **kwargs)
+        super().save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):
         from django_base.middleware import get_request
@@ -3281,14 +3414,17 @@ class VisitLog(UserOwnedModel,
         :return:
         """
         log, created = VisitLog.objects.get_or_create(
-            author=guest,
-            user=host,
+            author=guest.user,
+            user=host.user,
         )
         log.date_created = datetime.now()
         log.geo_lat = guest.geo_lat
         log.geo_lng = guest.geo_lng
         log.geo_label = guest.geo_label
         log.save()
+
+    def time_ago(self):
+        return int((datetime.now() - self.date_last_visit).seconds / 60)
 
     class Meta:
         verbose_name = '访客记录'
@@ -3776,10 +3912,10 @@ class Banner(models.Model):
     def save(self, *args, **kwargs):
         from django_base.middleware import get_request
         user = get_request().user
-        if user.is_staff and self.id:
+        if user.is_staff and self.id and not self.is_del:
             super().save(*args, **kwargs)
             AdminLog.make(user, AdminLog.TYPE_UPDATE, self, '修改節目Banner')
-        elif user.is_staff:
+        elif user.is_staff and not self.is_del:
             super().save(*args, **kwargs)
             AdminLog.make(user, AdminLog.TYPE_CREATE, self, '新增節目Banner')
         else:

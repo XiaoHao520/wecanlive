@@ -35,18 +35,20 @@ def rsa_verify(text, sign):
     return verifier.verify(h, sign)
 
 
-def response_success(msg=''):
+def response_success(msg='', silent=False):
     return Response(data=dict(
         ok=True,
         msg=msg,
+        silent=silent,
     ))
 
 
-def response_fail(msg='', error_code=0, status=400):
+def response_fail(msg='', error_code=0, status=400, silent=False):
     return Response(data=dict(
         ok=False,
         error_code=error_code,
         msg=msg,
+        silent=silent,
     ), status=status)
 
 

@@ -24,6 +24,7 @@ def patch_methods(model_class):
             obj = getattr(cls, k)
             if not k.startswith('_') and callable(obj):
                 setattr(model_class, k, obj)
+
     return do_patch
 
 
@@ -682,6 +683,12 @@ class Comment(HierarchicalModel,
             )
         super().delete(*args, **kwargs)
 
+    def get_activeevent_img(self):
+        if self.activeevents.first():
+            return self.activeevents.first().images.first().image.url
+        else:
+            return False
+
 
 class CommentableModel(models.Model):
     comments = models.ManyToManyField(
@@ -1280,6 +1287,11 @@ class UserMark(UserOwnedModel):
     object_id = models.PositiveIntegerField()
     object = GenericForeignKey('content_type', 'object_id')
 
+    date_created = models.DateTimeField(
+        verbose_name='记录时间',
+        auto_now_add=True,
+    )
+
     subject = models.CharField(
         verbose_name='标记类型',
         max_length=20,
@@ -1294,6 +1306,20 @@ class UserMark(UserOwnedModel):
     def __str__(self):
         return '{} - Content type:{}- id:{} - 类型:{}'.format(self.author, self.content_type, self.object_id,
                                                             self.subject)
+
+    def get_activeevent_img(self):
+        if self.content_type == ContentType.objects.get(model='activeevent'):
+            from core.models import ActiveEvent
+            activeevent = ActiveEvent.objects.get(pk=self.object_id)
+            if activeevent.images.exists():
+                return activeevent.images.first().image.url
+            else:
+                return False
+        else:
+            return False
+
+    def is_following(self):
+        return self.author.member.isfollow
 
 
 class UserMarkableModel(models.Model):
@@ -1597,6 +1623,13 @@ class PlannedTask(models.Model):
                 RankRecord.make(member)
             for rank_record in rank_records:
                 rank_record.update()
+
+    @staticmethod
+    def update_member_check_history():
+        from core.models import Member
+        for member in Member.objects.all():
+            member.check_member_history = None
+            member.save()
 
 
 class AdminLog(UserOwnedModel):

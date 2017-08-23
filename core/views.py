@@ -136,7 +136,7 @@ class MessageViewSet(viewsets.ModelViewSet):
     class Filter(FilterSet):
         # 系统消息
         is_from_system = filters.BooleanFilter(
-            name='author',
+            name='sender',
             lookup_expr='isnull',
         )
         # 客服消息
@@ -176,8 +176,26 @@ class MessageViewSet(viewsets.ModelViewSet):
         ))
 
         family = self.request.query_params.get('family')
+        chat = self.request.query_params.get('chat')
+        target = self.request.query_params.get('target')
+
         if family:
             qs = qs.filter(families__id=family).order_by('date_created')
+        if chat:
+            qs = qs.filter(
+                m.models.Q(sender__id=chat, receiver=self.request.user) |
+                m.models.Q(sender=self.request.user, receiver__id=chat)
+            ).order_by('date_created')
+        if target and target == 'activity':
+            qs = qs.filter(
+                broadcast__target=m.Broadcast.TARGET_ACTIVITY,
+            ).order_by('date_created')
+        if target and target == 'system':
+            qs = qs.filter(
+                m.models.Q(broadcast__target=m.Broadcast.TARGET_SYSTEM) |
+                m.models.Q(broadcast__target=m.Broadcast.TARGET_SYSTEM_FAMILYS) |
+                m.models.Q(broadcast__target=m.Broadcast.TARGET_SYSTEM_NOT_FAMILYS)
+            ).order_by('date_created')
         return qs
 
     @list_route(methods=['POST'])
@@ -189,6 +207,55 @@ class MessageViewSet(viewsets.ModelViewSet):
             m.Message.create_message(object, message_type)
         else:
             m.Message.create_message(object, message_type)
+        return Response(data=True)
+
+    @list_route(methods=['POST'])
+    def read_message(self, request):
+        last_id = request.data.get('last_id')
+        sender = m.User.objects.get(id=request.data.get('sender'))
+        messages = m.Message.objects.filter(
+            sender=sender,
+            receiver=self.request.user,
+            id__gt=last_id,
+            is_read=False,
+        ).all()
+        for message in messages:
+            message.is_read = True
+            message.save()
+        return Response(data=True)
+
+    @list_route(methods=['POST'])
+    def read_system_message(self, request):
+        last_id = request.data.get('last_id')
+        target = request.data.get('target')
+        messages = []
+        if target == 'system':
+            messages = m.Message.objects.filter(
+                m.models.Q(broadcast__target=m.Broadcast.TARGET_SYSTEM,
+                           sender=None,
+                           receiver=self.request.user,
+                           is_read=False, ) |
+                m.models.Q(broadcast__target=m.Broadcast.TARGET_SYSTEM_NOT_FAMILYS,
+                           sender=None,
+                           receiver=self.request.user,
+                           is_read=False, ) |
+                m.models.Q(broadcast__target=m.Broadcast.TARGET_SYSTEM_FAMILYS,
+                           sender=None,
+                           receiver=self.request.user,
+                           is_read=False, )
+            )
+        elif target == 'activity':
+            messages = m.Message.objects.filter(
+                sender=None,
+                receiver=self.request.user,
+                is_read=False,
+                broadcast__target=m.Broadcast.TARGET_ACTIVITY,
+            )
+
+        for message in messages:
+            message.is_read = True
+            message.save()
+
         return Response(data=True)
 
 
@@ -461,7 +528,7 @@ class UserViewSet(viewsets.ModelViewSet):
     @list_route(methods=['GET'])
     def current(self, request):
         if request.user.is_anonymous():
-            return response_fail('')
+            return response_fail('需要登录', silent=True)
         data = s.UserDetailedSerializer(request.user).data
         if hasattr(request.user, 'member'):
             data['tencent_sig'] = request.user.member.tencent_sig
@@ -822,12 +889,19 @@ class MemberViewSet(viewsets.ModelViewSet):
         member_id = self.request.query_params.get('member')
         is_follow = self.request.query_params.get('is_follow')
         is_followed = self.request.query_params.get('is_followed')
+        is_blacklist = self.request.query_params.get('is_blacklist')
+        new_member = self.request.query_params.get('new_member')
+        follow_recommended = self.request.query_params.get('follow_recommended')
+
         if member_id:
             member = m.Member.objects.filter(user_id=member_id).first()
             if member and is_follow:
                 qs = member.get_follow()
             elif member and is_followed:
                 qs = member.get_followed()
+
+        if is_blacklist:
+            qs = self.request.user.member.get_blacklist()
 
         invite = self.request.query_params.get('invite')
         if invite:
@@ -859,6 +933,26 @@ class MemberViewSet(viewsets.ModelViewSet):
         elif is_withdraw_blacklisted == 'false':
             qs = qs.exclude(is_withdraw_blacklisted=True)
 
+        if new_member:
+            from django.db.models import Count
+            qs = qs.annotate(
+                live_count=Count('user__lives_owned')
+            ).filter(
+                live_count__lte=3,
+                live_count__gt=0,
+            ).order_by('live_count', '-date_created')
+
+        if follow_recommended:
+            me = self.request.user.member
+            follow = me.get_follow().all()
+            qs = qs.filter(
+                is_follow_recommended=True
+            ).exclude(
+                user=self.request.user
+            ).exclude(
+                user__in=[member.user for member in follow],
+            )
+
         return qs
 
     @list_route(methods=['post'])
@@ -889,6 +983,16 @@ class MemberViewSet(viewsets.ModelViewSet):
             else not member.is_followed_by_current_user()
         member.set_followed_by(request.user, is_follow)
         return u.response_success('')
+
+    @detail_route(methods=['POST'])
+    def cancel_follow(self, request, pk):
+        me = m.Member.objects.get(pk=pk)
+        member = request.data.get('member')
+        follow_mark = m.UserMark.objects.filter(author=me.user, subject='follow', object_id=member)
+        if follow_mark.exists():
+            follow_mark.first().delete()
+
+        return Response(data=True)
 
     @detail_route(methods=['GET'])
     def get_contact_list(self, request, pk):
@@ -970,12 +1074,169 @@ class MemberViewSet(viewsets.ModelViewSet):
             data.append(item)
         return Response(data=sorted(data, key=lambda item: item['first_pk'], reverse=True))
 
+    @list_route(methods=['GET'])
+    def get_chat_list(self, request):
+        """ 获取聊天列表
+        所有和自己发过消息的人的列表
+        附加最近发布过的消息，按照从新到旧的顺序排列
+        :return:
+        """
+        me = request.user
+        sql = '''
+        select u.*, max(m.date_created) last_date
+        from auth_user u, base_message m
+        where u.id = m.sender_id and m.receiver_id = %s
+          or u.id = m.receiver_id and m.sender_id = %s
+        group by u.id
+        order by max(m.date_created) desc
+        '''
+
+        users = m.User.objects.raw(sql, [me.id, me.id])
+        data = []
+
+        for user in users:
+            message = m.Message.objects.filter(
+                m.models.Q(sender=user, receiver=me) |
+                m.models.Q(sender=me, receiver=user)
+            ).order_by('-date_created').first()
+            unread_count = m.Message.objects.filter(
+                sender=user,
+                receiver=me,
+                is_read=False,
+            ).count()
+            data.append(dict(
+                id=user.id,
+                nickname=user.member.nickname,
+                message_date=message.date_created,
+                message_countent=message.content,
+                avatar=s.ImageSerializer(user.member.avatar).data['image'],
+            ))
+
+        return Response(data=data)
+
+    @list_route(methods=['POST'])
+    def member_inform(self, request):
+        # 舉報用戶
+        member = m.User.objects.get(id=request.data.get('member')).member
+        member.informs.create(
+            author=self.request.user,
+            reason=request.data.get('content'),
+        )
+        return Response(data=True)
+
+    @list_route(methods=['POST'])
+    def set_member_blacklist(self, request):
+        member = m.User.objects.get(id=request.data.get('member')).member
+        is_black = False
+        if request.data.get('is_black') and request.data.get('is_black') == '1':
+            is_black = True
+        member.set_blacklist_by(self.request.user, is_black)
+        return Response(data=True)
+
     @list_route(methods=['POST'])
     def update_search_history(self, request):
         keyword = request.data.get('keyword')
         if keyword:
             self.request.user.member.update_search_history(keyword)
         return Response(data=True)
+
+    @list_route(methods=['GET'])
+    def get_system_message_list(self, request):
+        # 获得系统消息列表
+        # 最新系統信息
+        system_message = m.Message.objects.filter(
+            m.models.Q(broadcast__target=m.Broadcast.TARGET_SYSTEM,
+                       sender=None, receiver=self.request.user, ) |
+            m.models.Q(broadcast__target=m.Broadcast.TARGET_SYSTEM_NOT_FAMILYS,
+                       sender=None, receiver=self.request.user, ) |
+            m.models.Q(broadcast__target=m.Broadcast.TARGET_SYSTEM_FAMILYS,
+                       sender=None, receiver=self.request.user, )
+        ).order_by('-date_created')
+        last_system_message = None
+        if system_message.exists():
+            last_system_message = dict(
+                date_created=system_message.first().date_created,
+                content=system_message.first().content,
+                is_read=system_message.first().is_read,
+            )
+        # 最新活動信息
+        activity_message = m.Message.objects.filter(
+            sender=None,
+            receiver=self.request.user,
+            broadcast__target=m.Broadcast.TARGET_ACTIVITY,
+        ).order_by('-date_created')
+        last_active_message = None
+        if activity_message.exists():
+            last_active_message = dict(
+                date_created=activity_message.first().date_created,
+                content=activity_message.first().content,
+                is_read=activity_message.first().is_read,
+
+            )
+        # 最新动态通知
+        last_activeevent_message = None
+        like_usermark_date = None
+        active_comment_date = None
+        activeevents = self.request.user.activeevents_owned.all()
+        like_usermark = m.UserMark.objects.filter(
+            object_id__in=[activeevent.id for activeevent in activeevents],
+            subject='like',
+            content_type=m.ContentType.objects.get(model='activeevent'),
+        ).order_by('-date_created').first()
+        active_comment = m.Comment.objects.filter(
+            activeevents__id__in=[activeevent.id for activeevent in activeevents],
+        ).order_by('-date_created').first()
+        if like_usermark:
+            like_usermark_date = like_usermark.date_created
+        if active_comment:
+            active_comment_date = active_comment.date_created
+
+        if active_comment_date > like_usermark_date:
+            last_activeevent_message = dict(
+                date_created=active_comment.date_created,
+                content=active_comment.content,
+                is_read=True,
+            )
+        else:
+            last_activeevent_message = dict(
+                date_created=like_usermark.date_created,
+                content='{}給你點了一個贊'.format(like_usermark.author.member.nickname),
+                is_read=True,
+            )
+
+        # 最新跟踪信息
+        follow_user_mark = m.UserMark.objects.filter(
+            object_id=self.request.user.id,
+            subject='follow',
+            content_type=m.ContentType.objects.get(model='member')
+        ).order_by('-date_created')
+        last_follow_message = None
+        if follow_user_mark.exists():
+            last_follow_message = dict(
+                date_created=follow_user_mark.first().date_created,
+                content='{}.追蹤了你'.format(follow_user_mark.first().author.member.nickname),
+                is_read=True,
+            )
+        return Response(data=dict(
+            last_system_message=last_system_message,
+            last_active_message=last_active_message,
+            last_follow_message=last_follow_message,
+            last_activeevent_message=last_activeevent_message,
+        ))
+
+    @list_route(methods=['GET'])
+    def get_prize_emoji(self, request):
+        return Response(data=True)
+
+    @list_route(methods=['GET'])
+    def check_view_member(self, request):
+        # 查看谁看过我的列表中的会员卡
+        me = self.request.user.member
+        member = m.User.objects.get(pk=request.query_params.get('member_id')).member
+        results = me.update_check_member_history(member)
+        if not results:
+            return response_fail('', 50001, silent=True)
+        return Response(data=s.MemberSerializer(results).data)
 
     @list_route(methods=['GET'])
     def get_increased_chart_data(self, request):
@@ -1404,7 +1665,12 @@ class LiveCategoryViewSet(viewsets.ModelViewSet):
     ordering = ['-pk']
 
     def get_queryset(self):
-        return interceptor_get_queryset_kw_field(self)
+        from django.db.models import Count
+        qs = interceptor_get_queryset_kw_field(self)
+        order = self.request.query_params.get('order')
+        if order and order == 'live_count':
+            qs = qs.annotate(live_count=Count('lives')).order_by('live_count')
+        return qs
 
 
 class LiveViewSet(viewsets.ModelViewSet):
@@ -1687,6 +1953,7 @@ class ActiveEventViewSet(viewsets.ModelViewSet):
         qs = interceptor_get_queryset_kw_field(self)
         member_id = self.request.query_params.get('member')
         followed_by = self.request.query_params.get('followed_by')
+        hot = self.request.query_params.get('hot')
         if member_id:
             member = m.Member.objects.filter(
                 user_id=member_id
@@ -1701,6 +1968,21 @@ class ActiveEventViewSet(viewsets.ModelViewSet):
                 m.models.Q(author__member__in=users_following) |
                 m.models.Q(author__member__in=users_friend)
             )
+        if hot:
+            # 热门动态
+            me = self.request.user.member
+            follow = me.get_follow().all()
+            friend = m.Member.objects.filter(
+                m.models.Q(user__contacts_related__author=me.user),
+                m.models.Q(user__contacts_owned__user=me.user),
+            ).all()
+            qs = qs.exclude(
+                author__in=[member.user for member in follow],
+            ).exclude(
+                author__in=[member.user for member in friend],
+            ).exclude(
+                author=me.user
+            ).order_by('-like_count')
         return qs
 
     @detail_route(methods=['POST'])
@@ -1710,6 +1992,8 @@ class ActiveEventViewSet(viewsets.ModelViewSet):
         is_like = request.data.get('is_like') == '1' if 'is_like' in request.data \
             else not active_event.is_liked_by_current_user()
         active_event.set_like_by(request.user, is_like)
+        # 统计动态点赞数
+        active_event.update_like_count()
         return Response(data=dict(
             is_like=active_event.is_liked_by_current_user(),
             count_like=active_event.get_like_count(),
@@ -1812,16 +2096,16 @@ class PrizeViewSet(viewsets.ModelViewSet):
                 ))
         return Response(data=data)
 
-    @list_route(methods=['GET'])
-    def get_user_prize_emoji(self, request):
-        # todo 获得当前用户送过的礼物没过期的表情包
-        prize = m.Prize.objects.filter(
-            date_sticker_begin__lt=datetime.now(),
-            date_sticker_end__gt=datetime.now(),
-            orders__author=request.user,
-        ).exclude(stickers=None)
-
-        return Response(data=True)
+        # @list_route(methods=['GET'])
+        # def get_user_prize_emoji(self, request):
+        #     # todo 获得当前用户送过的礼物没过期的表情包
+        #     prize = m.Prize.objects.filter(
+        #         date_sticker_begin__lt=datetime.now(),
+        #         date_sticker_end__gt=datetime.now(),
+        #         orders__author=request.user,
+        #     ).exclude(stickers=None)
+        #
+        #     return Response(data=True)
 
 
 class PrizeTransactionViewSet(viewsets.ModelViewSet):
@@ -1930,10 +2214,27 @@ class VisitLogViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.VisitLog.objects.all()
     serializer_class = s.VisitLogSerializer
-    ordering = ['-pk']
+
+    # ordering = ['-pk']
 
     def get_queryset(self):
-        return interceptor_get_queryset_kw_field(self)
+        qs = interceptor_get_queryset_kw_field(self)
+        latest = self.request.query_params.get('latest')
+        if latest:
+            latest_time = datetime.now() - timedelta(hours=24)
+            # 24小时内
+            qs = qs.filter(
+                date_last_visit__gt=latest_time,
+                user=self.request.user,
+            ).order_by('-date_last_visit')
+        return qs
+
+    @list_route(methods=['post'])
+    def visit(self, request):
+        guest = m.User.objects.get(id=request.data.get('guest')).member
+        host = m.User.objects.get(id=request.data.get('host')).member
+        m.VisitLog.visit(guest, host)
+        return Response(data=True)
 
 
 class MovieViewSet(viewsets.ModelViewSet):
@@ -2032,7 +2333,7 @@ class StarMissionAchievementViewSet(viewsets.ModelViewSet):
         return Response(True)
 
 
-class LevelOptionViewSet(viewsets.ModelViewSet):
+class Levelet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.LevelOption.objects.all()
     serializer_class = s.LevelOptionSerializer
@@ -2132,12 +2433,22 @@ class CommentViewSet(viewsets.ModelViewSet):
         qs = interceptor_get_queryset_kw_field(self)
         activeevent_id = self.request.query_params.get('activeevent')
         live_id = self.request.query_params.get('live')
+        own_activeevent_comment = self.request.query_params.get('own_activeevent_comment')
+
+        me = self.request.user
         if activeevent_id:
             qs = qs.filter(activeevents__id=activeevent_id,
                            is_active=True, ).order_by('-date_created')
         if live_id:
             qs = qs.filter(livewatchlogs__live__id=live_id,
                            is_active=True, ).order_by('-date_created')
+
+        if own_activeevent_comment:
+            activeevents = me.activeevents_owned.all()
+            qs = qs.filter(
+                activeevents__id__in=[activeevent.id for activeevent in activeevents],
+            ).order_by('-date_created')
+
         return qs
 
     @list_route(methods=['POST'])
@@ -2180,6 +2491,28 @@ class UserMarkViewSet(viewsets.ModelViewSet):
                 subject='like',
                 content_type=m.ContentType.objects.get(model='activeevent'),
             ).order_by('-date_created')
+
+        own_like_list = self.request.query_params.get('own_like_list')
+        # 个人被点赞的usermark列表
+        me = self.request.user
+        if own_like_list:
+            activeevents = me.activeevents_owned.all()
+            qs = qs.filter(
+                object_id__in=[activeevent.id for activeevent in activeevents],
+                subject='like',
+                content_type=m.ContentType.objects.get(model='activeevent'),
+            ).order_by('-date_created')
+
+        # 被关注列表
+        is_followed = self.request.query_params.get('is_followed')
+        if is_followed:
+            qs = qs.filter(
+                object_id=me.id,
+                subject='follow',
+                content_type=m.ContentType.objects.get(model='member'),
+            ).order_by('-date_created')
+            # print(qs)
+
         return qs
 
 
@@ -2187,10 +2520,33 @@ class ContactViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.Contact.objects.all()
     serializer_class = s.ContactSerializer
-    ordering = ['-pk']
+
+    # ordering = ['-pk']
 
     def get_queryset(self):
-        return interceptor_get_queryset_kw_field(self)
+        qs = interceptor_get_queryset_kw_field(self)
+
+        return qs
+
+    @list_route(methods=['POST'])
+    def set_disturb(self, request):
+        disturb = request.data.get('disturb')
+        contact = m.Contact.objects.filter(author=self.request.user,
+                                           user__id=request.data.get('member'))
+        if not contact.exists():
+            return response_fail('你們還不是好友關係')
+        setting = contact.first().settings.filter(key='is_not_disturb')
+        if setting.exists():
+            setting_is_not_disturb = setting.first()
+            setting_is_not_disturb.value = disturb
+            setting_is_not_disturb.save()
+        else:
+            contact.first().settings.create(
+                key='is_not_disturb',
+                value=disturb,
+            )
+
+        return Response(data=True)
 
 
 class AccountTransactionViewSet(viewsets.ModelViewSet):
@@ -2275,6 +2631,13 @@ class RankRecordViewSet(viewsets.ModelViewSet):
         duration = self.request.query_params.get('duration')
         if rank_type and duration:
             qs = qs.filter(duration=duration).order_by('-{}'.format(rank_type))
+            if rank_type == 'receive_diamond_amount':
+                qs = qs.filter(receive_diamond_amount__gt=0)
+            if rank_type == 'send_diamond_amount':
+                qs = qs.filter(send_diamond_amount__gt=0)
+            if rank_type == 'star_index_amount':
+                qs = qs.filter(star_index_amount__gt=0)
+
         return qs
 
 
@@ -2327,3 +2690,32 @@ class OptionViewSet(viewsets.ModelViewSet):
             data.append(s.ImageSerializer(image).data['image'])
 
         return Response(data=data)
+
+
+class RechargeRecordViewSet(viewsets.ModelViewSet):
+    filter_fields = '__all__'
+    queryset = m.RechargeRecord.objects.all()
+    serializer_class = s.RechargeRecordSerializer
+    ordering = ['-pk']
+
+    def get_queryset(self):
+        return interceptor_get_queryset_kw_field(self)
+
+    @list_route(methods=['GET'])
+    def get_total_recharge_this_month(self, request):
+        qs = self.queryset
+        now = datetime.now()
+        first_day = datetime(now.year, now.month, 1)
+        if now.month == 12:
+            last_day = datetime(now.year + 1, 1, 1) - timedelta(days=1)
+        else:
+            last_day = datetime(now.year, now.month + 1, 1) - timedelta(days=1)
+        qs = qs.filter(
+            author=self.request.user,
+            date_created__gt=first_day,
+            date_created__lt=last_day,
+        )
+        total = 0
+        for recharge in qs:
+            total += recharge.amount
+        return Response(data=total)
