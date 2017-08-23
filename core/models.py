@@ -124,6 +124,16 @@ class Member(AbstractMember,
         help_text='默认过期时间为180天'
     )
 
+    experience = models.IntegerField(
+        verbose_name='经验值',
+        default=0,
+    )
+
+    vip_level = models.IntegerField(
+        verbose_name='VIP等级',
+        default=0,
+    )
+
     class Meta:
         verbose_name = '会员'
         verbose_name_plural = '会员'
@@ -377,6 +387,56 @@ class Member(AbstractMember,
         """ 根据经验值获取用户等级
         :return:
         """
+        import json
+        # 获取等级规则
+        level_rules = json.loads(Option.objects.filter(key='level_rules').first().value)
+
+        # 获取经验
+        memberExp = Member.objects.filter(user=self.user.id).first().experience
+
+        # 根据经验获取等级，等级以对象的形式传送
+        memberLevel = {}
+        cc={'a':'a'}
+        if 'level_1' in level_rules:
+            amount=0 #经验总值
+            n=0 # 等级
+            for item in level_rules['level_1']:
+                startLevel=str(item['key']).split('_')[1]
+                endLevel=str(item['key']).split('_')[3]
+                preAmount=amount
+                amount+=(int(endLevel)-int(startLevel)+1)*item['value']
+                if memberExp<amount:
+                    n+=(memberExp-preAmount)//item['value']
+                    memberLevel={
+                        'topLevel':1, # 图案等级
+                        'subLevel':n,
+                        'currentLevelExp':(memberExp-preAmount)%item['value'], # 当前等级拥有经验
+                        'upgradeExp':item['value'], #升级所需经验
+                        'bigLevelExp':amount #图案等级经验总值
+                    }
+                    return memberLevel
+                n=int(endLevel)
+            if 'level_more' in level_rules:# 如果等级不为星星的时候
+                topLevel=2 # 图案等级
+                for item in level_rules['level_more']:
+                    preAmount=amount
+                    amount += 100 * item['value']
+                    if memberExp<amount:
+                        subLevel=(memberExp-preAmount)//item['value']+1
+                        memberLevel={
+                            'topLevel':topLevel,
+                            'subLevel':subLevel,
+                            'currentLevelExp': (memberExp - preAmount) % item['value'],  # 当前等级拥有经验
+                            'upgradeExp': item['value'],  # 升级所需经验
+                            'bigLevelExp': amount  # 图案等级经验总值
+                        }
+                        return memberLevel
+                    topLevel+=1
+            else:
+                raise ValueError('level_rules 没有定义好 ： \'level_more\'')
+        else:
+            raise ValueError('level_rules 没有定义好 ： \'level_1\'')
+
         # TODO: 未实现
         return 1
 
@@ -384,6 +444,7 @@ class Member(AbstractMember,
         """ 获取用户 VIP 等级
         :return:
         """
+
         # TODO: 未实现
         return 1
 

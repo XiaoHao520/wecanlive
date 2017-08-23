@@ -252,6 +252,17 @@ class BankAccountSerializer(QueryFieldsMixin, serializers.ModelSerializer):
         fields = '__all__'
 
 
+class RechargeRecordSerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    author_item = UserSerializer(
+        source='author',
+        read_only=True,
+    )
+
+    class Meta:
+        model = m.RechargeRecord
+        fields = '__all__'
+
+
 class UserDetailedSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     nickname = serializers.ReadOnlyField(source='member.nickname')
     gender = serializers.ReadOnlyField(source="member.gender")
@@ -267,8 +278,8 @@ class UserDetailedSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     star_index_receiver_balance = serializers.ReadOnlyField(source='member.get_star_index_receiver_balance')
 
     member_level = serializers.ReadOnlyField(source='member.get_level')
-
-    member_vip_level = serializers.ReadOnlyField(source='member.get_vip_level')
+    member_experience = serializers.ReadOnlyField(source='member.experience')
+    member_vip_level = serializers.ReadOnlyField(source='member.vip_level')
 
     # 跟踪数量
     count_follow = serializers.ReadOnlyField(
