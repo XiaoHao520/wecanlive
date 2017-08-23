@@ -2206,7 +2206,7 @@ class StarMissionAchievementViewSet(viewsets.ModelViewSet):
         return Response(True)
 
 
-class LevelOptionViewSet(viewsets.ModelViewSet):
+class Levelet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.LevelOption.objects.all()
     serializer_class = s.LevelOptionSerializer
@@ -2563,3 +2563,32 @@ class OptionViewSet(viewsets.ModelViewSet):
             data.append(s.ImageSerializer(image).data['image'])
 
         return Response(data=data)
+
+
+class RechargeRecordViewSet(viewsets.ModelViewSet):
+    filter_fields = '__all__'
+    queryset = m.RechargeRecord.objects.all()
+    serializer_class = s.RechargeRecordSerializer
+    ordering = ['-pk']
+
+    def get_queryset(self):
+        return interceptor_get_queryset_kw_field(self)
+
+    @list_route(methods=['GET'])
+    def get_total_recharge_this_month(self, request):
+        qs = self.queryset
+        now = datetime.now()
+        first_day = datetime(now.year, now.month, 1)
+        if now.month == 12:
+            last_day = datetime(now.year + 1, 1, 1) - timedelta(days=1)
+        else:
+            last_day = datetime(now.year, now.month + 1, 1) - timedelta(days=1)
+        qs = qs.filter(
+            author=self.request.user,
+            date_created__gt=first_day,
+            date_created__lt=last_day,
+        )
+        total = 0
+        for recharge in qs:
+            total += recharge.amount
+        return Response(data=total)

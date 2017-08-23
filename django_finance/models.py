@@ -37,6 +37,8 @@ class Bank(EntityModel):
         super().save(*args, **kwargs)
 
 
+
+
 class BankAccount(UserOwnedModel,
                   EntityModel):
     """ 用户账号/银行账号/银行卡

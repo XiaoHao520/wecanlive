@@ -132,6 +132,16 @@ class Member(AbstractMember,
         help_text='当天内查看非好友会员的id'
     )
 
+    experience = models.IntegerField(
+        verbose_name='经验值',
+        default=0,
+    )
+
+    vip_level = models.IntegerField(
+        verbose_name='VIP等级',
+        default=0,
+    )
+
     class Meta:
         verbose_name = '会员'
         verbose_name_plural = '会员'
@@ -172,16 +182,6 @@ class Member(AbstractMember,
                 remark='完成元气任务的完善资料任务奖励',
                 type=CreditStarTransaction.TYPE_EARNING,
             )
-        # if not self.pk:
-        #     from tencent.webim import WebIM
-        #     webim = WebIM(settings.TENCENT_WEBIM_APPID)
-        #     create = webim.create_group(
-        #         self.user.username,
-        #         self.user.username,
-        #         type=WebIM.GROUP_TYPE_PRIVATE,
-        #         group_id=self.user.username,
-        #     )
-
         super().save(*args, **kwargs)
 
     def load_tencent_sig(self, force=False):
@@ -269,15 +269,6 @@ class Member(AbstractMember,
         :return:
         """
         return self.get_followed().count()
-
-    # def get_following_start_date(self):
-    #     """获得用户开始跟踪的时间，如果没跟踪返回false"""
-    #     from django_base.middleware import get_request
-    #     user = get_request().user
-    #     if user.member.is_followed_by(self.user):
-    #         return UserMark.objects.filter(author=self.user, subject='follow', object_id=user.id).first().date_created
-    #     else:
-    #         return False
 
     def get_contacts(self):
         """ 獲取聯繫人列表
@@ -412,6 +403,56 @@ class Member(AbstractMember,
         """ 根据经验值获取用户等级
         :return:
         """
+        import json
+        # 获取等级规则
+        level_rules = json.loads(Option.objects.filter(key='level_rules').first().value)
+
+        # 获取经验
+        memberExp = Member.objects.filter(user=self.user.id).first().experience
+
+        # 根据经验获取等级，等级以对象的形式传送
+        memberLevel = {}
+        cc={'a':'a'}
+        if 'level_1' in level_rules:
+            amount=0 #经验总值
+            n=0 # 等级
+            for item in level_rules['level_1']:
+                startLevel=str(item['key']).split('_')[1]
+                endLevel=str(item['key']).split('_')[3]
+                preAmount=amount
+                amount+=(int(endLevel)-int(startLevel)+1)*item['value']
+                if memberExp<amount:
+                    n+=(memberExp-preAmount)//item['value']
+                    memberLevel={
+                        'topLevel':1, # 图案等级
+                        'subLevel':n,
+                        'currentLevelExp':(memberExp-preAmount)%item['value'], # 当前等级拥有经验
+                        'upgradeExp':item['value'], #升级所需经验
+                        'bigLevelExp':amount #图案等级经验总值
+                    }
+                    return memberLevel
+                n=int(endLevel)
+            if 'level_more' in level_rules:# 如果等级不为星星的时候
+                topLevel=2 # 图案等级
+                for item in level_rules['level_more']:
+                    preAmount=amount
+                    amount += 100 * item['value']
+                    if memberExp<amount:
+                        subLevel=(memberExp-preAmount)//item['value']+1
+                        memberLevel={
+                            'topLevel':topLevel,
+                            'subLevel':subLevel,
+                            'currentLevelExp': (memberExp - preAmount) % item['value'],  # 当前等级拥有经验
+                            'upgradeExp': item['value'],  # 升级所需经验
+                            'bigLevelExp': amount  # 图案等级经验总值
+                        }
+                        return memberLevel
+                    topLevel+=1
+            else:
+                raise ValueError('level_rules 没有定义好 ： \'level_more\'')
+        else:
+            raise ValueError('level_rules 没有定义好 ： \'level_1\'')
+
         # TODO: 未实现
         return 1
 
@@ -419,6 +460,7 @@ class Member(AbstractMember,
         """ 获取用户 VIP 等级
         :return:
         """
+
         # TODO: 未实现
         return 1
 
@@ -622,10 +664,10 @@ class Robot(models.Model):
     def save(self, *args, **kwargs):
         from django_base.middleware import get_request
         user = get_request().user
-        if user.is_staff and self.id:
+        if user.is_staff and self.id and not self.is_del:
             super().save(*args, **kwargs)
             AdminLog.make(user, AdminLog.TYPE_UPDATE, self, '修改機器人')
-        elif user.is_staff:
+        elif user.is_staff and not self.is_del:
             super().save(*args, **kwargs)
             AdminLog.make(user, AdminLog.TYPE_CREATE, self, '新增機器人')
         else:
@@ -3870,10 +3912,10 @@ class Banner(models.Model):
     def save(self, *args, **kwargs):
         from django_base.middleware import get_request
         user = get_request().user
-        if user.is_staff and self.id:
+        if user.is_staff and self.id and not self.is_del:
             super().save(*args, **kwargs)
             AdminLog.make(user, AdminLog.TYPE_UPDATE, self, '修改節目Banner')
-        elif user.is_staff:
+        elif user.is_staff and not self.is_del:
             super().save(*args, **kwargs)
             AdminLog.make(user, AdminLog.TYPE_CREATE, self, '新增節目Banner')
         else:
