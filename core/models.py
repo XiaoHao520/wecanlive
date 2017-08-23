@@ -2092,6 +2092,11 @@ class ActiveEvent(UserOwnedModel,
         default=True,
     )
 
+    like_count = models.IntegerField(
+        verbose_name='点赞数',
+        default=0,
+    )
+
     class Meta:
         verbose_name = '个人动态'
         verbose_name_plural = '个人动态'
@@ -2117,6 +2122,10 @@ class ActiveEvent(UserOwnedModel,
     def get_preview(self):
         if self.images.first():
             return self.images.first()
+
+    def update_like_count(self):
+        self.like_count = self.get_like_count()
+        self.save()
 
 
 class PrizeCategory(EntityModel):

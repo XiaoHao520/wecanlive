@@ -1843,10 +1843,19 @@ class ActiveEventViewSet(viewsets.ModelViewSet):
             )
         if hot:
             # 热门动态
-            # m.ContentType.objects.get(model='activeevent').id
-            qs = qs.extra(
-                select=dict()
-            )
+            me = self.request.user.member
+            follow = me.get_follow().all()
+            friend = m.Member.objects.filter(
+                m.models.Q(user__contacts_related__author=me.user),
+                m.models.Q(user__contacts_owned__user=me.user),
+            ).all()
+            qs = qs.exclude(
+                author__in=[member.user for member in follow],
+            ).exclude(
+                author__in=[member.user for member in friend],
+            ).exclude(
+                author=me.user
+            ).order_by('-like_count')
         return qs
 
     @detail_route(methods=['POST'])
@@ -1856,6 +1865,8 @@ class ActiveEventViewSet(viewsets.ModelViewSet):
         is_like = request.data.get('is_like') == '1' if 'is_like' in request.data \
             else not active_event.is_liked_by_current_user()
         active_event.set_like_by(request.user, is_like)
+        # 统计动态点赞数
+        active_event.update_like_count()
         return Response(data=dict(
             is_like=active_event.is_liked_by_current_user(),
             count_like=active_event.get_like_count(),
@@ -2493,6 +2504,13 @@ class RankRecordViewSet(viewsets.ModelViewSet):
         duration = self.request.query_params.get('duration')
         if rank_type and duration:
             qs = qs.filter(duration=duration).order_by('-{}'.format(rank_type))
+            if rank_type == 'receive_diamond_amount':
+                qs = qs.filter(receive_diamond_amount__gt=0)
+            if rank_type == 'send_diamond_amount':
+                qs = qs.filter(send_diamond_amount__gt=0)
+            if rank_type == 'star_index_amount':
+                qs = qs.filter(star_index_amount__gt=0)
+
         return qs
 
 

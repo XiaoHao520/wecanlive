@@ -1093,7 +1093,6 @@ class NotificationsSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
 
 class VisitLogSerializer(QueryFieldsMixin, serializers.ModelSerializer):
-
     author_avatar = serializers.ReadOnlyField(source='author.member.avatar.image.url')
     author_nickname = serializers.ReadOnlyField(source='author.member.nickname')
     author_gender = serializers.ReadOnlyField(source='author.member.gender')
@@ -1107,7 +1106,6 @@ class VisitLogSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
     # todo 距离 时间
     time_ago = serializers.ReadOnlyField()
-
 
     class Meta:
         model = m.VisitLog
@@ -1250,8 +1248,6 @@ class UserMarkSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
     is_following = serializers.BooleanField(source='author.member.is_followed_by_current_user', read_only=True)
 
-
-
     class Meta:
         model = m.UserMark
         fields = '__all__'
@@ -1273,6 +1269,14 @@ class RankRecordSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     age = serializers.ReadOnlyField(source='author.member.age')
 
     constellation = serializers.ReadOnlyField(source='author.member.constellation')
+
+    author_level = serializers.ReadOnlyField(source='author.member.get_level')
+
+    author_vip_level = serializers.ReadOnlyField(source='author.member.get_vip_level')
+
+    author_avatar = serializers.ReadOnlyField(source='author.member.avatar.image.url')
+
+    is_following = serializers.BooleanField(source='author.member.is_followed_by_current_user', read_only=True)
 
     class Meta:
         model = m.RankRecord
