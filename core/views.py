@@ -501,6 +501,7 @@ class UserViewSet(viewsets.ModelViewSet):
         #                     '管理员用户【{}】登录了系统'.format(request.user.username))
 
         login(request, user)
+        m.LoginRecord.make(user)
 
         return Response(
             data=s.UserDetailedSerializer(user).data
@@ -1247,118 +1248,118 @@ class MemberViewSet(viewsets.ModelViewSet):
         """
         time_begin = self.request.query_params.get('time_begin')
         time_end = self.request.query_params.get('time_end')
-        if time_begin and time_end:
-            begin = datetime.strptime(time_begin, '%Y-%m-%d')
-            end = datetime.strptime(time_end, '%Y-%m-%d')
-            duration = end - begin
-            data = None
-            labels = []
-            amounts = []
-            if duration.days < 31:
-                for i in range(duration.days + 1):
-                    label_item = '{}月{}號'.format(
-                        (begin + timedelta(days=i)).month, (begin + timedelta(days=i)).day)
-                    amount_item = m.Member.objects.filter(
-                        date_created__gt=begin + timedelta(days=i),
-                        date_created__lt=begin + timedelta(days=i + 1)
-                    ).count()
-                    labels.append(label_item)
-                    amounts.append(amount_item)
-            elif 31 < duration.days < 62:
-                for i in range(int(duration.days / 7)):
+        if not time_begin or not time_end:
+            return response_fail('請填寫完整的時間區間')
+        begin = datetime.strptime(time_begin, '%Y-%m-%d')
+        end = datetime.strptime(time_end, '%Y-%m-%d')
+        duration = end - begin
+        data = None
+        labels = []
+        amounts = []
+        if duration.days < 31:
+            for i in range(duration.days + 1):
+                label_item = '{}月{}號'.format(
+                    (begin + timedelta(days=i)).month, (begin + timedelta(days=i)).day)
+                amount_item = m.Member.objects.filter(
+                    date_created__gt=begin + timedelta(days=i),
+                    date_created__lt=begin + timedelta(days=i + 1)
+                ).count()
+                labels.append(label_item)
+                amounts.append(amount_item)
+        elif 31 < duration.days < 62:
+            for i in range(int(duration.days / 7)):
+                label_item = '{}月{}號 - {}月{}號'.format(
+                    (begin + timedelta(days=i * 7)).month,
+                    (begin + timedelta(days=i * 7)).day,
+                    (begin + timedelta(days=(i + 1) * 7)).month,
+                    (begin + timedelta(days=(i + 1) * 7)).day,
+                )
+                amount_item = m.Member.objects.filter(
+                    date_created__gt=begin + timedelta(days=i * 7),
+                    date_created__lt=begin + timedelta(days=(i + 1) * 7)
+                ).count()
+                labels.append(label_item)
+                amounts.append(amount_item)
+                if i == int(duration.days / 7) - 1 and duration.days % 7 > 0:
                     label_item = '{}月{}號 - {}月{}號'.format(
-                        (begin + timedelta(days=i * 7)).month,
-                        (begin + timedelta(days=i * 7)).day,
                         (begin + timedelta(days=(i + 1) * 7)).month,
                         (begin + timedelta(days=(i + 1) * 7)).day,
+                        end.month,
+                        end.day,
                     )
                     amount_item = m.Member.objects.filter(
-                        date_created__gt=begin + timedelta(days=i * 7),
-                        date_created__lt=begin + timedelta(days=(i + 1) * 7)
+                        date_created__gt=begin + timedelta(days=(i + 1) * 7),
+                        date_created__lt=end + timedelta(days=1),
                     ).count()
                     labels.append(label_item)
                     amounts.append(amount_item)
-                    if i == int(duration.days / 7) - 1 and duration.days % 7 > 0:
-                        label_item = '{}月{}號 - {}月{}號'.format(
-                            (begin + timedelta(days=(i + 1) * 7)).month,
-                            (begin + timedelta(days=(i + 1) * 7)).day,
-                            end.month,
-                            end.day,
-                        )
-                        amount_item = m.Member.objects.filter(
-                            date_created__gt=begin + timedelta(days=(i + 1) * 7),
-                            date_created__lt=end + timedelta(days=1),
-                        ).count()
-                        labels.append(label_item)
-                        amounts.append(amount_item)
-            elif 62 < duration.days <= 366:
-                for i in range(int(duration.days / 31) + 1):
-                    if i == 0 and begin.day != 1:
-                        label_item = '{}月{}號 - {}月{}號'.format(
-                            begin.month,
-                            begin.day,
-                            1 if begin.month == 12 else begin.month + 1,
-                            1,
-                        )
-                        amount_item = m.Member.objects.filter(
-                            date_created__gt=begin,
-                            date_created__lt=datetime(begin.year + 1, 1, 1) if begin.month == 12 else datetime(
-                                begin.year, begin.month + 1, 1),
-                        ).count()
-                    elif i == int(duration.days / 31):
-                        label_item = '{}月{}號 - {}月{}號'.format(
-                            1 if begin.month + i == 12 else (begin.month + i) % 12,
-                            1,
-                            end.month,
-                            end.day,
-                        )
-                        amount_item = m.Member.objects.filter(
-                            date_created__gt=datetime(begin.year + 1, (begin.month + i) % 12,
-                                                      1) if begin.month + i > 12 else datetime(begin.year,
-                                                                                               begin.month + i, 1),
-                            date_created__lt=end + timedelta(days=1)
-                        ).count()
-                    else:
-                        label_item = '{}月1號 - {}月1號'.format(
-                            begin.month + i if begin.month + i <= 12 else (begin.month + i) % 12,
-                            begin.month + i + 1 if begin.month + i + 1 <= 12 else (begin.month + i + 1) % 12,
-                        )
-                        amount_item = m.Member.objects.filter(
-                            date_created__gt=datetime(begin.year + 1, (begin.month + i) % 12,
-                                                      1) if begin.month + i > 12 else datetime(
-                                begin.year, begin.month + i, 1),
-                            date_created__lt=datetime(begin.year + 1, (begin.month + i + 1) % 12,
-                                                      1) if begin.month + i + 1 > 12 else datetime(
-                                begin.year, begin.month + i + 1, 1),
-                        ).count()
-                    labels.append(label_item)
-                    amounts.append(amount_item)
-            else:
-                for i in range(int(duration.days / 365) + 1):
-                    label_item = '{}年'.format(begin.year + i)
-                    if i == 0:
-                        amount_item = m.Member.objects.filter(
-                            date_created__gt=begin,
-                            date_created__lt=datetime(begin.year + 1, 1, 1)
-                        ).count()
-                    elif i == duration.days / 365:
-                        amount_item = m.Member.objects.filter(
-                            date_created__gt=datetime(begin.year + i, 1, 1),
-                            date_created__lt=end,
-                        ).count()
-                    else:
-                        amount_item = m.Member.objects.filter(
-                            date_created__gt=datetime(begin.year + i, 1, 1),
-                            date_created__lt=datetime(begin.year + i + 1, 1, 1),
-                        ).count()
-                    labels.append(label_item)
-                    amounts.append(amount_item)
-            data = dict(
-                labels=labels,
-                amounts=amounts,
-            )
-            return Response(data=data)
-        return response_fail('請填寫完整的時間區間')
+        elif 62 < duration.days <= 366:
+            for i in range(int(duration.days / 31) + 2):
+                if i == 0 and begin.day != 1:
+                    label_item = '{}月{}號 - {}月{}號'.format(
+                        begin.month,
+                        begin.day,
+                        1 if begin.month == 12 else begin.month + 1,
+                        1,
+                    )
+                    amount_item = m.Member.objects.filter(
+                        date_created__gt=begin,
+                        date_created__lt=datetime(begin.year + 1, 1, 1) if begin.month == 12 else datetime(
+                            begin.year, begin.month + 1, 1),
+                    ).count()
+                elif i == int(duration.days / 31) + 1:
+                    label_item = '{}月{}號 - {}月{}號'.format(
+                        1 if begin.month + i == 12 else (begin.month + i) % 12,
+                        1,
+                        end.month,
+                        end.day,
+                    )
+                    amount_item = m.Member.objects.filter(
+                        date_created__gt=datetime(begin.year + 1, (begin.month + i) % 12,
+                                                  1) if begin.month + i > 12 else datetime(begin.year,
+                                                                                           begin.month + i, 1),
+                        date_created__lt=end + timedelta(days=1)
+                    ).count()
+                else:
+                    label_item = '{}月1號 - {}月1號'.format(
+                        begin.month + i if begin.month + i <= 12 else (begin.month + i) % 12,
+                        begin.month + i + 1 if begin.month + i + 1 <= 12 else (begin.month + i + 1) % 12,
+                    )
+                    amount_item = m.Member.objects.filter(
+                        date_created__gt=datetime(begin.year + 1, (begin.month + i) % 12,
+                                                  1) if begin.month + i > 12 else datetime(
+                            begin.year, begin.month + i, 1),
+                        date_created__lt=datetime(begin.year + 1, (begin.month + i + 1) % 12,
+                                                  1) if begin.month + i + 1 > 12 else datetime(
+                            begin.year, begin.month + i + 1, 1),
+                    ).count()
+                labels.append(label_item)
+                amounts.append(amount_item)
+        else:
+            for i in range(int(duration.days / 365) + 1):
+                label_item = '{}年'.format(begin.year + i)
+                if i == 0:
+                    amount_item = m.Member.objects.filter(
+                        date_created__gt=begin,
+                        date_created__lt=datetime(begin.year + 1, 1, 1)
+                    ).count()
+                elif i == duration.days / 365:
+                    amount_item = m.Member.objects.filter(
+                        date_created__gt=datetime(begin.year + i, 1, 1),
+                        date_created__lt=end,
+                    ).count()
+                else:
+                    amount_item = m.Member.objects.filter(
+                        date_created__gt=datetime(begin.year + i, 1, 1),
+                        date_created__lt=datetime(begin.year + i + 1, 1, 1),
+                    ).count()
+                labels.append(label_item)
+                amounts.append(amount_item)
+        data = dict(
+            labels=labels,
+            amounts=amounts,
+        )
+        return Response(data=data)
 
 
 class RobotViewSet(viewsets.ModelViewSet):
@@ -2719,3 +2720,259 @@ class RechargeRecordViewSet(viewsets.ModelViewSet):
         for recharge in qs:
             total += recharge.amount
         return Response(data=total)
+
+
+class LoginRecordViewSet(viewsets.ModelViewSet):
+    filter_fields = '__all__'
+    queryset = m.LoginRecord.objects.all()
+    serializer_class = s.LoginRecordSerializer
+    ordering = ['-pk']
+
+    def get_queryset(self):
+        return interceptor_get_queryset_kw_field(self)
+
+    @list_route(methods=['GET'])
+    def get_active_chart_data(self, request):
+        """
+        数据分析 - 活躍用戶
+        :param request:
+        :return:
+        """
+        time_begin = self.request.query_params.get('time_begin')
+        time_end = self.request.query_params.get('time_end')
+        if not time_begin or not time_end:
+            return response_fail('請填寫完整的時間區間')
+        begin = datetime.strptime(time_begin, '%Y-%m-%d')
+        end = datetime.strptime(time_end, '%Y-%m-%d')
+        duration = end - begin
+        data = None
+        labels = []
+        amounts = []
+        if duration.days < 31:
+            for i in range(duration.days + 1):
+                label_item = '{}月{}號'.format(
+                    (begin + timedelta(days=i)).month, (begin + timedelta(days=i)).day)
+                amount_item = m.LoginRecord.objects.filter(
+                    date_login__gt=begin + timedelta(days=i),
+                    date_login__lt=begin + timedelta(days=i + 1)
+                ).count()
+                labels.append(label_item)
+                amounts.append(amount_item)
+        elif 31 < duration.days < 62:
+            for i in range(int(duration.days / 7)):
+                label_item = '{}月{}號 - {}月{}號'.format(
+                    (begin + timedelta(days=i * 7)).month,
+                    (begin + timedelta(days=i * 7)).day,
+                    (begin + timedelta(days=(i + 1) * 7)).month,
+                    (begin + timedelta(days=(i + 1) * 7)).day,
+                )
+                amount_item = m.LoginRecord.objects.filter(
+                    date_login__gt=begin + timedelta(days=i * 7),
+                    date_login__lt=begin + timedelta(days=(i + 1) * 7)
+                ).count()
+                labels.append(label_item)
+                amounts.append(amount_item)
+                if i == int(duration.days / 7) - 1 and duration.days % 7 > 0:
+                    label_item = '{}月{}號 - {}月{}號'.format(
+                        (begin + timedelta(days=(i + 1) * 7)).month,
+                        (begin + timedelta(days=(i + 1) * 7)).day,
+                        end.month,
+                        end.day,
+                    )
+                    amount_item = m.LoginRecord.objects.filter(
+                        date_login__gt=begin + timedelta(days=(i + 1) * 7),
+                        date_login__lt=end + timedelta(days=1),
+                    ).count()
+                    labels.append(label_item)
+                    amounts.append(amount_item)
+        elif 62 < duration.days <= 366:
+            for i in range(int(duration.days / 31) + 2):
+                if i == 0 and begin.day != 1:
+                    label_item = '{}月{}號 - {}月{}號'.format(
+                        begin.month,
+                        begin.day,
+                        1 if begin.month == 12 else begin.month + 1,
+                        1,
+                    )
+                    amount_item = m.LoginRecord.objects.filter(
+                        date_login__gt=begin,
+                        date_login__lt=datetime(begin.year + 1, 1, 1) if begin.month == 12 else datetime(
+                            begin.year, begin.month + 1, 1),
+                    ).count()
+                elif i == int(duration.days / 31) + 1:
+                    label_item = '{}月{}號 - {}月{}號'.format(
+                        1 if begin.month + i == 12 else (begin.month + i) % 12,
+                        1,
+                        end.month,
+                        end.day,
+                    )
+                    amount_item = m.LoginRecord.objects.filter(
+                        date_login__gt=datetime(begin.year + 1, (begin.month + i) % 12,
+                                                  1) if begin.month + i > 12 else datetime(begin.year,
+                                                                                           begin.month + i, 1),
+                        date_login__lt=end + timedelta(days=1)
+                    ).count()
+                else:
+                    label_item = '{}月1號 - {}月1號'.format(
+                        begin.month + i if begin.month + i <= 12 else (begin.month + i) % 12,
+                        begin.month + i + 1 if begin.month + i + 1 <= 12 else (begin.month + i + 1) % 12,
+                    )
+                    amount_item = m.LoginRecord.objects.filter(
+                        date_login__gt=datetime(begin.year + 1, (begin.month + i) % 12,
+                                                  1) if begin.month + i > 12 else datetime(
+                            begin.year, begin.month + i, 1),
+                        date_login__lt=datetime(begin.year + 1, (begin.month + i + 1) % 12,
+                                                  1) if begin.month + i + 1 > 12 else datetime(
+                            begin.year, begin.month + i + 1, 1),
+                    ).count()
+                labels.append(label_item)
+                amounts.append(amount_item)
+        else:
+            for i in range(int(duration.days / 365) + 1):
+                label_item = '{}年'.format(begin.year + i)
+                if i == 0:
+                    amount_item = m.LoginRecord.objects.filter(
+                        date_created__gt=begin,
+                        date_created__lt=datetime(begin.year + 1, 1, 1)
+                    ).count()
+                elif i == duration.days / 365:
+                    amount_item = m.LoginRecord.objects.filter(
+                        date_created__gt=datetime(begin.year + i, 1, 1),
+                        date_created__lt=end,
+                    ).count()
+                else:
+                    amount_item = m.LoginRecord.objects.filter(
+                        date_created__gt=datetime(begin.year + i, 1, 1),
+                        date_created__lt=datetime(begin.year + i + 1, 1, 1),
+                    ).count()
+                labels.append(label_item)
+                amounts.append(amount_item)
+        data = dict(
+            labels=labels,
+            amounts=amounts,
+        )
+        return Response(data=data)
+
+    @list_route(methods=['GET'])
+    def get_remain_chart_data(self, request):
+        """
+        数据分析 - 活躍用戶
+        :param request:
+        :return:
+        """
+        time_begin = self.request.query_params.get('time_begin')
+        time_end = self.request.query_params.get('time_end')
+        if not time_begin or not time_end:
+            return response_fail('請填寫完整的時間區間')
+        days = int(self.request.query_params.get('days'))
+        print(days)
+        begin = datetime.strptime(time_begin, '%Y-%m-%d')
+        end = datetime.strptime(time_end, '%Y-%m-%d')
+        duration = end - begin
+        data = None
+        labels = []
+        amounts = []
+        if duration.days < 31:
+            for i in range(duration.days + 1):
+                label_item = '{}月{}號'.format(
+                    (begin + timedelta(days=i)).month, (begin + timedelta(days=i)).day)
+                amount_item = m.LoginRecord.objects.filter(
+                    date_login__gt=begin + timedelta(days=i),
+                    date_login__lt=begin + timedelta(days=i + 1)
+                ).count()
+                labels.append(label_item)
+                amounts.append(amount_item)
+        elif 31 < duration.days < 62:
+            for i in range(int(duration.days / 7)):
+                label_item = '{}月{}號 - {}月{}號'.format(
+                    (begin + timedelta(days=i * 7)).month,
+                    (begin + timedelta(days=i * 7)).day,
+                    (begin + timedelta(days=(i + 1) * 7)).month,
+                    (begin + timedelta(days=(i + 1) * 7)).day,
+                )
+                amount_item = m.LoginRecord.objects.filter(
+                    date_login__gt=begin + timedelta(days=i * 7),
+                    date_login__lt=begin + timedelta(days=(i + 1) * 7)
+                ).count()
+                labels.append(label_item)
+                amounts.append(amount_item)
+                if i == int(duration.days / 7) - 1 and duration.days % 7 > 0:
+                    label_item = '{}月{}號 - {}月{}號'.format(
+                        (begin + timedelta(days=(i + 1) * 7)).month,
+                        (begin + timedelta(days=(i + 1) * 7)).day,
+                        end.month,
+                        end.day,
+                    )
+                    amount_item = m.LoginRecord.objects.filter(
+                        date_login__gt=begin + timedelta(days=(i + 1) * 7),
+                        date_login__lt=end + timedelta(days=1),
+                    ).count()
+                    labels.append(label_item)
+                    amounts.append(amount_item)
+        elif 62 < duration.days <= 366:
+            for i in range(int(duration.days / 31) + 2):
+                if i == 0 and begin.day != 1:
+                    label_item = '{}月{}號 - {}月{}號'.format(
+                        begin.month,
+                        begin.day,
+                        1 if begin.month == 12 else begin.month + 1,
+                        1,
+                    )
+                    amount_item = m.LoginRecord.objects.filter(
+                        date_login__gt=begin,
+                        date_login__lt=datetime(begin.year + 1, 1, 1) if begin.month == 12 else datetime(
+                            begin.year, begin.month + 1, 1),
+                    ).count()
+                elif i == int(duration.days / 31) + 1:
+                    label_item = '{}月{}號 - {}月{}號'.format(
+                        1 if begin.month + i == 12 else (begin.month + i) % 12,
+                        1,
+                        end.month,
+                        end.day,
+                    )
+                    amount_item = m.LoginRecord.objects.filter(
+                        date_login__gt=datetime(begin.year + 1, (begin.month + i) % 12,
+                                                  1) if begin.month + i > 12 else datetime(begin.year,
+                                                                                           begin.month + i, 1),
+                        date_login__lt=end + timedelta(days=1)
+                    ).count()
+                else:
+                    label_item = '{}月1號 - {}月1號'.format(
+                        begin.month + i if begin.month + i <= 12 else (begin.month + i) % 12,
+                        begin.month + i + 1 if begin.month + i + 1 <= 12 else (begin.month + i + 1) % 12,
+                    )
+                    amount_item = m.LoginRecord.objects.filter(
+                        date_login__gt=datetime(begin.year + 1, (begin.month + i) % 12,
+                                                  1) if begin.month + i > 12 else datetime(
+                            begin.year, begin.month + i, 1),
+                        date_login__lt=datetime(begin.year + 1, (begin.month + i + 1) % 12,
+                                                  1) if begin.month + i + 1 > 12 else datetime(
+                            begin.year, begin.month + i + 1, 1),
+                    ).count()
+                labels.append(label_item)
+                amounts.append(amount_item)
+        else:
+            for i in range(int(duration.days / 365) + 1):
+                label_item = '{}年'.format(begin.year + i)
+                if i == 0:
+                    amount_item = m.LoginRecord.objects.filter(
+                        date_created__gt=begin,
+                        date_created__lt=datetime(begin.year + 1, 1, 1)
+                    ).count()
+                elif i == duration.days / 365:
+                    amount_item = m.LoginRecord.objects.filter(
+                        date_created__gt=datetime(begin.year + i, 1, 1),
+                        date_created__lt=end,
+                    ).count()
+                else:
+                    amount_item = m.LoginRecord.objects.filter(
+                        date_created__gt=datetime(begin.year + i, 1, 1),
+                        date_created__lt=datetime(begin.year + i + 1, 1, 1),
+                    ).count()
+                labels.append(label_item)
+                amounts.append(amount_item)
+        data = dict(
+            labels=labels,
+            amounts=amounts,
+        )
+        return Response(data=data)

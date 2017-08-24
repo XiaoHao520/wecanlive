@@ -1306,3 +1306,9 @@ class AdminLogSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.AdminLog
         fields = '__all__'
+
+
+class LoginRecordSerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    class Meta:
+        model = m.LoginRecord
+        fields = '__all__'

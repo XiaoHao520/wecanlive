@@ -618,6 +618,20 @@ class Member(AbstractMember,
         return member
 
 
+class LoginRecord(UserOwnedModel):
+    """
+    登录记录
+    """
+    date_login = models.DateTimeField(
+        verbose_name='登录时间',
+        auto_now_add=True,
+    )
+
+    @staticmethod
+    def make(author):
+        return LoginRecord.objects.create(author=author)
+
+
 class Robot(models.Model):
     """ 机器人
     创建一个机器人会强制需要对应一个用户，这个用户对应一个 Member
@@ -3492,6 +3506,14 @@ class Movie(UserOwnedModel,
         blank=True,
         default='',
         help_text='當影片分類爲熱門視頻時需要選擇',
+    )
+
+    live = models.ForeignKey(
+        verbose_name='直播',
+        to='Live',
+        related_name='movies',
+        blank=True,
+        null=True,
     )
 
     class Meta:
