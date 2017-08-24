@@ -413,42 +413,42 @@ class Member(AbstractMember,
 
             # 根据经验获取等级，等级以对象的形式传送
             memberLevel = {}
-            cc={'a':'a'}
+            cc = {'a': 'a'}
             if 'level_1' in level_rules:
-                amount=0 #经验总值
-                n=0 # 等级
+                amount = 0  # 经验总值
+                n = 0  # 等级
                 for item in level_rules['level_1']:
-                    startLevel=str(item['key']).split('_')[1]
-                    endLevel=str(item['key']).split('_')[3]
-                    preAmount=amount
-                    amount+=(int(endLevel)-int(startLevel)+1)*item['value']
-                    if memberExp<amount:
-                        n+=(memberExp-preAmount)//item['value']
-                        memberLevel={
-                            'topLevel':1, # 图案等级
-                            'subLevel':n,
-                            'currentLevelExp':(memberExp-preAmount)%item['value'], # 当前等级拥有经验
-                            'upgradeExp':item['value'], #升级所需经验
-                            'bigLevelExp':amount #图案等级经验总值
+                    startLevel = str(item['key']).split('_')[1]
+                    endLevel = str(item['key']).split('_')[3]
+                    preAmount = amount
+                    amount += (int(endLevel) - int(startLevel) + 1) * item['value']
+                    if memberExp < amount:
+                        n += (memberExp - preAmount) // item['value']
+                        memberLevel = {
+                            'topLevel': 1,  # 图案等级
+                            'subLevel': n,
+                            'currentLevelExp': (memberExp - preAmount) % item['value'],  # 当前等级拥有经验
+                            'upgradeExp': item['value'],  # 升级所需经验
+                            'bigLevelExp': amount  # 图案等级经验总值
                         }
                         return memberLevel
-                    n=int(endLevel)
-                if 'level_more' in level_rules:# 如果等级不为星星的时候
-                    topLevel=2 # 图案等级
+                    n = int(endLevel)
+                if 'level_more' in level_rules:  # 如果等级不为星星的时候
+                    topLevel = 2  # 图案等级
                     for item in level_rules['level_more']:
-                        preAmount=amount
+                        preAmount = amount
                         amount += 100 * item['value']
-                        if memberExp<amount:
-                            subLevel=(memberExp-preAmount)//item['value']+1
-                            memberLevel={
-                                'topLevel':topLevel,
-                                'subLevel':subLevel,
+                        if memberExp < amount:
+                            subLevel = (memberExp - preAmount) // item['value'] + 1
+                            memberLevel = {
+                                'topLevel': topLevel,
+                                'subLevel': subLevel,
                                 'currentLevelExp': (memberExp - preAmount) % item['value'],  # 当前等级拥有经验
                                 'upgradeExp': item['value'],  # 升级所需经验
                                 'bigLevelExp': amount  # 图案等级经验总值
                             }
                             return memberLevel
-                        topLevel+=1
+                        topLevel += 1
                 else:
                     raise ValueError('level_rules 没有定义好 ： \'level_more\'')
             else:
@@ -617,6 +617,20 @@ class Member(AbstractMember,
         self.check_member_history = string
         self.save()
         return member
+
+
+class LoginRecord(UserOwnedModel):
+    """
+    登录记录
+    """
+    date_login = models.DateTimeField(
+        verbose_name='登录时间',
+        auto_now_add=True,
+    )
+
+    @staticmethod
+    def make(author):
+        return LoginRecord.objects.create(author=author)
 
 
 class Robot(models.Model):
@@ -3506,6 +3520,14 @@ class Movie(UserOwnedModel,
         default=0,
     )
 
+    live = models.ForeignKey(
+        verbose_name='直播',
+        to='Live',
+        related_name='movies',
+        blank=True,
+        null=True,
+    )
+
     class Meta:
         verbose_name = '影片节目'
         verbose_name_plural = '影片节目'
@@ -3924,10 +3946,10 @@ class Banner(models.Model):
     def save(self, *args, **kwargs):
         from django_base.middleware import get_request
         user = get_request().user
-        if user.is_staff and self.id and not self.is_del:
+        if user.is_staff and self.id:
             super().save(*args, **kwargs)
             AdminLog.make(user, AdminLog.TYPE_UPDATE, self, '修改節目Banner')
-        elif user.is_staff and not self.is_del:
+        elif user.is_staff :
             super().save(*args, **kwargs)
             AdminLog.make(user, AdminLog.TYPE_CREATE, self, '新增節目Banner')
         else:
