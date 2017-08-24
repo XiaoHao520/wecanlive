@@ -892,6 +892,9 @@ class MemberViewSet(viewsets.ModelViewSet):
         is_blacklist = self.request.query_params.get('is_blacklist')
         new_member = self.request.query_params.get('new_member')
         follow_recommended = self.request.query_params.get('follow_recommended')
+        nearby = self.request.query_params.get('nearby')
+
+        me = self.request.user.member
 
         if member_id:
             member = m.Member.objects.filter(user_id=member_id).first()
@@ -943,7 +946,6 @@ class MemberViewSet(viewsets.ModelViewSet):
             ).order_by('live_count', '-date_created')
 
         if follow_recommended:
-            me = self.request.user.member
             follow = me.get_follow().all()
             qs = qs.filter(
                 is_follow_recommended=True
@@ -952,7 +954,12 @@ class MemberViewSet(viewsets.ModelViewSet):
             ).exclude(
                 user__in=[member.user for member in follow],
             )
-
+        if nearby:
+            qs = qs.exclude(user=me.user).extra(select=dict(distance="""6378137 * acos(
+                sin(radians({lat})) * sin(radians(geo_lat)) +
+                cos(radians({lat})) * cos(radians(geo_lat)) * cos(radians({lng}-geo_lng))
+            )""".format(lat=me.geo_lat, lng=me.geo_lng)))
+            qs = qs.extra(order_by=['distance'])
         return qs
 
     @list_route(methods=['post'])
@@ -2119,7 +2126,8 @@ class MovieViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.Movie.objects.all()
     serializer_class = s.MovieSerializer
-    ordering = ['-pk']
+
+    # ordering = ['-pk']
 
     def get_queryset(self):
         qs = interceptor_get_queryset_kw_field(self)
@@ -2127,6 +2135,13 @@ class MovieViewSet(viewsets.ModelViewSet):
         if category:
             qs = qs.filter(category=category)
         return qs
+
+    @detail_route(methods=['POST'])
+    def movie_view_count(self, request, pk):
+        movie = m.Movie.objects.get(pk=pk)
+        movie.view_count += 1
+        movie.save()
+        return Response(data=True)
 
 
 class StarBoxViewSet(viewsets.ModelViewSet):
