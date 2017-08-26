@@ -1361,6 +1361,33 @@ class MemberViewSet(viewsets.ModelViewSet):
         )
         return Response(data=data)
 
+    @list_route(methods=['GET'])
+    def get_gender_chart_data(self, request):
+        """
+        用戶性別、年齡比
+        :param request:
+        :return:
+        """
+        gender = self.request.query_params.get('gender')
+        labels = []
+        amounts = []
+        data = None
+        count_member = m.Member.objects.all().count()
+        for i in range(20):
+            if i < 19:
+                label_item = '{}~{}歲'.format(i * 5, (i + 1) * 5 - 1)
+            else:
+                label_item = '>95歲'
+            labels.append(label_item)
+            amount_item = m.Member.objects.filter(
+                gender=gender,
+                age__gte=i * 5,
+                age__lte=(i + 1) * 5 - 1,
+            ).count()
+            amounts.append(amount_item / count_member)
+        data = dict(labels=labels, amounts=amounts)
+        return Response(data=data)
+
 
 class RobotViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
@@ -1942,6 +1969,28 @@ class LiveWatchLogViewSet(viewsets.ModelViewSet):
         log = live.watch_logs.filter(author=request.user).first()
         log.leave_live()
         return Response(data=True)
+
+    @list_route(methods=['GET'])
+    def get_watch_chart_data(self, request):
+        labels = []
+        amounts = []
+        data = None
+        category = self.request.query_params.get('category')
+        now = datetime.now()
+        yesterday = datetime(now.year, now.month, now.day) - timedelta(days=1)
+        for i in range(24):
+            print(datetime(yesterday.year, yesterday.month, yesterday.day, i))
+            label_item = '{:0>2d}:00 - {:0>2d}:00'.format(i, i + 1)
+            amount_item = m.LiveWatchLog.objects.filter(
+                live__category=category,
+                date_enter__gte=datetime(yesterday.year, yesterday.month, yesterday.day, i),
+                date_enter__lte=datetime(yesterday.year, yesterday.month, yesterday.day,
+                                         i + 1) if i + 1 < 24 else datetime(now.year, now.month, now.day)
+            ).count()
+            labels.append(label_item)
+            amounts.append(amount_item)
+        data = dict(labels=labels, amounts=amounts)
+        return Response(data=data)
 
 
 class ActiveEventViewSet(viewsets.ModelViewSet):
@@ -2808,8 +2857,8 @@ class LoginRecordViewSet(viewsets.ModelViewSet):
                     )
                     amount_item = m.LoginRecord.objects.filter(
                         date_login__gt=datetime(begin.year + 1, (begin.month + i) % 12,
-                                                  1) if begin.month + i > 12 else datetime(begin.year,
-                                                                                           begin.month + i, 1),
+                                                1) if begin.month + i > 12 else datetime(begin.year,
+                                                                                         begin.month + i, 1),
                         date_login__lt=end + timedelta(days=1)
                     ).count()
                 else:
@@ -2819,10 +2868,10 @@ class LoginRecordViewSet(viewsets.ModelViewSet):
                     )
                     amount_item = m.LoginRecord.objects.filter(
                         date_login__gt=datetime(begin.year + 1, (begin.month + i) % 12,
-                                                  1) if begin.month + i > 12 else datetime(
+                                                1) if begin.month + i > 12 else datetime(
                             begin.year, begin.month + i, 1),
                         date_login__lt=datetime(begin.year + 1, (begin.month + i + 1) % 12,
-                                                  1) if begin.month + i + 1 > 12 else datetime(
+                                                1) if begin.month + i + 1 > 12 else datetime(
                             begin.year, begin.month + i + 1, 1),
                     ).count()
                 labels.append(label_item)
@@ -2932,8 +2981,8 @@ class LoginRecordViewSet(viewsets.ModelViewSet):
                     )
                     amount_item = m.LoginRecord.objects.filter(
                         date_login__gt=datetime(begin.year + 1, (begin.month + i) % 12,
-                                                  1) if begin.month + i > 12 else datetime(begin.year,
-                                                                                           begin.month + i, 1),
+                                                1) if begin.month + i > 12 else datetime(begin.year,
+                                                                                         begin.month + i, 1),
                         date_login__lt=end + timedelta(days=1)
                     ).count()
                 else:
@@ -2943,10 +2992,10 @@ class LoginRecordViewSet(viewsets.ModelViewSet):
                     )
                     amount_item = m.LoginRecord.objects.filter(
                         date_login__gt=datetime(begin.year + 1, (begin.month + i) % 12,
-                                                  1) if begin.month + i > 12 else datetime(
+                                                1) if begin.month + i > 12 else datetime(
                             begin.year, begin.month + i, 1),
                         date_login__lt=datetime(begin.year + 1, (begin.month + i + 1) % 12,
-                                                  1) if begin.month + i + 1 > 12 else datetime(
+                                                1) if begin.month + i + 1 > 12 else datetime(
                             begin.year, begin.month + i + 1, 1),
                     ).count()
                 labels.append(label_item)
