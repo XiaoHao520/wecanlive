@@ -1940,6 +1940,27 @@ class Live(UserOwnedModel,
                '{live_code}.flv' \
             .format(biz_id=biz_id, live_code=live_code)
 
+    def get_live_diamond(self):
+        """直播间获得钻石数
+        """
+        return PrizeOrder.objects.filter(
+            live_watch_log__in=self.watch_logs.all(),
+            diamond_transaction__id__gt=0,
+        ).aggregate(
+            amount=models.Sum('diamond_transaction__amount')
+        ).get('amount') or 0
+
+    def get_live_receiver_star(self):
+        """直播间获得星光指数
+        """
+        return PrizeOrder.objects.filter(
+            live_watch_log__in=self.watch_logs.all(),
+            receiver_star_index_transaction__id__gt=0,
+        ).aggregate(
+            amount=models.Sum('receiver_star_index_transaction__amount')
+        ).get('amount') or 0
+
+
 
 class LiveBarrage(UserOwnedModel,
                   AbstractMessageModel):

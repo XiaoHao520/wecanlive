@@ -750,6 +750,10 @@ class LiveSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     # 主播追踪数
     count_author_followed = serializers.ReadOnlyField(source='author.member.get_follow_count')
     count_author_diamond = serializers.ReadOnlyField(source='author.member.diamond_count')
+
+    count_live_diamond = serializers.ReadOnlyField(source='get_live_diamond')
+    count_live_receiver_star = serializers.ReadOnlyField(source='get_live_receiver_star')
+
     duration = serializers.ReadOnlyField(source='get_duration')
     live_status = serializers.ReadOnlyField(source='get_live_status')
 

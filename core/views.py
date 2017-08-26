@@ -1069,17 +1069,27 @@ class MemberViewSet(viewsets.ModelViewSet):
                 user_debit=user,
                 user_credit=user,
                 prize=prize,
+                prize_orders_as_receiver__id__gt=0,
             )
-            amount = prize_transaction.all().aggregate(amount=m.models.Sum('amount')).get('amount') or 0
+            if prize_transaction.exists():
+                amount = prize_transaction.all().aggregate(amount=m.models.Sum('amount')).get('amount') or 0
 
-            first_pk = prize_transaction.order_by('pk').first().pk
+                first_pk = prize_transaction.order_by('pk').first().pk
 
-            item = dict(
-                prize=s.PrizeSerializer(prize).data,
-                amount=amount,
-                first_pk=first_pk,
-            )
-            data.append(item)
+                author_avatar = m.PrizeOrder.objects.filter(
+                    receiver_prize_transaction__prize=prize,
+                    receiver_prize_transaction__user_debit=user,
+                    receiver_prize_transaction__user_credit=user,
+                    sender_prize_transaction__id__gt=0,
+                ).order_by('pk').first().author.member.avatar.image.url
+
+                item = dict(
+                    prize=s.PrizeSerializer(prize).data,
+                    amount=amount,
+                    first_pk=first_pk,
+                    author_avatar=author_avatar,
+                )
+                data.append(item)
         return Response(data=sorted(data, key=lambda item: item['first_pk'], reverse=True))
 
     @list_route(methods=['GET'])
@@ -2823,8 +2833,8 @@ class LoginRecordViewSet(viewsets.ModelViewSet):
                     )
                     amount_item = m.LoginRecord.objects.filter(
                         date_login__gt=datetime(begin.year + 1, (begin.month + i) % 12,
-                                                  1) if begin.month + i > 12 else datetime(begin.year,
-                                                                                           begin.month + i, 1),
+                                                1) if begin.month + i > 12 else datetime(begin.year,
+                                                                                         begin.month + i, 1),
                         date_login__lt=end + timedelta(days=1)
                     ).count()
                 else:
@@ -2834,10 +2844,10 @@ class LoginRecordViewSet(viewsets.ModelViewSet):
                     )
                     amount_item = m.LoginRecord.objects.filter(
                         date_login__gt=datetime(begin.year + 1, (begin.month + i) % 12,
-                                                  1) if begin.month + i > 12 else datetime(
+                                                1) if begin.month + i > 12 else datetime(
                             begin.year, begin.month + i, 1),
                         date_login__lt=datetime(begin.year + 1, (begin.month + i + 1) % 12,
-                                                  1) if begin.month + i + 1 > 12 else datetime(
+                                                1) if begin.month + i + 1 > 12 else datetime(
                             begin.year, begin.month + i + 1, 1),
                     ).count()
                 labels.append(label_item)
@@ -2947,8 +2957,8 @@ class LoginRecordViewSet(viewsets.ModelViewSet):
                     )
                     amount_item = m.LoginRecord.objects.filter(
                         date_login__gt=datetime(begin.year + 1, (begin.month + i) % 12,
-                                                  1) if begin.month + i > 12 else datetime(begin.year,
-                                                                                           begin.month + i, 1),
+                                                1) if begin.month + i > 12 else datetime(begin.year,
+                                                                                         begin.month + i, 1),
                         date_login__lt=end + timedelta(days=1)
                     ).count()
                 else:
@@ -2958,10 +2968,10 @@ class LoginRecordViewSet(viewsets.ModelViewSet):
                     )
                     amount_item = m.LoginRecord.objects.filter(
                         date_login__gt=datetime(begin.year + 1, (begin.month + i) % 12,
-                                                  1) if begin.month + i > 12 else datetime(
+                                                1) if begin.month + i > 12 else datetime(
                             begin.year, begin.month + i, 1),
                         date_login__lt=datetime(begin.year + 1, (begin.month + i + 1) % 12,
-                                                  1) if begin.month + i + 1 > 12 else datetime(
+                                                1) if begin.month + i + 1 > 12 else datetime(
                             begin.year, begin.month + i + 1, 1),
                     ).count()
                 labels.append(label_item)
