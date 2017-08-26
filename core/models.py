@@ -2565,7 +2565,7 @@ class PrizeOrder(UserOwnedModel):
     )
 
     date_created = models.DateTimeField(
-        verbose_name='创建时间',`
+        verbose_name='创建时间',
         auto_now_add=True,
     )
 
