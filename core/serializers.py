@@ -502,8 +502,6 @@ class MemberSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
     is_blacklist = serializers.ReadOnlyField()
 
-    distance = serializers.ReadOnlyField()
-
     class Meta:
         model = m.Member
         # fields = '__all__'

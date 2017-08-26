@@ -893,9 +893,6 @@ class MemberViewSet(viewsets.ModelViewSet):
         is_blacklist = self.request.query_params.get('is_blacklist')
         new_member = self.request.query_params.get('new_member')
         follow_recommended = self.request.query_params.get('follow_recommended')
-        nearby = self.request.query_params.get('nearby')
-
-        me = self.request.user.member
 
         if member_id:
             member = m.Member.objects.filter(user_id=member_id).first()
@@ -947,6 +944,7 @@ class MemberViewSet(viewsets.ModelViewSet):
             ).order_by('live_count', '-date_created')
 
         if follow_recommended:
+            me = self.request.user.member
             follow = me.get_follow().all()
             qs = qs.filter(
                 is_follow_recommended=True
@@ -955,12 +953,7 @@ class MemberViewSet(viewsets.ModelViewSet):
             ).exclude(
                 user__in=[member.user for member in follow],
             )
-        if nearby:
-            qs = qs.exclude(user=me.user).extra(select=dict(distance="""6378137 * acos(
-                sin(radians({lat})) * sin(radians(geo_lat)) +
-                cos(radians({lat})) * cos(radians(geo_lat)) * cos(radians({lng}-geo_lng))
-            )""".format(lat=me.geo_lat, lng=me.geo_lng)))
-            qs = qs.extra(order_by=['distance'])
+
         return qs
 
     @list_route(methods=['post'])
@@ -1376,6 +1369,33 @@ class MemberViewSet(viewsets.ModelViewSet):
             labels=labels,
             amounts=amounts,
         )
+        return Response(data=data)
+
+    @list_route(methods=['GET'])
+    def get_gender_chart_data(self, request):
+        """
+        用戶性別、年齡比
+        :param request:
+        :return:
+        """
+        gender = self.request.query_params.get('gender')
+        labels = []
+        amounts = []
+        data = None
+        count_member = m.Member.objects.all().count()
+        for i in range(20):
+            if i < 19:
+                label_item = '{}~{}歲'.format(i * 5, (i + 1) * 5 - 1)
+            else:
+                label_item = '>95歲'
+            labels.append(label_item)
+            amount_item = m.Member.objects.filter(
+                gender=gender,
+                age__gte=i * 5,
+                age__lte=(i + 1) * 5 - 1,
+            ).count()
+            amounts.append(amount_item / count_member)
+        data = dict(labels=labels, amounts=amounts)
         return Response(data=data)
 
 
@@ -1960,6 +1980,28 @@ class LiveWatchLogViewSet(viewsets.ModelViewSet):
         log.leave_live()
         return Response(data=True)
 
+    @list_route(methods=['GET'])
+    def get_watch_chart_data(self, request):
+        labels = []
+        amounts = []
+        data = None
+        category = self.request.query_params.get('category')
+        now = datetime.now()
+        yesterday = datetime(now.year, now.month, now.day) - timedelta(days=1)
+        for i in range(24):
+            print(datetime(yesterday.year, yesterday.month, yesterday.day, i))
+            label_item = '{:0>2d}:00 - {:0>2d}:00'.format(i, i + 1)
+            amount_item = m.LiveWatchLog.objects.filter(
+                live__category=category,
+                date_enter__gte=datetime(yesterday.year, yesterday.month, yesterday.day, i),
+                date_enter__lte=datetime(yesterday.year, yesterday.month, yesterday.day,
+                                         i + 1) if i + 1 < 24 else datetime(now.year, now.month, now.day)
+            ).count()
+            labels.append(label_item)
+            amounts.append(amount_item)
+        data = dict(labels=labels, amounts=amounts)
+        return Response(data=data)
+
 
 class ActiveEventViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
@@ -2259,8 +2301,7 @@ class MovieViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.Movie.objects.all()
     serializer_class = s.MovieSerializer
-
-    # ordering = ['-pk']
+    ordering = ['-pk']
 
     def get_queryset(self):
         qs = interceptor_get_queryset_kw_field(self)
@@ -2268,13 +2309,6 @@ class MovieViewSet(viewsets.ModelViewSet):
         if category:
             qs = qs.filter(category=category)
         return qs
-
-    @detail_route(methods=['POST'])
-    def movie_view_count(self, request, pk):
-        movie = m.Movie.objects.get(pk=pk)
-        movie.view_count += 1
-        movie.save()
-        return Response(data=True)
 
 
 class StarBoxViewSet(viewsets.ModelViewSet):
