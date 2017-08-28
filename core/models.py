@@ -406,6 +406,7 @@ class Member(AbstractMember,
         import json
         # 获取等级规则
         if Option.objects.filter(key='level_rules').exists():
+            return 1
             level_rules = json.loads(Option.objects.filter(key='level_rules').first().value)
 
             # 获取经验
