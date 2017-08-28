@@ -902,6 +902,14 @@ class ActiveEventSerializer(QueryFieldsMixin, serializers.ModelSerializer):
         source='is_liked_by_current_user'
     )
 
+    author_level = serializers.ReadOnlyField(
+        source='author.member.get_level'
+    )
+
+    author_vip_level = serializers.ReadOnlyField(
+        source='author.member.get_vip_level'
+    )
+
     class Meta:
         model = m.ActiveEvent
         fields = '__all__'
