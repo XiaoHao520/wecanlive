@@ -1725,6 +1725,8 @@ class LiveViewSet(viewsets.ModelViewSet):
         up_liveing = self.request.query_params.get('up_liveing')
         down_liveing = self.request.query_params.get('down_liveing')
 
+        id_not_in = self.request.query_params.get('id_not_in')
+
         if member_id:
             member = m.Member.objects.filter(
                 user_id=member_id
@@ -1760,6 +1762,10 @@ class LiveViewSet(viewsets.ModelViewSet):
                 id__lt=down_liveing,
                 date_end=None,
             ).order_by('-pk')
+
+        if id_not_in:
+            id_list = [int(x) for x in id_not_in.split(',') if x]
+            qs = qs.exclude(pk__in=id_list)
 
         return qs
 
@@ -1941,6 +1947,14 @@ class LiveViewSet(viewsets.ModelViewSet):
         watch_logs = live.watch_logs.exclude(author=live.author)
         return Response(data=s.LiveWatchLogSerializer(watch_logs, many=True).data)
 
+    @detail_route(methods=['POST'])
+    def live_delete(self, request, pk):
+        live = m.Live.objects.get(pk=pk)
+        assert self.request.user == live.author, '你不是直播主不能刪除此直播間'
+        live.is_del = True
+        live.save()
+        return Response(data=True)
+
 
 class LiveBarrageViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
@@ -2014,6 +2028,10 @@ class ActiveEventViewSet(viewsets.ModelViewSet):
         member_id = self.request.query_params.get('member')
         followed_by = self.request.query_params.get('followed_by')
         hot = self.request.query_params.get('hot')
+
+        id_not_in = self.request.query_params.get('id_not_in')
+
+
         if member_id:
             member = m.Member.objects.filter(
                 user_id=member_id
@@ -2043,6 +2061,11 @@ class ActiveEventViewSet(viewsets.ModelViewSet):
             ).exclude(
                 author=me.user
             ).order_by('-like_count')
+
+        if id_not_in:
+            id_list = [int(x) for x in id_not_in.split(',') if x]
+            qs = qs.exclude(pk__in=id_list)
+
         return qs
 
     @detail_route(methods=['POST'])
