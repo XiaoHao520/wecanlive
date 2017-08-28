@@ -136,7 +136,7 @@ class Member(AbstractMember,
         verbose_name='经验值',
         default=0,
     )
-
+    #
     vip_level = models.IntegerField(
         verbose_name='VIP等级',
         default=0,
