@@ -889,6 +889,19 @@ class CreditCoinTransaction(AbstractTransactionModel):
         verbose_name_plural = '金币流水'
         db_table = 'core_credit_coin_transaction'
 
+    @staticmethod
+    def get_coin_by_product_id(product_id):
+        """
+        通过coin_recharge_rules配置获取对应金币数
+        [{"product": "", "coin": int, "money": int}]
+        :return:
+        """
+        rules = json.loads(Option.get('coin_recharge_rules') or '[]')
+        for rule in rules:
+            if rule.get('product') == product_id:
+                return rule.get('coin')
+        return None
+
 
 class BadgeRecord(UserOwnedModel):
     badge = models.ForeignKey(
@@ -1960,7 +1973,6 @@ class Live(UserOwnedModel,
         ).aggregate(
             amount=models.Sum('receiver_star_index_transaction__amount')
         ).get('amount') or 0
-
 
 
 class LiveBarrage(UserOwnedModel,
@@ -3971,7 +3983,7 @@ class Banner(models.Model):
         if user.is_staff and self.id:
             super().save(*args, **kwargs)
             AdminLog.make(user, AdminLog.TYPE_UPDATE, self, '修改節目Banner')
-        elif user.is_staff :
+        elif user.is_staff:
             super().save(*args, **kwargs)
             AdminLog.make(user, AdminLog.TYPE_CREATE, self, '新增節目Banner')
         else:

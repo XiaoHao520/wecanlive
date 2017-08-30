@@ -88,12 +88,14 @@ class PaymentRecord(UserOwnedModel):
     PLATFORM_ALIPAY = 'ALIPAY'
     PLATFORM_IN_APP = 'APP'
     PLATFORM_PAYPAL = 'PAYPAL'
+    PLATFORM_OTHER = 'OTHER'
     PLATFORM_CHOICES = (
         (PLATFORM_BALANCE, '余额支付'),
         (PLATFORM_ALIPAY, '支付宝'),
         (PLATFORM_WXPAY, '微信支付'),
         (PLATFORM_IN_APP, 'Buy in app'),
         (PLATFORM_PAYPAL, 'Paypal'),
+        (PLATFORM_OTHER, '其他'),
     )
 
     platform = models.CharField(
@@ -177,6 +179,13 @@ class PaymentRecord(UserOwnedModel):
         to='AccountTransaction',
         blank=True,
         null=True,
+    )
+
+    product_id = models.CharField(
+        verbose_name='产品编号',
+        blank=True,
+        default='',
+        max_length=255,
     )
 
     class Meta:
