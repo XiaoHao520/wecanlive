@@ -781,6 +781,28 @@ class UserViewSet(viewsets.ModelViewSet):
         ).update(is_read=True)
         return Response(1)
 
+    @list_route(methods=['POST'])
+    def query_user(self, request):
+        account = self.request.data.get('account')
+        serverid = self.request.data.get('serverid')
+        time = self.request.data.get('time')
+        verify = self.request.data.get('verify')
+        from hashlib import md5
+        str_to_hash = account + serverid + str(time) + settings.WECAN_PAYMENT_VERIFY_KEY
+        my_hash = md5(str_to_hash.encode()).hexdigest()
+        if my_hash.upper() != verify.upper():
+            return Response(data=dict(code='1', msg='verify incorrect'))
+        user = m.User.objects.filter(username=account).first()
+        if not user:
+            return Response(data=dict(code='1', msg='Account not exist'))
+        return Response(data=dict(
+            code='0',
+            account=user.username,
+            charname=user.member.nickname,
+            level=user.member.get_level() or 0,
+            gmoney=user.member.get_coin_balance() or 0,
+        ))
+
 
 class MemberViewSet(viewsets.ModelViewSet):
     class Filter(FilterSet):
@@ -1069,18 +1091,18 @@ class MemberViewSet(viewsets.ModelViewSet):
 
                 first_pk = prize_transaction.order_by('pk').first().pk
 
-                author_avatar = m.PrizeOrder.objects.filter(
+                author = m.PrizeOrder.objects.filter(
                     receiver_prize_transaction__prize=prize,
                     receiver_prize_transaction__user_debit=user,
                     receiver_prize_transaction__user_credit=user,
                     sender_prize_transaction__id__gt=0,
-                ).order_by('pk').first().author.member.avatar.image.url
+                ).order_by('pk').first().author
 
                 item = dict(
                     prize=s.PrizeSerializer(prize).data,
                     amount=amount,
                     first_pk=first_pk,
-                    author_avatar=author_avatar,
+                    author_avatar=author.member.avatar.image.url if author.member.avatar else None,
                 )
                 data.append(item)
         return Response(data=sorted(data, key=lambda item: item['first_pk'], reverse=True))
@@ -2031,7 +2053,6 @@ class ActiveEventViewSet(viewsets.ModelViewSet):
 
         id_not_in = self.request.query_params.get('id_not_in')
 
-
         if member_id:
             member = m.Member.objects.filter(
                 user_id=member_id
@@ -2781,6 +2802,61 @@ class RechargeRecordViewSet(viewsets.ModelViewSet):
     serializer_class = s.RechargeRecordSerializer
     ordering = ['-pk']
 
+    @list_route(methods=['POST', 'GET'])
+    def notify(self, request):
+        """
+        参照 wecanLive+API+Requirement_20170605 文档
+        wecan SDK下单回调
+        :return:
+        """
+        account = self.request.data.get('account') or self.request.query_params.get('account')
+        serverid = self.request.data.get('serverid') or self.request.query_params.get('serverid')
+        platform = self.request.data.get('platform') or self.request.query_params.get('platform')
+        orderid = self.request.data.get('orderid') or self.request.query_params.get('orderid')
+        productid = self.request.data.get('productid') or self.request.query_params.get('productid')
+        imoney = self.request.data.get('imoney') or self.request.query_params.get('imoney')
+        to_account = self.request.data.get('to_account') or self.request.query_params.get('to_account')
+        extra = self.request.data.get('extra') or self.request.query_params.get('extra')
+        time = self.request.data.get('time') or self.request.query_params.get('time')
+        verify = self.request.data.get('verify') or self.request.query_params.get('verify')
+        # 验签
+        from hashlib import md5
+        str_to_hash = account + platform + orderid + str(imoney) + str(time) + settings.WECAN_PAYMENT_VERIFY_KEY
+        my_hash = md5(str_to_hash.encode()).hexdigest()
+        if my_hash.upper() != verify.upper():
+            return Response(data=dict(code='1', msg='verify incorrect'))
+        author = m.User.objects.filter(username=account).first()
+        if not author:
+            return Response(data=dict(code='1', msg='user does not exist'))
+        # 入单
+        payment_record, is_created = m.PaymentRecord.objects.get_or_create(
+            out_trade_no=orderid,
+            defaults=dict(
+                subject='wecan充值{}'.format(productid),
+                amount=imoney,
+                author=author,
+                platform=m.PaymentRecord.PLATFORM_OTHER,
+                product_id=productid or '',
+                notify_data='',#request.body,
+            )
+        )
+        # 订单重复
+        if not is_created:
+            return Response(data=dict(code='1', msg='record exist'))
+        # 记录充值订单
+        recharge_record = m.RechargeRecord.objects.create(
+            payment_record=payment_record,
+            amount=payment_record.amount,
+        )
+        # 金币流水
+        coin_transaction = m.CreditCoinTransaction.objects.create(
+            type=m.CreditCoinTransaction.TYPE_RECHARGE,
+            user_debit=author,
+            amount=m.CreditCoinTransaction.get_coin_by_product_id(productid),
+            remark='充值{}'.format(orderid),
+        )
+        return Response(data=dict(code='0', msg=''))
+
     def get_queryset(self):
         return interceptor_get_queryset_kw_field(self)
 
@@ -3058,3 +3134,13 @@ class LoginRecordViewSet(viewsets.ModelViewSet):
             amounts=amounts,
         )
         return Response(data=data)
+
+
+class PaymentRecordViewSet(viewsets.ModelViewSet):
+    filter_fields = '__all__'
+    queryset = m.PaymentRecord.objects.all()
+    serializer_class = s.PaymentRecordSerializer
+    ordering = ['-pk']
+
+    def get_queryset(self):
+        return interceptor_get_queryset_kw_field(self)
