@@ -1069,6 +1069,11 @@ class ActivitySerializer(QueryFieldsMixin, serializers.ModelSerializer):
         read_only=True,
     )
 
+    thumbnail_url = serializers.URLField(
+        source='thumbnail.image.url',
+        read_only=True,
+    )
+
     vote_way = serializers.ReadOnlyField()
 
     vote_count_award = serializers.ReadOnlyField()

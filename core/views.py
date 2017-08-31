@@ -1202,7 +1202,7 @@ class MemberViewSet(viewsets.ModelViewSet):
         if active_comment:
             active_comment_date = active_comment.date_created
 
-        if active_comment_date > like_usermark_date:
+        if active_comment_date and active_comment_date > like_usermark_date:
             last_activeevent_message = dict(
                 date_created=active_comment.date_created,
                 content=active_comment.content,
@@ -2031,7 +2031,6 @@ class ActiveEventViewSet(viewsets.ModelViewSet):
 
         id_not_in = self.request.query_params.get('id_not_in')
 
-
         if member_id:
             member = m.Member.objects.filter(
                 user_id=member_id
@@ -2261,6 +2260,140 @@ class ActivityViewSet(viewsets.ModelViewSet):
         if activity_type:
             qs = qs.filter(type=activity_type)
         return qs
+
+    @detail_route(methods=['POST'])
+    def activity_draw_turntable(self, request, pk):
+        """ 抽奖活动转盘点击开始抽奖动作
+            完成概率抽奖和对应的流水插入等动作，返回1-8抽奖结果给前端的转盘显示
+        """
+        activity = m.Activity.objects.get(pk=pk)
+        activity.join_draw_activity(self.request.user)
+        awards = json.loads(activity.rules)['awards']
+        r = random.random()
+        weight_local = 0
+        number = 0
+        result = None
+        result_number = None
+        for award in awards:
+            number += 1
+            new_weight_local = weight_local + award['weight']
+            if weight_local < r <= new_weight_local:
+                result = award
+                result_number = number
+            weight_local = new_weight_local
+
+        activity.activity_draw_award(result['award'], self.request.user)
+        return Response(data=dict(
+            result_number=result_number,
+            result=result,
+        ))
+
+    @detail_route(methods=['GET'])
+    def get_activity_vote_list(self, request, pk):
+        """
+            票選活動票數排序名單
+        """
+        activity = m.Activity.objects.get(pk=pk)
+        rules_prize_id = json.loads(activity.rules)['prize']
+        prize_transactions = m.PrizeTransaction.objects.filter(
+            prize__id=rules_prize_id,
+            user_debit=m.models.F('user_credit'),
+            prize_orders_as_receiver__id__gt=0,
+            prize_orders_as_receiver__date_created__gt=activity.date_begin,
+            prize_orders_as_receiver__date_created__lt=activity.date_end,
+        ).all()
+        members = m.Member.objects.filter(
+            user__in=[prize_transaction.user_debit for prize_transaction in prize_transactions]
+        )
+        data = []
+        for member in members:
+            prize_amount = member.user.prizetransactions_debit.filter(
+                prize__id=rules_prize_id,
+                user_debit=m.models.F('user_credit'),
+                prize_orders_as_receiver__id__gt=0,
+                prize_orders_as_receiver__date_created__gt=activity.date_begin,
+                prize_orders_as_receiver__date_created__lt=activity.date_end,
+            ).all().aggregate(amount=m.models.Sum('amount')).get('amount') or 0
+            data.append(dict(
+                member=s.MemberSerializer(member).data,
+                amount=prize_amount,
+            ))
+        return Response(data=sorted(data, key=lambda item: item['amount'], reverse=True)[:20])
+
+    @detail_route(methods=['GET'])
+    def get_activity_watch_list(self, request, pk):
+        """观看活动观看时长排序列表
+        """
+        activity = m.Activity.objects.get(pk=pk)
+        rules = json.loads(activity.rules)
+        watch_logs = m.LiveWatchLog.objects.filter(
+            live__date_created__gt=activity.date_begin,
+            live__date_created__lt=activity.date_end,
+            duration__gt=rules['min_duration'],
+        ).all()
+        members = m.Member.objects.filter(
+            user__in=[watch_log.author for watch_log in watch_logs],
+        ).all()
+        data = []
+        for member in members:
+            watch_logs = member.user.livewatchlogs_owned.filter(
+                live__date_created__gt=activity.date_begin,
+                live__date_created__lt=activity.date_end,
+                duration__gt=rules['min_duration'],
+            )
+            watch_logs_count = watch_logs.count()
+            watch_logs_duration = watch_logs.all().aggregate(duration=m.models.Sum('duration')).get('duration') or 0
+            if watch_logs_count >= int(rules['min_watch']):
+                data.append(dict(
+                    member=s.MemberSerializer(member).data,
+                    watch_logs_count=watch_logs_count,
+                    watch_logs_duration=watch_logs_duration,
+                ))
+
+        return Response(data=sorted(data, key=lambda item: item['watch_logs_duration'], reverse=True)[:20])
+
+    @detail_route(methods=['GET'])
+    def get_activity_diamond_list(self, request, pk):
+        """
+        鑽石活動，獲得鑽石數排序
+        """
+        activity = m.Activity.objects.get(pk=pk)
+        prize_orders = m.PrizeOrder.objects.filter(
+            date_created__gt=activity.date_begin,
+            date_created__lt=activity.date_end,
+            diamond_transaction__id__gt=0,
+        )
+        # 收钻石用户
+        receiver_members = m.Member.objects.filter(
+            user__in=[order.diamond_transaction.user_debit for order in prize_orders],
+        )
+        # 送礼物用户
+        sender_members = m.Member.objects.filter(
+            user__in=[order.author for order in prize_orders],
+        )
+        receiver_list = []
+        sender_list = []
+        for receiver_member in receiver_members:
+            # 收鑽石列表
+            diamond_amount = receiver_member.user.creditdiamondtransactions_debit.filter(
+                prize_orders__id__gt=0,
+                prize_orders__date_created__gt=activity.date_begin,
+                prize_orders__date_created__lt=activity.date_end,
+            ).all().aggregate(amount=m.models.Sum('amount')).get('amount') or 0
+            receiver_list.append(dict(member=s.MemberSerializer(receiver_member).data, amount=diamond_amount))
+        # 收鑽石列表排序
+        receiver_list = sorted(receiver_list, key=lambda item: item['amount'], reverse=True)[:10]
+
+        for sender_member in sender_members:
+            # 送鑽石列表
+            diamond_amount = sender_member.user.prizeorders_owned.filter(
+                date_created__gt=activity.date_begin,
+                date_created__lt=activity.date_end,
+                diamond_transaction__id__gt=0,
+            ).all().aggregate(amount=m.models.Sum('diamond_transaction__amount')).get('amount') or 0
+            sender_list.append(dict(member=s.MemberSerializer(sender_member).data, amount=diamond_amount))
+        sender_list = sorted(sender_list, key=lambda item: item['amount'], reverse=True)[:10]
+        return Response(data=dict(receiver_list=receiver_list, sender_list=sender_list))
 
 
 class ActivityPageViewSet(viewsets.ModelViewSet):
