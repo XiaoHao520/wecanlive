@@ -2840,6 +2840,8 @@ class RechargeRecordViewSet(viewsets.ModelViewSet):
                 notify_data='',  # request.body,
             )
         )
+        print('>>>>>>>>>')
+        print(is_created)
         # 订单重复
         if not is_created:
             return Response(data=dict(code='1', msg='record exist'))
@@ -2855,6 +2857,7 @@ class RechargeRecordViewSet(viewsets.ModelViewSet):
             user_debit=author,
             amount=m.CreditCoinTransaction.get_coin_by_product_id(productid),
             remark='充值{}'.format(orderid),
+        #     注意这里的remark会在下面的 get_recharge_coin_transactions 里面使用
         )
         # 金币充值奖励流水
         award_coin_transaction = m.CreditCoinTransaction.objects.create(
@@ -2863,6 +2866,7 @@ class RechargeRecordViewSet(viewsets.ModelViewSet):
             amount=m.CreditCoinTransaction.get_award_coin_by_product_id(productid, m.RechargeRecord.objects.filter(
                 author=author, payment_record__product_id=productid).count() <= 1),
             remark='充值奖励{}'.format(orderid),
+            #     注意这里的remark会在下面的 get_recharge_coin_transactions 里面使用
         )
         return Response(data=dict(code='0', msg=''))
 
@@ -2887,6 +2891,26 @@ class RechargeRecordViewSet(viewsets.ModelViewSet):
         for recharge in qs:
             total += recharge.amount
         return Response(data=total)
+
+    @list_route(methods=['GET'])
+    def get_recharge_coin_transactions(self, request):
+        author = self.request.user
+        data = []
+        for recharge_record in m.RechargeRecord.objects.filter(author=author):
+            coin_transaction = m.CreditCoinTransaction.objects.filter(
+                user_debit=author,
+                remark='充值{}'.format(recharge_record.payment_record.out_trade_no),
+            ).first()
+            award_coin_transaction = m.CreditCoinTransaction.objects.filter(
+                user_debit=author,
+                remark='充值奖励{}'.format(recharge_record.payment_record.out_trade_no),
+            ).first()
+            data.append(dict(
+                amount=recharge_record.amount,
+                date_created=recharge_record.date_created,
+                coin=coin_transaction.amount + award_coin_transaction.amount or 0,
+            ))
+        return Response(data=data)
 
 
 class LoginRecordViewSet(viewsets.ModelViewSet):

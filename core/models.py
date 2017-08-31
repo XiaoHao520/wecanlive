@@ -2400,11 +2400,11 @@ class Prize(EntityModel):
     def save(self, *args, **kwargs):
         from django_base.middleware import get_request
         user = get_request().user
+        super().save(*args, **kwargs)
         if user.is_staff and self.id and not self.is_del:
             AdminLog.make(user, AdminLog.TYPE_UPDATE, self, '修改禮物')
         elif user.is_staff and not self.is_del:
             AdminLog.make(user, AdminLog.TYPE_CREATE, self, '新增禮物')
-        super().save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):
         from django_base.middleware import get_request
