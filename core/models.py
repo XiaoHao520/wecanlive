@@ -893,13 +893,29 @@ class CreditCoinTransaction(AbstractTransactionModel):
     def get_coin_by_product_id(product_id):
         """
         通过coin_recharge_rules配置获取对应金币数
-        [{"product": "", "coin": int, "money": int}]
+        [{"product": "", "coin": int, "money": int, "award": int, "award2": int}]
         :return:
         """
         rules = json.loads(Option.get('coin_recharge_rules') or '[]')
         for rule in rules:
             if rule.get('product') == product_id:
                 return rule.get('coin')
+        return None
+
+    @staticmethod
+    def get_award_coin_by_product_id(product_id, is_first=False):
+        """
+        通过coin_recharge_rules配置获取对应金币数
+        [{"product": "", "coin": int, "money": int, "award": int, "award2": int}]
+        :param product_id:
+        :return:
+        """
+        rules = json.loads(Option.get('coin_recharge_rules') or '[]')
+        for rule in rules:
+            if rule.get('product') == product_id:
+                if is_first:
+                    return rule.get('award')
+                return rule.get('award2')
         return None
 
 

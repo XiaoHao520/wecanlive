@@ -2837,7 +2837,7 @@ class RechargeRecordViewSet(viewsets.ModelViewSet):
                 author=author,
                 platform=m.PaymentRecord.PLATFORM_OTHER,
                 product_id=productid or '',
-                notify_data='',#request.body,
+                notify_data='',  # request.body,
             )
         )
         # 订单重复
@@ -2845,6 +2845,7 @@ class RechargeRecordViewSet(viewsets.ModelViewSet):
             return Response(data=dict(code='1', msg='record exist'))
         # 记录充值订单
         recharge_record = m.RechargeRecord.objects.create(
+            author=author,
             payment_record=payment_record,
             amount=payment_record.amount,
         )
@@ -2854,6 +2855,14 @@ class RechargeRecordViewSet(viewsets.ModelViewSet):
             user_debit=author,
             amount=m.CreditCoinTransaction.get_coin_by_product_id(productid),
             remark='充值{}'.format(orderid),
+        )
+        # 金币充值奖励流水
+        award_coin_transaction = m.CreditCoinTransaction.objects.create(
+            type=m.CreditCoinTransaction.TYPE_RECHARGE,
+            user_debit=author,
+            amount=m.CreditCoinTransaction.get_award_coin_by_product_id(productid, m.RechargeRecord.objects.filter(
+                author=author, payment_record__product_id=productid).count() <= 1),
+            remark='充值奖励{}'.format(orderid),
         )
         return Response(data=dict(code='0', msg=''))
 
