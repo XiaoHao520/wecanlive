@@ -837,6 +837,7 @@ class CreditDiamondTransaction(AbstractTransactionModel):
     TYPE_WITHDRAW = 'WITHDRAW'
     TYPE_ACTIVITY_EXPENSE = 'ACTIVITY_EXPENSE'
     TYPE_BOX = 'BOX'
+    TYPE_ACTIVITY = 'ACTIVITY'
     TYPE_CHOICES = (
         (TYPE_ADMIN, '管理員發放'),
         (TYPE_LIVE_GIFT, '直播赠送'),
@@ -844,6 +845,7 @@ class CreditDiamondTransaction(AbstractTransactionModel):
         (TYPE_WITHDRAW, '提現'),
         (TYPE_ACTIVITY_EXPENSE, '活動消費'),
         (TYPE_BOX, '开启元气宝盒'),
+        (TYPE_ACTIVITY, '活动'),
     )
 
     type = models.CharField(
@@ -867,6 +869,7 @@ class CreditCoinTransaction(AbstractTransactionModel):
     TYPE_BARRAGE = 'BARRAGE'
     TYPE_FAMILY_MODIFY = 'FAMILY_MODIFY'
     TYPE_DAILY = 'DAILY'
+    TYPE_ACTIVITY = 'ACTIVITY'
     TYPE_CHOICES = (
         (TYPE_ADMIN, '管理員發放'),
         (TYPE_LIVE_GIFT, '直播赠送'),
@@ -876,6 +879,7 @@ class CreditCoinTransaction(AbstractTransactionModel):
         (TYPE_BARRAGE, '發送彈幕消費'),
         (TYPE_FAMILY_MODIFY, '家族長修改頭銜'),
         (TYPE_DAILY, '每日签到获得'),
+        (TYPE_ACTIVITY, '活动'),
     )
 
     type = models.CharField(
@@ -3193,7 +3197,7 @@ class Activity(EntityModel):
         if not self.type == self.TYPE_VOTE:
             return None
         rule = json.loads(self.rules)
-        if rule['prize']:
+        if self.type == self.TYPE_VOTE and rule['prize']:
             prize_id = rule['prize']
             prize = Prize.objects.filter(id=prize_id).first()
             if prize:
@@ -3390,6 +3394,125 @@ class Activity(EntityModel):
         :return:
         """
 
+    def join_draw_activity(self, user):
+        """ 参与抽獎活动
+            判断用户是否满足活动参与条件，满足就创建活动参与记录，状态为进行中
+        """
+        assert datetime.now() > self.date_begin, '活動還沒開始'
+        assert datetime.now() < self.date_end, '活動已結束'
+        assert not ActivityParticipation.objects.filter(author=user, activity=self).exists(), '您已經參與過抽獎'
+
+        user = User.objects.get(pk=user.id)
+        condition = json.loads(self.rules)
+        # 活动条件完成数量。到达活动所规定的数量才能参与活动
+        condition_complete_count = 0
+
+        if json.loads(self.rules)['condition_code'] == '000001':
+            # 送禮額度
+            condition_complete_count = PrizeOrder.objects.filter(
+                coin_transaction__user_credit=user,
+                date_created__gt=self.date_begin,
+            ).all().aggregate(amount=models.Sum("coin_transaction__amount")).get('amount') or 0
+        elif json.loads(self.rules)['condition_code'] == '000002':
+            # 觀看時長
+            print(1)
+        elif json.loads(self.rules)['condition_code'] == '000003':
+            # 累計觀看數
+            condition_complete_count = LiveWatchLog.objects.filter(
+                date_enter__gt=self.date_begin,
+                author=user,
+            ).count()
+        elif json.loads(self.rules)['condition_code'] == '000004':
+            # 追蹤數
+            condition_complete_count = UserMark.objects.filter(
+                author=user,
+                subject='follow',
+                content_type=ContentType.objects.get(model='member'),
+                date_created__gt=self.date_begin,
+            ).count()
+        elif condition['condition_code'] == '000005':
+            # 好友數
+            friends = User.objects.filter(
+                contacts_owned__user=user,
+                contacts_related__author=user
+            ).all()
+            for friend in friends:
+                contact = Contact.objects.filter(
+                    models.Q(author=friend, user=user, timestamp__gt=self.date_begin) |
+                    models.Q(author=user, user=friend, timestamp__gt=self.date_begin)
+                ).order_by('-timestamp').exists()
+                if contact:
+                    condition_complete_count += 1
+        elif condition['condition_code'] == '000006':
+            # 粉絲數
+            condition_complete_count = UserMark.objects.filter(
+                object_id=user.id,
+                subject='follow',
+                content_type=ContentType.objects.get(model='member'),
+                date_created__gt=self.date_begin,
+            ).count()
+        elif json.loads(self.rules)['condition_code'] == '000007':
+            # 分享直播間數
+            print(1)
+        elif condition['condition_code'] == '000008':
+            # 邀請好友註冊數
+            condition_complete_count = Member.objects.filter(
+                date_created__gt=self.date_begin,
+                referrer=user).count()
+        elif json.loads(self.rules)['condition_code'] == '000009':
+            # 連續登入X天
+            # todo
+            LoginRecord.objects.filter(author=user, date_created__date=self.date_begin)
+            print(1)
+        elif condition['condition_code'] == '000010':
+            # 連續開播X天
+            lives = Live.objects.filter(date_created__gt=self.date_begin, author=user).all()
+            # todo
+            print(lives[0])
+        elif condition['condition_code'] == '000011':
+            # 收到鑽石額度
+            condition_complete_count = PrizeOrder.objects.filter(
+                diamond_transaction__user_debit=user,
+                date_created__gt=self.date_begin,
+            ).all().aggregate(amount=models.Sum("diamond_transaction__amount")).get('amount') or 0
+
+        assert condition_complete_count >= condition['condition_value'], '您當前還未滿足參與活動的條件，不能參與活動'
+        ActivityParticipation.objects.create(
+            author=user,
+            activity=self,
+            status=ActivityParticipation.STATUS_ACTIVE
+        )
+
+    def activity_draw_award(self, award, user):
+        """领取抽獎活动奖励
+        """
+        coin_transaction = None
+        diamond_transaction = None
+        if award['type'] == 'coin':
+            coin_transaction = CreditCoinTransaction.objects.create(
+                user_debit=user,
+                type=CreditCoinTransaction.TYPE_ACTIVITY,
+                amount=int(award['value'])
+            )
+            print(coin_transaction)
+        if award['type'] == 'diamond':
+            diamond_transaction = CreditDiamondTransaction.objects.create(
+                user_Debit=user,
+                type=CreditDiamondTransaction.TYPE_ACTIVITY,
+                amount=int(award['value'])
+            )
+
+        activity_participation = ActivityParticipation.objects.filter(
+            author=user,
+            activity=self,
+        ).first()
+        # todo 經驗 i幣 禮物等
+        activity_participation.coin_transaction = coin_transaction
+        activity_participation.diamond_transaction = diamond_transaction
+        activity_participation.status = ActivityParticipation.STATUS_COMPLETE
+        activity_participation.save()
+        return True
+
 
 class ActivityPage(EntityModel):
     banner = models.ForeignKey(
@@ -3429,7 +3552,7 @@ class ActivityParticipation(UserOwnedModel):
     STATUS_CHOICES = (
         (STATUS_ACTIVE, '进行中'),
         (STATUS_EXPIRED, '超时未达成'),
-        (STATUS_ACTIVE, '完成'),
+        (STATUS_COMPLETE, '完成'),
     )
 
     status = models.CharField(
@@ -3437,6 +3560,22 @@ class ActivityParticipation(UserOwnedModel):
         max_length=20,
         default=STATUS_ACTIVE,
         choices=STATUS_CHOICES,
+    )
+
+    coin_transaction = models.OneToOneField(
+        verbose_name='金币奖励记录',
+        to='CreditCoinTransaction',
+        related_name='activity_participation',
+        null=True,
+        blank=True,
+    )
+
+    diamond_transaction = models.OneToOneField(
+        verbose_name='钻石奖励记录',
+        to='CreditDiamondTransaction',
+        related_name='activity_participation',
+        null=True,
+        blank=True,
     )
 
     class Meta:
