@@ -1090,6 +1090,8 @@ class ActivitySerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
     award_way = serializers.ReadOnlyField()
 
+    date_end_countdown = serializers.ReadOnlyField()
+
     class Meta:
         model = m.Activity
         fields = '__all__'

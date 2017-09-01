@@ -3394,6 +3394,14 @@ class Activity(EntityModel):
         :return:
         """
 
+    def date_end_countdown(self):
+        """ 活动倒计时，返回分钟
+        """
+        if self.date_end < datetime.now():
+            return 0
+        return int((self.date_end - datetime.now()).seconds / 60) + \
+               (self.date_end - datetime.now()).days * 1440
+
     def join_draw_activity(self, user):
         """ 参与抽獎活动
             判断用户是否满足活动参与条件，满足就创建活动参与记录，状态为进行中
@@ -3628,7 +3636,8 @@ class VisitLog(UserOwnedModel,
         log.save()
 
     def time_ago(self):
-        return int((datetime.now() - self.date_last_visit).seconds / 60)
+        return int((datetime.now() - self.date_last_visit).seconds / 60) + \
+               (datetime.now() - self.date_last_visit).days * 1440
 
     class Meta:
         verbose_name = '访客记录'
