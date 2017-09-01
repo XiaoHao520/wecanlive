@@ -893,6 +893,35 @@ class CreditCoinTransaction(AbstractTransactionModel):
         verbose_name_plural = '金币流水'
         db_table = 'core_credit_coin_transaction'
 
+    @staticmethod
+    def get_coin_by_product_id(product_id):
+        """
+        通过coin_recharge_rules配置获取对应金币数
+        [{"product": "", "coin": int, "money": int, "award": int, "award2": int}]
+        :return:
+        """
+        rules = json.loads(Option.get('coin_recharge_rules') or '[]')
+        for rule in rules:
+            if rule.get('product') == product_id:
+                return rule.get('coin')
+        return None
+
+    @staticmethod
+    def get_award_coin_by_product_id(product_id, is_first=False):
+        """
+        通过coin_recharge_rules配置获取对应金币数
+        [{"product": "", "coin": int, "money": int, "award": int, "award2": int}]
+        :param product_id:
+        :return:
+        """
+        rules = json.loads(Option.get('coin_recharge_rules') or '[]')
+        for rule in rules:
+            if rule.get('product') == product_id:
+                if is_first:
+                    return rule.get('award')
+                return rule.get('award2')
+        return None
+
 
 class BadgeRecord(UserOwnedModel):
     badge = models.ForeignKey(
@@ -2375,11 +2404,11 @@ class Prize(EntityModel):
     def save(self, *args, **kwargs):
         from django_base.middleware import get_request
         user = get_request().user
+        super().save(*args, **kwargs)
         if user.is_staff and self.id and not self.is_del:
             AdminLog.make(user, AdminLog.TYPE_UPDATE, self, '修改禮物')
         elif user.is_staff and not self.is_del:
             AdminLog.make(user, AdminLog.TYPE_CREATE, self, '新增禮物')
-        super().save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):
         from django_base.middleware import get_request
