@@ -2417,6 +2417,12 @@ class ActivityViewSet(viewsets.ModelViewSet):
         sender_list = sorted(sender_list, key=lambda item: item['amount'], reverse=True)[:10]
         return Response(data=dict(receiver_list=receiver_list, sender_list=sender_list))
 
+    @detail_route(methods=['POST'])
+    def activity_award(self, request, pk):
+        activity = m.Activity.objects.get(pk=pk)
+        activity.settle()
+        return Response(data=True)
+
 
 class ActivityPageViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
@@ -2991,7 +2997,7 @@ class RechargeRecordViewSet(viewsets.ModelViewSet):
             user_debit=author,
             amount=m.CreditCoinTransaction.get_coin_by_product_id(productid),
             remark='充值{}'.format(orderid),
-        #     注意这里的remark会在下面的 get_recharge_coin_transactions 里面使用
+            #     注意这里的remark会在下面的 get_recharge_coin_transactions 里面使用
         )
         # 金币充值奖励流水
         award_coin_transaction = m.CreditCoinTransaction.objects.create(

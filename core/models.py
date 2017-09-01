@@ -619,6 +619,70 @@ class Member(AbstractMember,
         self.save()
         return member
 
+    def member_activity_award(self, activity, awards, status='COMPLETE'):
+        """
+        用户 获得的活动奖励
+        @:param  activity 活动对象
+                 awards {'value': 10, 'type': 'coin'}
+                        type: '', // experience:经验值/icoin:i币/coin:金币/star:星星/prize:礼物/contribution:贡献值/badge:勋章
+                 status 活动完成状态
+        """
+        coin_transaction = None
+        diamond_transaction = None
+        prize_transaction = None
+        star_transaction = None
+        badge_record = None
+        if awards['type'] == 'coin':
+            # 金币
+            coin_transaction = CreditCoinTransaction.objects.create(
+                user_debit=self.user,
+                type=CreditCoinTransaction.TYPE_ACTIVITY,
+                amount=awards['value'],
+            )
+        if awards['type'] == 'diamond':
+            # 钻石
+            diamond_transaction = CreditDiamondTransaction.objects.create(
+                user_debit=self.user,
+                type=CreditDiamondTransaction.TYPE_ACTIVITY,
+                amount=awards['value'],
+            )
+        if awards['type'] == 'prize':
+            # 礼物
+            prize_transaction = PrizeTransaction.objects.create(
+                user_debit=self.user,
+                amount=1,
+                type=PrizeTransaction.TYPE_ACTIVITY_GAIN,
+                prize=Prize.objects.get(pk=awards['value'])
+            )
+        if awards['type'] == 'experience':
+            # 经验
+            self.experience += awards['value']
+            self.save()
+        if awards['type'] == 'star':
+            # 元气
+            star_transaction = CreditStarTransaction(
+                user_debit=self.user,
+                amount=awards['value'],
+                type=CreditStarTransaction.TYPE_ACTIVITY,
+            )
+        if awards['type'] == 'badge':
+            # 徽章
+            badge_record = BadgeRecord.objects.create(
+                author=self.user,
+                badge=Badge.objects.get(pk=awards['value'])
+            )
+        # todo  i币 贡献值
+        ActivityParticipation.objects.create(
+            author=self.user,
+            activity=activity,
+            status=status,
+            coin_transaction=coin_transaction,
+            diamond_transaction=diamond_transaction,
+            prize_transaction=prize_transaction,
+            star_transaction=star_transaction,
+            badge_record=badge_record,
+        )
+
 
 class LoginRecord(UserOwnedModel):
     """
@@ -764,11 +828,13 @@ class CreditStarTransaction(AbstractTransactionModel):
     TYPE_EARNING = 'EARNING'
     TYPE_ADMIN = 'ADMIN'
     TYPE_DAILY = 'DAILY'
+    TYPE_ACTIVITY = 'ACTIVITY'
     TYPE_CHOICES = (
         (TYPE_LIVE_GIFT, '直播赠送'),
         (TYPE_EARNING, '任務獲得'),
         (TYPE_ADMIN, '後臺補償'),
         (TYPE_DAILY, '签到获得'),
+        (TYPE_ACTIVITY, '活动获得'),
     )
 
     type = models.CharField(
@@ -3160,6 +3226,11 @@ class Activity(EntityModel):
         verbose_name='结束时间',
     )
 
+    is_settle = models.BooleanField(
+        verbose_name='是否已结算',
+        default=False,
+    )
+
     class Meta:
         verbose_name = '活动'
         verbose_name_plural = '活动'
@@ -3391,8 +3462,55 @@ class Activity(EntityModel):
 
     def settle(self):
         """ 结算当次活动，找出所有参与记录，然后统计满足条件的自动发放奖励
+            跑批用，每天执行1次
+            转盘活动  不用做结算动作 is_settle = True
+            观看任务  全部用户，在结束日期之后做一次结算，全部用户排序结算 is_settle = True
+            投票活动  全部用户，在结束日期之后做一次结算，全部用户排序结算 is_settle = True
+            钻石活动  每一日做一次结算，将活动五个等级的分别结算 活动结束时候才is_settle = True
         :return:
         """
+        rules = json.loads(self.rules)
+        if self.type == Activity.TYPE_WATCH:
+            if datetime.now() < self.date_end or self.is_settle:
+                # 活动没结束 或者 活动已经结束 不做结算动作
+                return
+            # 观看任务结算
+            awards = rules['award']
+            watch_logs = LiveWatchLog.objects.filter(
+                live__date_created__gt=self.date_begin,
+                live__date_created__lt=self.date_end,
+                duration__gt=rules['min_duration'],
+            ).all()
+            members = Member.objects.filter(
+                user__in=[watch_log.author for watch_log in watch_logs],
+            ).all()
+            for member in members:
+                logs_count = member.user.livewatchlogs_owned.filter(
+                    live__date_created__gt=self.date_begin,
+                    live__date_created__lt=self.date_end,
+                    duration__gt=rules['min_duration'],
+                ).count()
+                if logs_count >= int(rules['min_watch']):
+                    # 符合条件的会员，添加奖励和参加活动记录
+                    member.member_activity_award(self, awards)
+            # 处理完成更改结算状态
+            self.is_settle = True
+            self.save()
+        if self.type == Activity.TYPE_DRAW:
+            # 转盘活动
+            if datetime.now < self.date_end or self.is_settle:
+                return
+            self.is_settle = True
+            self.save()
+
+        if self.type == Activity.TYPE_VOTE:
+            # 投票活动
+            return
+        if self.type == Activity.TYPE_DIAMOND:
+            # 钻石活动
+            return
+        return
+
 
     def date_end_countdown(self):
         """ 活动倒计时，返回分钟
@@ -3581,6 +3699,30 @@ class ActivityParticipation(UserOwnedModel):
     diamond_transaction = models.OneToOneField(
         verbose_name='钻石奖励记录',
         to='CreditDiamondTransaction',
+        related_name='activity_participation',
+        null=True,
+        blank=True,
+    )
+
+    prize_transaction = models.OneToOneField(
+        verbose_name='礼物奖励记录',
+        to='PrizeTransaction',
+        related_name='activity_participation',
+        null=True,
+        blank=True,
+    )
+
+    star_transaction = models.OneToOneField(
+        verbose_name='元气奖励记录',
+        to='CreditStarTransaction',
+        related_name='activity_participation',
+        null=True,
+        blank=True,
+    )
+
+    badge_record = models.OneToOneField(
+        verbose_name='奖励徽章记录',
+        to='BadgeRecord',
         related_name='activity_participation',
         null=True,
         blank=True,
