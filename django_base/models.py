@@ -1,15 +1,18 @@
 import json
+import re
 import os
 import os.path
+import random
+
 from datetime import datetime, timedelta
 
+from django.db import models
 from django.conf import settings
-from django.contrib.auth.models import User, Group
+from django.contrib.staticfiles.templatetags.staticfiles import static
+from django.contrib.auth.models import User, Group, Permission
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 from django.contrib.contenttypes.models import ContentType
-from django.contrib.staticfiles.templatetags.staticfiles import static
 from django.core.exceptions import ValidationError
-from django.db import models
 
 from . import utils as u
 from .middleware import get_request
@@ -1627,6 +1630,14 @@ class PlannedTask(models.Model):
         for member in Member.objects.all():
             member.check_member_history = None
             member.save()
+
+    @staticmethod
+    def settle_activity():
+        from core.models import Activity
+        for activity in Activity.objects.filter(
+            is_settle=False,
+        ).all():
+            activity.settle()
 
     @staticmethod
     def change_vip_level(member_id_list):
