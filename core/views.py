@@ -1230,7 +1230,7 @@ class MemberViewSet(viewsets.ModelViewSet):
                 content=active_comment.content,
                 is_read=True,
             )
-        else:
+        elif like_usermark and active_comment_date < like_usermark_date:
             last_activeevent_message = dict(
                 date_created=like_usermark.date_created,
                 content='{}給你點了一個贊'.format(like_usermark.author.member.nickname),
@@ -2974,8 +2974,6 @@ class RechargeRecordViewSet(viewsets.ModelViewSet):
                 notify_data='',  # request.body,
             )
         )
-        print('>>>>>>>>>')
-        print(is_created)
         # 订单重复
         if not is_created:
             return Response(data=dict(code='1', msg='record exist'))
@@ -2985,6 +2983,8 @@ class RechargeRecordViewSet(viewsets.ModelViewSet):
             payment_record=payment_record,
             amount=payment_record.amount,
         )
+        # 计算vip等级
+        author.member.update_vip_level(recharge_record)
         # 金币流水
         coin_transaction = m.CreditCoinTransaction.objects.create(
             type=m.CreditCoinTransaction.TYPE_RECHARGE,

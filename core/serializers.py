@@ -486,7 +486,7 @@ class MemberSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
     level = serializers.ReadOnlyField(source='get_level')
 
-    vip_level = serializers.ReadOnlyField(source='get_vip_level')
+    # vip_level = serializers.ReadOnlyField(source='get_vip_level')
 
     is_living = serializers.ReadOnlyField()
 

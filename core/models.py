@@ -142,6 +142,17 @@ class Member(AbstractMember,
         default=0,
     )
 
+    date_update_vip = models.DateTimeField(
+        verbose_name='VIP等级更新时间',
+        null=True,
+        blank=True,
+    )
+
+    is_demote = models.BooleanField(
+        verbose_name='是否被降级',
+        default=False,
+    )
+
     class Meta:
         verbose_name = '会员'
         verbose_name_plural = '会员'
@@ -462,9 +473,78 @@ class Member(AbstractMember,
         """ 获取用户 VIP 等级
         :return:
         """
+        return self.vip_level
 
-        # TODO: 未实现
-        return 1
+    def update_vip_level(self, recharge_record):
+        """
+        每次储值后，计算新的vip等级
+        :return:
+        """
+        if not Option.get('vip_rules'):
+            return 0
+        vip_rules = json.loads(Option.get('vip_rules'))
+        current_vip_level = self.vip_level
+        now = datetime.now()
+        if not self.is_demote:
+            # 最近一个月的储值量
+            amount_this_month = RechargeRecord.objects.filter(
+                author=recharge_record.author,
+                date_created__lte=now,
+                date_created__gte=now - timedelta(days=30),
+            ).aggregate(amount=models.Sum('amount')).get('amount') or 0
+        if self.date_update_vip and self.is_demote:
+            # 降级后的储值量
+            amount_after_demote = RechargeRecord.objects.filter(
+                author=recharge_record.author,
+                date_created__lte=now,
+                date_created__gte=self.date_update_vip,
+            ).aggregate(amount=models.Sum('amount')).get('amount') or 0
+        if not self.date_update_vip or not self.is_demote:
+            for i in range(current_vip_level, len(vip_rules)):
+                if i == len(vip_rules) - 1 and amount_this_month >= vip_rules[i].get('recharge'):
+                    self.upgrade(i + 1, recharge_record.date_created)
+                elif i < len(vip_rules) - 1 and vip_rules[i].get('recharge') <= amount_this_month < vip_rules[
+                            i + 1].get('recharge'):
+                    self.upgrade(i + 1, recharge_record.date_created)
+                    break
+        if self.date_update_vip and (now - self.date_update_vip).days <= 30 and self.is_demote:
+            for i in range(current_vip_level, len(vip_rules)):
+                if i == len(vip_rules) - 1 and amount_after_demote >= vip_rules[len(vip_rules) - 1].get(
+                        'recharge_next_month'):
+                    self.upgrade(i + 1, recharge_record.date_created)
+                elif i == current_vip_level and vip_rules[i].get('recharge_next_month') <= amount_after_demote < \
+                        vip_rules[i + 1].get('recharge'):
+                    self.upgrade(i + 1, recharge_record.date_created)
+                    break
+                elif vip_rules[i].get('recharge') <= amount_after_demote < vip_rules[i + 1].get('recharge'):
+                    self.upgrade(i + 1, recharge_record.date_created)
+                    break
+        return 0
+
+    def upgrade(self, level, date_update_vip):
+        """
+        执行更新vip等级
+        :param level:
+        :param date_update_vip:
+        :return:
+        """
+        self.vip_level = level
+        self.date_update_vip = date_update_vip
+        self.is_demote = False
+        self.save()
+        self.make_update_vip_plan(date_update_vip + timedelta(days=30), self.id)
+
+    @staticmethod
+    def make_update_vip_plan(date_planned, member_id):
+        planned_task = PlannedTask.objects.filter(
+            method='change_vip_level',
+            args__exact=json.dumps([member_id]),
+        ).first()
+        if not planned_task:
+            PlannedTask.make('change_vip_level', date_planned, json.dumps([member_id]))
+            return
+        planned_task.date_planned = date_planned
+        planned_task.save()
 
     def get_today_watch_mission_count(self):
         """当前用户当天完成观看任务次数
