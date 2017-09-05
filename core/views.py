@@ -874,23 +874,31 @@ class MemberViewSet(viewsets.ModelViewSet):
         return Response(data=sorted(rank, key=lambda item: item['amount'], reverse=True))
 
     @detail_route(methods=['GET'])
-    def get_gift_list(self, request, pk):
-        from urllib.parse import urljoin
-        results = map(
-            lambda prize: dict(
-                id=prize.id,
-                name=prize.name,
-                amount=int(prize.amount),
-                icon=urljoin(request.get_raw_uri(), prize.icon.image.url),
-            ),
-            m.Prize.objects.raw('''
-                select p.id, sum(pt.amount) amount
-                from core_prize p, core_prize_transaction pt
-                where pt.prize_id = p.id and pt.user_debit_id = {}
-                group by p.id
-            '''.format(pk))
-        )
-        return Response(data=list(results))
+    def get_live_prize(self, request, pk):
+        user = m.User.objects.get(pk=pk)
+
+        prizes = m.Prize.objects.filter(
+            transactions__user_debit=user,
+            transactions__user_credit=user,
+        ).distinct().all()
+        data = []
+        for prize in prizes:
+            prize_transaction = m.PrizeTransaction.objects.filter(
+                user_debit=user,
+                user_credit=user,
+                prize=prize,
+            )
+            amount = prize_transaction.all().aggregate(amount=m.models.Sum('amount')).get('amount') or 0
+
+            first_pk = prize_transaction.order_by('pk').first().pk
+
+            item = dict(
+                prize=s.PrizeSerializer(prize).data,
+                amount=amount,
+                first_pk=first_pk,
+            )
+            data.append(item)
+        return Response(data=sorted(data, key=lambda item: item['first_pk'], reverse=True))
 
 
 class RobotViewSet(viewsets.ModelViewSet):
@@ -957,7 +965,6 @@ class CreditDiamondTransactionViewSet(viewsets.ModelViewSet):
             amount = m.CreditDiamondTransaction.objects.filter(
                 user_debit=request.user,
                 user_credit=user).all().aggregate(amount=models.Sum('amount')).get('amount') or 0
-            print(amount)
         return Response(data=data)
 
 
@@ -976,20 +983,57 @@ class BadgeViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.Badge.objects.all()
     serializer_class = s.BadgeSerializer
-    ordering = ['-pk']
+
+    # ordering = ['-pk']
 
     def get_queryset(self):
-        return interceptor_get_queryset_kw_field(self)
+        qs = interceptor_get_queryset_kw_field(self)
+
+        live_author = self.request.query_params.get('live_author')
+        next_diamond_badge = self.request.query_params.get('next_diamond_badge')
+
+        if live_author and next_diamond_badge:
+            live_author_diamond_count = m.User.objects.get(pk=live_author).member.diamond_count()
+            qs = qs.filter(
+                date_from__lt=datetime.now(),
+                date_to__gt=datetime.now(),
+                badge_item=m.Badge.ITEM_COUNT_RECEIVE_DIAMOND,
+                item_value__gt=live_author_diamond_count,
+            ).order_by('item_value')
+
+        return qs
 
 
 class BadgeRecordViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.BadgeRecord.objects.all()
     serializer_class = s.BadgeRecordSerializer
-    ordering = ['-pk']
+
+    # ordering = ['-pk']
 
     def get_queryset(self):
-        return interceptor_get_queryset_kw_field(self)
+        qs = interceptor_get_queryset_kw_field(self)
+        live_author = self.request.query_params.get('live_author')
+        if live_author:
+            qs = qs.extra(
+                select=dict(
+                    date_active='DATE_ADD(core_badge_record.date_created, INTERVAL core_badge.validity DAY)'
+                ),
+                where=[
+                    'DATE_ADD(core_badge_record.date_created, INTERVAL core_badge.validity DAY)>\'{}\''.format(
+                        datetime.now())
+                ]
+                # active=models.F('date_created')+timedelta(days=badge__validity)
+            ).filter(
+                # user_debit_id=F('user_credit_id'),
+                author__id=live_author,
+                badge__date_from__lt=datetime.now(),
+                badge__date_to__gt=datetime.now(),
+                # date_active__gt=datetime.now(),
+            )
+            # print(qs.query)
+
+        return qs
 
 
 class DailyCheckInLogViewSet(viewsets.ModelViewSet):
@@ -1000,6 +1044,20 @@ class DailyCheckInLogViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return interceptor_get_queryset_kw_field(self)
+
+    @list_route(methods=['POST'])
+    def daily_checkin(self, request):
+        today_daily = m.DailyCheckInLog.objects.filter(
+            author=self.request.user,
+            date_created__date=datetime.now().date(),
+        ).exists()
+        if today_daily:
+            return response_fail('今天已經簽到了')
+        daily_check = m.DailyCheckInLog.check_in(self.request.user)
+        return Response(data=dict(
+            daily_check=s.DailyCheckInLogSerializer(daily_check['daily_check']).data,
+            continue_daily_check=s.DailyCheckInLogSerializer(daily_check['continue_daily_check']).data,
+        ))
 
 
 class FamilyViewSet(viewsets.ModelViewSet):
@@ -1040,13 +1098,51 @@ class FamilyMemberViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         qs = interceptor_get_queryset_kw_field(self)
         family_id = self.request.query_params.get('family')
+        search = self.request.query_params.get('search')
         if family_id:
             family = m.Family.objects.get(id=family_id)
             qs = qs.filter(
                 family=family,
                 status=m.FamilyMember.STATUS_APPROVED,
             )
+        if search:
+            qs = qs.filter(
+                author__member__nickname__contains=search,
+            )
         return qs
+
+    @list_route(methods=['POST'])
+    def family_manage(self, request):
+        type = request.data.get('type')
+        members = m.FamilyMember.objects.filter(
+            id__in=request.data.get('select'),
+            family__id=request.data.get('family'),
+        ).all()
+        for member in members:
+            if type == 'manage':
+                member.role = m.FamilyMember.ROLE_ADMIN
+                member.save()
+            if type == 'normal':
+                member.role = m.FamilyMember.ROLE_NORMAL
+                member.save()
+            if type == 'delete':
+                member.delete()
+            if type == 'ban':
+                member.is_ban = True
+                member.save()
+            if type == 'unban':
+                member.is_ban = False
+                member.save()
+        return Response(data=True)
+
+    @list_route(methods=['POST'])
+    def modify_member_title(self, request):
+        select = request.data.get('select')
+        user = self.request.user
+        title = request.data.get('title')
+        family = m.Family.objects.get(pk=request.data.get('family'))
+        m.FamilyMember.modify_member_title(user, select, title, family)
+        return Response(data=True)
 
 
 class FamilyArticleViewSet(viewsets.ModelViewSet):
@@ -1062,6 +1158,19 @@ class FamilyArticleViewSet(viewsets.ModelViewSet):
             family = m.Family.objects.get(id=family_id)
             qs = qs.filter(family=family)
         return qs
+
+    @list_route(methods=['POST'])
+    def batch_delete(self, request):
+        # 批量刪除家族公告
+        select = request.data.get('select')
+        articles = m.FamilyArticle.objects.filter(
+            id__in=select,
+        ).all()
+
+        for article in articles:
+            article.delete()
+
+        return Response(data=True)
 
 
 class FamilyMissionViewSet(viewsets.ModelViewSet):
@@ -1110,6 +1219,9 @@ class LiveViewSet(viewsets.ModelViewSet):
         member_id = self.request.query_params.get('member')
         live_status = self.request.query_params.get('live_status')
         followed_by = self.request.query_params.get('followed_by')
+        up_liveing = self.request.query_params.get('up_liveing')
+        down_liveing = self.request.query_params.get('down_liveing')
+
         if member_id:
             member = m.Member.objects.filter(
                 user_id=member_id
@@ -1133,6 +1245,19 @@ class LiveViewSet(viewsets.ModelViewSet):
                 m.models.Q(author__member__in=users_following) |
                 m.models.Q(author__member__in=users_friend)
             )
+
+        if up_liveing:
+            qs = qs.filter(
+                id__gt=up_liveing,
+                date_end=None,
+            ).order_by('pk')
+
+        if down_liveing:
+            qs = qs.filter(
+                id__lt=down_liveing,
+                date_end=None,
+            ).order_by('-pk')
+
         return qs
 
     @detail_route(methods=['POST'])
@@ -1262,11 +1387,39 @@ class LiveViewSet(viewsets.ModelViewSet):
             type=m.StarMissionAchievement.TYPE_WATCH,
             date_created__date=datetime.now().date(),
         )
+
+        # 當前用戶邀請好友當日的完成次數
+        today_invite_mission = m.StarMissionAchievement.objects.filter(
+            author=self.request.user,
+            type=m.StarMissionAchievement.TYPE_INVITE,
+            date_created__date=datetime.now().date(),
+        )
+
+        # 当前用户分享任务次数
+        today_share_mission = m.StarMissionAchievement.objects.filter(
+            author=self.request.user,
+            type=m.StarMissionAchievement.TYPE_SHARE,
+            date_created__date=datetime.now().date(),
+        )
+
         # 观看任务下次领取倒计时
-        last_watch_mission = today_watch_mission.order_by('-date_created').first()
+        watch_mission_time = 0
+        # todo 每天要清0
+        if m.UserPreference.objects.filter(user=self.request.user, key='watch_mission_time').exists():
+            mission_time = m.UserPreference.objects.filter(user=self.request.user,
+                                                           key='watch_mission_time').first().value
+            if int(mission_time) > 30 * 60:
+                watch_mission_time = 30 * 60
+            else:
+                watch_mission_time = mission_time
+        else:
+            m.UserPreference.set(self.request.user, 'watch_mission_time', 0)
 
         data['today_watch_mission_count'] = today_watch_mission.count()
+        data['today_share_mission_count'] = today_share_mission.count()
+        data['today_invite_mission_count'] = today_invite_mission.count()
         data['information_mission_count'] = information_mission_count
+        data['watch_mission_time'] = watch_mission_time
         return Response(data=data)
 
     @detail_route(methods=['POST'])
@@ -1425,7 +1578,6 @@ class PrizeViewSet(viewsets.ModelViewSet):
                 prize=prize,
                 user_credit=None,
             ).all().aggregate(amount=m.models.Sum('amount')).get('amount') or 0
-            print(accept)
             send = me.prizetransactions_credit.filter(
                 prize=prize,
             ).exclude(
@@ -1545,6 +1697,16 @@ class ActivityViewSet(viewsets.ModelViewSet):
         return qs
 
 
+class ActivityPageViewSet(viewsets.ModelViewSet):
+    filter_fields = '__all__'
+    queryset = m.ActivityPage.objects.all()
+    serializer_class = s.ActivityPageSerializer
+    ordering = ['-pk']
+
+    def get_queryset(self):
+        return interceptor_get_queryset_kw_field(self)
+
+
 class ActivityParticipationViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.ActivityParticipation.objects.all()
@@ -1582,7 +1744,11 @@ class MovieViewSet(viewsets.ModelViewSet):
     ordering = ['-pk']
 
     def get_queryset(self):
-        return interceptor_get_queryset_kw_field(self)
+        qs = interceptor_get_queryset_kw_field(self)
+        category = self.request.query_params.get('category')
+        if category:
+            qs = qs.filter(category=category)
+        return qs
 
 
 class StarBoxViewSet(viewsets.ModelViewSet):
@@ -1605,10 +1771,11 @@ class StarBoxRecordViewSet(viewsets.ModelViewSet):
         return interceptor_get_queryset_kw_field(self)
 
     @list_route(methods=['POST'])
-    def receiver_open_star_box(self, request):
+    def open_star_box(self, request):
         user = self.request.user
         live = m.Live.objects.get(pk=request.data.get('live'))
-        record = m.StarBoxRecord.receiver_open_star_box(user, live)
+        identity = request.data.get('identity')
+        record = m.StarBoxRecord.open_star_box(user, live, identity)
         if record.coin_transaction:
             return response_success('獲得金幣{}'.format(record.coin_transaction.amount))
         elif record.diamond_transaction:
@@ -1655,10 +1822,18 @@ class StarMissionAchievementViewSet(viewsets.ModelViewSet):
             remark='完成直播間觀看任務',
             type='EARNING',
         )
+        # 重置观看任务时间
+        preference = m.UserPreference.objects.filter(
+            user=self.request.user,
+            key='watch_mission_time',
+        ).first()
+        preference.value = 0
+        preference.save()
+
         return Response(True)
 
 
-class LevelOptionViewSet(viewsets.ModelViewSet):
+class Levelet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.LevelOption.objects.all()
     serializer_class = s.LevelOptionSerializer
@@ -1675,7 +1850,27 @@ class InformViewSet(viewsets.ModelViewSet):
     ordering = ['-pk']
 
     def get_queryset(self):
-        return interceptor_get_queryset_kw_field(self)
+        qs = interceptor_get_queryset_kw_field(self)
+        # 后台筛选被举报人 ID、账号时，同时能筛选 直播 和 动态
+        for key in self.request.query_params:
+            value = self.request.query_params[key]
+            if key == 'la_lives__author__id':
+                key2 = 'la_activeevents__author__id'
+                field = key[3:]
+                field2 = key2[3:]
+                qs = qs.filter(
+                    m.models.Q(**{field + '__contains': value}) |
+                    m.models.Q(**{field2 + '__contains': value})
+                )
+            if key == 'la_lives__author__member__mobile':
+                key2 = 'la_activeevents__author__member__mobile'
+                field = key[3:]
+                field2 = key2[3:]
+                qs = qs.filter(
+                    m.models.Q(**{field + '__contains': value}) |
+                    m.models.Q(**{field2 + '__contains': value})
+                )
+        return qs
 
 
 class FeedbackViewSet(viewsets.ModelViewSet):
@@ -1898,4 +2093,67 @@ class OptionViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.Option.objects.all()
     serializer_class = s.OptionSerializer
+    permission_classes = [p.IsAdminOrReadOnly]
+
+    @list_route(methods=['GET'])
+    def all(self, request):
+        data = dict()
+        for opt in m.Option.objects.all():
+            data[opt.key] = opt.value
+        return Response(data=data)
+
+    @list_route(methods=['GET'])
+    def get(self, request):
+        return Response(data=m.Option.get(request.GET.get('name')))
+
+    @list_route(methods=['POST'], permission_classes=[p.IsAdminUser])
+    def set(self, request):
+        # print(request.data)
+        m.Option.set(
+            request.data.get('name'),
+            request.data.get('value'),
+        )
+        return Response(data=m.Option.get(request.data.get('name')))
+
+    @list_route(methods=['GET'])
+    def get_guide_image(self, request):
+        option = []
+        if m.Option.get('guide_page'):
+            option = json.loads(m.Option.get('guide_page'))
+        images = m.ImageModel.objects.filter(
+            id__in=option,
+        ).all()
+        data = []
+        for image in images:
+            data.append(s.ImageSerializer(image).data['image'])
+
+        return Response(data=data)
+
+
+class RechargeRecordViewSet(viewsets.ModelViewSet):
+    filter_fields = '__all__'
+    queryset = m.RechargeRecord.objects.all()
+    serializer_class = s.RechargeRecordSerializer
     ordering = ['-pk']
+
+    def get_queryset(self):
+        return interceptor_get_queryset_kw_field(self)
+
+    @list_route(methods=['GET'])
+    def get_total_recharge_this_month(self, request):
+        qs = self.queryset
+        now = datetime.now()
+        first_day = datetime(now.year, now.month, 1)
+        if now.month == 12:
+            last_day = datetime(now.year + 1, 1, 1) - timedelta(days=1)
+        else:
+            last_day = datetime(now.year, now.month + 1, 1) - timedelta(days=1)
+        qs = qs.filter(
+            author=self.request.user,
+            date_created__gt=first_day,
+            date_created__lt=last_day,
+        )
+        total = 0
+        for recharge in qs:
+            total += recharge.amount
+        return Response(data=total)

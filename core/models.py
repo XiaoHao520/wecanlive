@@ -124,12 +124,39 @@ class Member(AbstractMember,
         help_text='默认过期时间为180天'
     )
 
+    experience = models.IntegerField(
+        verbose_name='经验值',
+        default=0,
+    )
+
+    vip_level = models.IntegerField(
+        verbose_name='VIP等级',
+        default=0,
+    )
+
     class Meta:
         verbose_name = '会员'
         verbose_name_plural = '会员'
         db_table = 'core_member'
 
+    def delete(self, *args, **kwargs):
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_staff:
+            AdminLog.make(user, AdminLog.TYPE_DELETE, self, '刪除會員')
+        super().delete(*args, **kwargs)
+
     def save(self, *args, **kwargs):
+        from django_base.middleware import get_request
+        user = get_request().user
+        print(self.age)
+        print(self.constellation)
+        if user.is_staff and self.user and not self.is_del:
+            super().save(*args, **kwargs)
+            AdminLog.make(user, AdminLog.TYPE_UPDATE, self, '修改會員')
+        elif user.is_staff and not self.is_del:
+            super().save(*args, **kwargs)
+            AdminLog.make(user, AdminLog.TYPE_CREATE, self, '新增會員')
         if self.user:
             self.load_tencent_sig()
 
@@ -360,6 +387,56 @@ class Member(AbstractMember,
         """ 根据经验值获取用户等级
         :return:
         """
+        import json
+        # 获取等级规则
+        level_rules = json.loads(Option.objects.filter(key='level_rules').first().value)
+
+        # 获取经验
+        memberExp = Member.objects.filter(user=self.user.id).first().experience
+
+        # 根据经验获取等级，等级以对象的形式传送
+        memberLevel = {}
+        cc={'a':'a'}
+        if 'level_1' in level_rules:
+            amount=0 #经验总值
+            n=0 # 等级
+            for item in level_rules['level_1']:
+                startLevel=str(item['key']).split('_')[1]
+                endLevel=str(item['key']).split('_')[3]
+                preAmount=amount
+                amount+=(int(endLevel)-int(startLevel)+1)*item['value']
+                if memberExp<amount:
+                    n+=(memberExp-preAmount)//item['value']
+                    memberLevel={
+                        'topLevel':1, # 图案等级
+                        'subLevel':n,
+                        'currentLevelExp':(memberExp-preAmount)%item['value'], # 当前等级拥有经验
+                        'upgradeExp':item['value'], #升级所需经验
+                        'bigLevelExp':amount #图案等级经验总值
+                    }
+                    return memberLevel
+                n=int(endLevel)
+            if 'level_more' in level_rules:# 如果等级不为星星的时候
+                topLevel=2 # 图案等级
+                for item in level_rules['level_more']:
+                    preAmount=amount
+                    amount += 100 * item['value']
+                    if memberExp<amount:
+                        subLevel=(memberExp-preAmount)//item['value']+1
+                        memberLevel={
+                            'topLevel':topLevel,
+                            'subLevel':subLevel,
+                            'currentLevelExp': (memberExp - preAmount) % item['value'],  # 当前等级拥有经验
+                            'upgradeExp': item['value'],  # 升级所需经验
+                            'bigLevelExp': amount  # 图案等级经验总值
+                        }
+                        return memberLevel
+                    topLevel+=1
+            else:
+                raise ValueError('level_rules 没有定义好 ： \'level_more\'')
+        else:
+            raise ValueError('level_rules 没有定义好 ： \'level_1\'')
+
         # TODO: 未实现
         return 1
 
@@ -367,6 +444,7 @@ class Member(AbstractMember,
         """ 获取用户 VIP 等级
         :return:
         """
+
         # TODO: 未实现
         return 1
 
@@ -390,10 +468,12 @@ class Member(AbstractMember,
 
     def is_living(self):
         # 是否在直播
-        live = self.user.lives_owned.filter(date_end=None)
-        # return live.exists() ? live.fist().id : False
+        live = self.user.lives_owned.filter().order_by('-date_created')
         if live.exists():
-            return live.order_by('-pk').first().id
+            if live.first().date_end:
+                return False
+            else:
+                return live.first().id
         else:
             return False
 
@@ -423,6 +503,41 @@ class Member(AbstractMember,
         # 把剩下仍在申请中的提现全部驳回
         for withdraw_record in WithdrawRecord.objects.filter(author=self.user, status=WithdrawRecord.STATUS_PENDING):
             withdraw_record.reject()
+
+    def get_first_live_date(self):
+        """用戶第一次直播的時間"""
+
+        if self.user.lives_owned.exists():
+            return self.user.lives_owned.order_by('-date_created').first().date_created
+        else:
+            return False
+
+    def add_diamond_badge(self):
+        """
+        增加主播收到鑽石徽章.
+        在觀衆送禮物時觸發
+        """
+        badges = Badge.objects.filter(
+            date_from__lt=datetime.now(),
+            date_to__gt=datetime.now(),
+            badge_item=Badge.ITEM_COUNT_RECEIVE_DIAMOND,
+            item_value__lt=self.diamond_count()
+        ).exclude(
+            records__author=self.user
+        ).all()
+        for badge in badges:
+            BadgeRecord.objects.create(
+                author=self.user,
+                badge=badge,
+            )
+
+    def is_checkin_daily(self):
+        """
+        今天是否已经签到
+        """
+        return self.user.dailycheckinlogs_owned.filter(
+            date_created__date=datetime.now().date()
+        ).exists()
 
 
 class Robot(models.Model):
@@ -468,8 +583,58 @@ class Robot(models.Model):
         verbose_name_plural = '机器人'
         db_table = 'core_robot'
 
+    def save(self, *args, **kwargs):
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_staff and self.id and not self.is_del:
+            super().save(*args, **kwargs)
+            AdminLog.make(user, AdminLog.TYPE_UPDATE, self, '修改機器人')
+        elif user.is_staff and not self.is_del:
+            super().save(*args, **kwargs)
+            AdminLog.make(user, AdminLog.TYPE_CREATE, self, '新增機器人')
+        else:
+            super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_staff:
+            AdminLog.make(user, AdminLog.TYPE_DELETE, self, '刪除機器人')
+        super().delete(*args, **kwargs)
+
 
 class CelebrityCategory(EntityModel):
+    TYPE_LIVE = 'LIVE'
+    TYPE_ACTIVITY = 'ACTIVITY'
+    TYPE_CHOICES = (
+        (TYPE_LIVE, '直播'),
+        (TYPE_ACTIVITY, '活動'),
+    )
+
+    type = models.CharField(
+        verbose_name='分類類別',
+        max_length=20,
+        choices=TYPE_CHOICES,
+        blank=True,
+        null=True,
+    )
+
+    live_category = models.ForeignKey(
+        verbose_name='直播分類',
+        to='LiveCategory',
+        related_name='celebrity_categories',
+        null=True,
+        blank=True,
+    )
+
+    activity = models.ForeignKey(
+        verbose_name='活動',
+        to='Activity',
+        related_name='celebrity_categories',
+        null=True,
+        blank=True,
+    )
+
     leader = models.ForeignKey(
         verbose_name='当前获得者',
         to=User,
@@ -483,6 +648,19 @@ class CelebrityCategory(EntityModel):
         verbose_name_plural = '众星云集分类'
         db_table = 'core_celebrity_category'
 
+    def get_category(self):
+        if self.type == self.TYPE_LIVE and self.live_category:
+            return dict(
+                category_id=self.live_category.id,
+                category_name=self.live_category.name,
+            )
+        elif self.type == self.TYPE_ACTIVITY and self.activity:
+            return dict(
+                category_id=self.activity.id,
+                category_name=self.activity.name,
+            )
+        return dict(category_id=None, category_name=None)
+
 
 class CreditStarTransaction(AbstractTransactionModel):
     """ 元气流水
@@ -491,10 +669,12 @@ class CreditStarTransaction(AbstractTransactionModel):
     TYPE_LIVE_GIFT = 'LIVE_GIFT'
     TYPE_EARNING = 'EARNING'
     TYPE_ADMIN = 'ADMIN'
+    TYPE_DAILY = 'DAILY'
     TYPE_CHOICES = (
         (TYPE_LIVE_GIFT, '直播赠送'),
         (TYPE_EARNING, '任務獲得'),
         (TYPE_ADMIN, '後臺補償'),
+        (TYPE_DAILY, '签到获得'),
     )
 
     type = models.CharField(
@@ -591,6 +771,8 @@ class CreditCoinTransaction(AbstractTransactionModel):
     TYPE_EXCHANGE = 'EXCHANGE'
     TYPE_BOX = 'BOX'
     TYPE_BARRAGE = 'BARRAGE'
+    TYPE_FAMILY_MODIFY = 'FAMILY_MODIFY'
+    TYPE_DAILY = 'DAILY'
     TYPE_CHOICES = (
         (TYPE_ADMIN, '管理員發放'),
         (TYPE_LIVE_GIFT, '直播赠送'),
@@ -598,6 +780,8 @@ class CreditCoinTransaction(AbstractTransactionModel):
         (TYPE_EXCHANGE, '兌換'),
         (TYPE_BOX, '打開元氣寶盒'),
         (TYPE_BARRAGE, '發送彈幕消費'),
+        (TYPE_FAMILY_MODIFY, '家族長修改頭銜'),
+        (TYPE_DAILY, '每日签到获得'),
     )
 
     type = models.CharField(
@@ -721,6 +905,25 @@ class Badge(EntityModel):
         verbose_name_plural = '徽章'
         db_table = 'core_badge'
 
+    def save(self, *args, **kwargs):
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_staff and self.id and not self.is_del:
+            super().save(*args, **kwargs)
+            AdminLog.make(user, AdminLog.TYPE_UPDATE, self, '修改徽章')
+        elif user.is_staff and not self.is_del:
+            super().save(*args, **kwargs)
+            AdminLog.make(user, AdminLog.TYPE_CREATE, self, '新增徽章')
+        else:
+            super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_staff:
+            AdminLog.make(user, AdminLog.TYPE_DELETE, self, '刪除徽章')
+        super().delete(*args, **kwargs)
+
 
 class DailyCheckInLog(UserOwnedModel):
     date_created = models.DateTimeField(
@@ -728,11 +931,31 @@ class DailyCheckInLog(UserOwnedModel):
         auto_now_add=True,
     )
 
+    prize_coin_transaction = models.OneToOneField(
+        verbose_name='奖励金币流水记录',
+        to='CreditCoinTransaction',
+        null=True,
+        blank=True,
+    )
+
     prize_star_transaction = models.OneToOneField(
         verbose_name='奖励星星流水记录',
         to='CreditStarTransaction',
         null=True,
         blank=True,
+    )
+
+    coin_transaction = models.OneToOneField(
+        verbose_name='奖励金币记录',
+        to='CreditCoinTransaction',
+        related_name='daily_check_in_log',
+        null=True,
+        blank=True,
+    )
+
+    is_continue = models.BooleanField(
+        verbose_name='连签奖励',
+        default=False,
     )
 
     class Meta:
@@ -746,8 +969,91 @@ class DailyCheckInLog(UserOwnedModel):
         :param user:
         :return:
         """
-        # TODO: 1. 同一天不能重复签到
-        # TODO: 2. 签到之后要计算发放相应的奖励
+
+        daily_option = json.loads(Option.get('daily_sign_award'))
+        # 每日签到奖励
+        award_list = daily_option['daily_seven_days']
+        # 连签配置
+        continue_award = daily_option['daily_for_days']
+        # 今天簽到獎勵
+        today_daily_award = award_list[datetime.now().weekday()]
+        daily_check = None
+        continue_daily_check = None
+        coin_transaction = None
+        star_transaction = None
+        if today_daily_award['type'] == 'star':
+            star_transaction = CreditStarTransaction.objects.create(
+                user_debit=user,
+                amount=today_daily_award['value'],
+                remark='每日签到获得',
+                type=CreditStarTransaction.TYPE_DAILY,
+            )
+        elif today_daily_award['type'] == 'coin':
+            coin_transaction = CreditCoinTransaction.objects.create(
+                user_debit=user,
+                amount=today_daily_award['value'],
+                remark='每日签到获得',
+                type=CreditCoinTransaction.TYPE_DAILY,
+            )
+        daily_check = DailyCheckInLog.objects.create(
+            author=user,
+            prize_star_transaction=star_transaction,
+            coin_transaction=coin_transaction,
+        )
+
+        # 连签要求天数
+        continue_check = DailyCheckInLog.objects.filter(
+            author=user,
+            is_continue=True,
+        ).order_by('-date_created')
+        last_continue_check_date = None
+        if continue_check.exists():
+            last_continue_check_date = continue_check.first().date_created
+        else:
+            last_continue_check_date = DailyCheckInLog.objects.filter(
+                author=user,
+            ).order_by('date_created').first().date_created
+
+        continue_days = continue_award['days']
+        continue_success = True
+        while continue_days > 0:
+            continue_days -= 1
+            daily = DailyCheckInLog.objects.filter(
+                author=user,
+                date_created__date=(datetime.now() - timedelta(days=continue_days)).date(),
+                date_created__date__gt=last_continue_check_date.date(),
+            ).exists()
+            if not daily:
+                continue_success = False
+        # 连签奖励
+        if continue_success:
+            continue_coin_transaction = None
+            continue_star_transaction = None
+            if continue_award['type'] == 'star':
+                continue_star_transaction = CreditStarTransaction.objects.create(
+                    user_debit=user,
+                    amount=continue_award['value'],
+                    remark='连续签到获得',
+                    type=CreditStarTransaction.TYPE_DAILY,
+                )
+            elif continue_award['type'] == 'coin':
+                continue_coin_transaction = CreditCoinTransaction.objects.create(
+                    user_debit=user,
+                    amount=continue_award['value'],
+                    remark='连续签到获得',
+                    type=CreditCoinTransaction.TYPE_DAILY,
+                )
+            continue_daily_check = DailyCheckInLog.objects.create(
+                author=user,
+                prize_star_transaction=continue_star_transaction,
+                coin_transaction=continue_coin_transaction,
+                is_continue=True,
+            )
+
+        return dict(
+            daily_check=daily_check,
+            continue_daily_check=continue_daily_check,
+        )
 
 
 class Family(UserOwnedModel,
@@ -818,6 +1124,11 @@ class Family(UserOwnedModel,
         default='',
     )
 
+    is_verify = models.BooleanField(
+        verbose_name='是否需要验证',
+        default=True,
+    )
+
     class Meta:
         verbose_name = '家族'
         verbose_name_plural = '家族'
@@ -869,7 +1180,17 @@ class Family(UserOwnedModel,
         return FamilyMission.objects.filter(family=self).count()
 
     def save(self, *args, **kwargs):
-        super().save(*args, **kwargs)
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_staff and self.id and not self.is_del:
+            super().save(*args, **kwargs)
+            AdminLog.make(user, AdminLog.TYPE_UPDATE, self, '修改家族{}'.format(self.name))
+        elif user.is_staff and not self.is_del:
+            super().save(*args, **kwargs)
+            AdminLog.make(user, AdminLog.TYPE_CREATE, self, '新建家族{}'.format(self.name))
+        else:
+            super().save(*args, **kwargs)
+
         # WebIM 建群
         from tencent.webim import WebIM
         webim = WebIM(settings.TENCENT_WEBIM_APPID)
@@ -879,6 +1200,40 @@ class Family(UserOwnedModel,
             type=WebIM.GROUP_TYPE_PRIVATE,
             group_id='family_{}'.format(self.id),
         )
+
+    def delete(self, *args, **kwargs):
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_staff:
+            AdminLog.make(
+                user,
+                AdminLog.TYPE_DELETE,
+                self,
+                '刪除家族{}'.format(self.name),
+            )
+        super().delete(*args, **kwargs)
+
+    def get_family_mission_cd(self):
+        """
+        家族任务冷却时间，返回秒
+        """
+        last_mission = self.missions.filter(
+        ).order_by('-date_created')
+
+        if last_mission.exists():
+            last_mission_created = last_mission.first().date_created
+            option = json.loads(Option.get('family_mission_cd'))
+            next_mission_created = last_mission_created + timedelta(days=option['days']) + timedelta(
+                hours=option['hours']) + timedelta(
+                minutes=option['minutes'])
+
+            if next_mission_created < datetime.now():
+                return 0
+            else:
+                return (next_mission_created - datetime.now()).seconds + \
+                       (next_mission_created - datetime.now()).days * 24 * 60 * 60
+        else:
+            return 0
 
 
 class FamilyMember(UserOwnedModel):
@@ -942,6 +1297,11 @@ class FamilyMember(UserOwnedModel):
         choices=ROLE_CHOICES,
     )
 
+    is_ban = models.BooleanField(
+        verbose_name='是否禁言',
+        default=False,
+    )
+
     class Meta:
         verbose_name = '家族成员'
         verbose_name_plural = '家族成员'
@@ -994,6 +1354,30 @@ class FamilyMember(UserOwnedModel):
         for watch_log in watch_logs:
             total_prize += watch_log.get_total_prize()
         return total_prize
+
+    @staticmethod
+    def modify_member_title(user, member_select, title, family):
+        """修改家族頭銜
+            @:param member_select 要修改的成員ID数组
+                    title         修改的头衔
+        """
+        members = FamilyMember.objects.filter(
+            id__in=member_select
+        )
+        amount = int(Option.get('family_modify_title_coin') or 10) * members.count()
+        assert user.id == family.author.id, '你不是家族族長不能修改'
+        assert int(user.member.get_coin_balance()) > amount, '金幣餘額不足'
+        CreditCoinTransaction.objects.create(
+            user_credit=user,
+            amount=amount,
+            type=CreditCoinTransaction.TYPE_FAMILY_MODIFY,
+            remark='家族長修改頭銜',
+        )
+        for member in members.all():
+            member.title = title
+            member.save()
+
+        return True
 
 
 class FamilyArticle(UserOwnedModel,
@@ -1133,10 +1517,27 @@ class FamilyMission(UserOwnedModel,
         null=True,
     )
 
+    content = models.TextField(
+        verbose_name='内容(規則)',
+        blank=True,
+        default='',
+    )
+
+    logo = models.OneToOneField(
+        verbose_name='任务海报',
+        to=ImageModel,
+        related_name='family_mission',
+        null=True,
+        blank=True,
+    )
+
     class Meta:
         verbose_name = '家族任务'
         verbose_name_plural = '家族任务'
         db_table = 'core_family_mission'
+
+    def is_end(self):
+        return datetime.now().date() > self.date_end
 
 
 class FamilyMissionAchievement(UserOwnedModel):
@@ -1146,10 +1547,68 @@ class FamilyMissionAchievement(UserOwnedModel):
         related_name='achievements',
     )
 
+    ##
+
+    STATUS_START = 'START'
+    STATUS_ACHIEVE = 'ACHIEVE'
+    STATUS_FINISH = 'FINISH'
+    STATUS_CHOICES = (
+        (STATUS_START, '领取任务'),
+        (STATUS_ACHIEVE, '完成任务未领取奖励'),
+        (STATUS_FINISH, '完成任务已领取奖励'),
+    )
+
+    status = models.CharField(
+        verbose_name='任务状态',
+        max_length=20,
+        choices=STATUS_CHOICES,
+        null=True,
+        blank=True,
+    )
+
+    coin_transaction = models.OneToOneField(
+        verbose_name='奖励金币记录',
+        to='CreditCoinTransaction',
+        related_name='family_mission_achievement',
+        null=True,
+        blank=True,
+    )
+
+    prize_star_transaction = models.OneToOneField(
+        verbose_name='奖励星星流水记录',
+        to='CreditStarTransaction',
+        null=True,
+        blank=True,
+    )
+
+    prize_transaction = models.OneToOneField(
+        verbose_name='獎勵礼物记录',
+        to='PrizeTransaction',
+        related_name='family_mission_achievement',
+        null=True,
+        blank=True,
+    )
+
+    badge_record = models.OneToOneField(
+        verbose_name='奖励勋章记录',
+        to='BadgeRecord',
+        null=True,
+        blank=True,
+    )
+
+    # todo i币 经验 贡献值 跑马灯内容
+
+
     class Meta:
         verbose_name = '家族任务成就'
         verbose_name_plural = '家族任务成就'
         db_table = 'core_family_mission_achievement'
+
+    def save(self, *args, **kwargs):
+        # if not self.id:
+        #     assert not self.mission.family.author == self.author, '家族長不能領取任務'
+
+        super().save(*args, **kwargs)
 
 
 class LiveCategory(EntityModel):
@@ -1157,6 +1616,25 @@ class LiveCategory(EntityModel):
         verbose_name = '直播分类'
         verbose_name_plural = '直播分类'
         db_table = 'core_live_category'
+
+    def save(self, *args, **kwargs):
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_staff and self.id and not self.is_del:
+            super().save(*args, **kwargs)
+            AdminLog.make(user, AdminLog.TYPE_UPDATE, self, '修改直播分類')
+        elif user.is_staff and not self.is_del:
+            super().save(*args, **kwargs)
+            AdminLog.make(user, AdminLog.TYPE_CREATE, self, '新增直播分類')
+        else:
+            super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_staff:
+            AdminLog.make(user, AdminLog.TYPE_DELETE, self, '刪除直播分類')
+        super().delete(*args, **kwargs)
 
 
 class Live(UserOwnedModel,
@@ -1223,7 +1701,16 @@ class Live(UserOwnedModel,
         db_table = 'core_live'
 
     def save(self, *args, **kwargs):
-        super().save(*args, **kwargs)
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_staff and self.id and not self.is_del:
+            super().save(*args, **kwargs)
+            AdminLog.make(user, AdminLog.TYPE_UPDATE, self, '修改直播')
+        elif user.is_staff and not self.is_del:
+            super().save(*args, **kwargs)
+            AdminLog.make(user, AdminLog.TYPE_CREATE, self, '新增直播')
+        else:
+            super().save(*args, **kwargs)
         # WebIM 建群
         from tencent.webim import WebIM
         webim = WebIM(settings.TENCENT_WEBIM_APPID)
@@ -1233,6 +1720,12 @@ class Live(UserOwnedModel,
             type=WebIM.GROUP_TYPE_PRIVATE,
             group_id='live_{}'.format(self.id),
         )
+
+    def delete(self, *args, **kwargs):
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_staff:
+            AdminLog.make(user, AdminLog.TYPE_DELETE, self, '刪除直播')
 
     def get_comment_count(self):
         return self.comments.count()
@@ -1498,7 +1991,21 @@ class LiveWatchLog(UserOwnedModel,
         self.date_leave = datetime.now()
         self.duration += int((self.date_leave - self.date_enter).seconds / 60) + \
                          (self.date_leave - self.date_enter).days * 1440 or 1
+
         self.save()
+
+        # 累計觀看時間
+        wathch_mission_preferences = self.author.preferences.filter(key='watch_mission_time').first()
+        mission_achivevments = self.author.starmissionachievements_owned.filter(
+            type=StarMissionAchievement.TYPE_WATCH,
+            date_created__gt=self.date_enter).order_by('-date_created')
+        if mission_achivevments.exists():
+            wathch_mission_preferences.value = int(wathch_mission_preferences.value) + \
+                                               (datetime.now() - mission_achivevments.first().date_created).seconds
+        else:
+            wathch_mission_preferences.value = int(wathch_mission_preferences.value) + (
+                self.date_leave - self.date_enter).seconds
+        wathch_mission_preferences.save()
 
     def get_duration(self):
         if self.duration:
@@ -1522,7 +2029,8 @@ class LiveWatchLog(UserOwnedModel,
 class ActiveEvent(UserOwnedModel,
                   AbstractMessageModel,
                   CommentableModel,
-                  UserMarkableModel):
+                  UserMarkableModel,
+                  InformableModel):
     """ 个人动态
     理论上只发图文，但是支持完整的消息格式
     用户可以点赞，使用 UserMark 的 subject=like
@@ -1577,6 +2085,30 @@ class PrizeCategory(EntityModel):
 
     def get_count_prize(self):
         return self.prizes.all().count()
+
+    def save(self, *args, **kwargs):
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_staff and self.id and not self.is_del:
+            super().save(*args, **kwargs)
+            AdminLog.make(user, AdminLog.TYPE_UPDATE, self, '修改禮物分類')
+        elif user.is_staff and not self.is_del:
+            super().save(*args, **kwargs)
+            AdminLog.make(user, AdminLog.TYPE_CREATE, self, '新增禮物分類')
+        else:
+            super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_staff:
+            AdminLog.make(
+                user,
+                AdminLog.TYPE_DELETE,
+                self,
+                '刪除禮物分類',
+            )
+        super().delete(*args, **kwargs)
 
 
 class Prize(EntityModel):
@@ -1701,6 +2233,27 @@ class Prize(EntityModel):
         ).aggregate(amount=models.Sum('amount')).get('amount') or 0
         # 返回餘額
         return accept - send
+
+    def save(self, *args, **kwargs):
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_staff and self.id and not self.is_del:
+            AdminLog.make(user, AdminLog.TYPE_UPDATE, self, '修改禮物')
+        elif user.is_staff and not self.is_del:
+            AdminLog.make(user, AdminLog.TYPE_CREATE, self, '新增禮物')
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_staff:
+            AdminLog.make(
+                user,
+                AdminLog.TYPE_DELETE,
+                self,
+                '刪除禮物',
+            )
+        super().delete(*args, **kwargs)
 
 
 class PrizeTransaction(AbstractTransactionModel):
@@ -1985,6 +2538,12 @@ class PrizeOrder(UserOwnedModel):
             sender_star_index_transaction=sender_star_index_transaction,
         )
 
+        # 更新主播徽章
+        live.author.member.add_diamond_badge()
+
+        # todo
+        # 檢測當日購買這個禮物類型夠不夠送桌布
+
         return order
 
     @staticmethod
@@ -2002,8 +2561,7 @@ class PrizeOrder(UserOwnedModel):
         assert watch_log, '用戶還沒有進入直播觀看，不能購買禮物贈送'
 
         total_price = count * prize.price
-
-        assert prize.get_balance(user, source_tag) <= count, '贈送失敗，禮物剩餘不足'
+        assert int(prize.get_balance(user, source_tag)) >= count, '贈送失敗，禮物剩餘不足'
         # 礼物流水
         receiver_prize_transaction = PrizeTransaction.objects.create(
             amount=count,
@@ -2063,6 +2621,9 @@ class PrizeOrder(UserOwnedModel):
             receiver_star_index_transaction=receiver_star_index_transaction,
             sender_star_index_transaction=sender_star_index_transaction,
         )
+
+        # 更新主播徽章
+        live.author.member.add_diamond_badge()
 
         return order
 
@@ -2261,6 +2822,8 @@ class ExtraPrize(EntityModel):
         verbose_name = '附赠礼物'
         verbose_name_plural = '附赠礼物'
         db_table = 'core_extra_prize'
+
+        # todo 每次用戶购买礼物就检测当天购买这个礼物分类额度，发放礼物，注意重复发送
 
 
 class StatisticRule(EntityModel):
@@ -2552,11 +3115,11 @@ class Activity(EntityModel):
                 if award_item['award']['type'] == 'badge':
                     badge = Badge.objects.filter(id=award_item['award']['value']).first()
                     if badge:
-                        str_award = badge.name
+                        str_award = badge.name + '徽章'
                 elif award_item['award']['type'] == 'prize':
                     prize = Prize.objects.filter(id=award_item['award']['value']).first()
                     if prize:
-                        str_award = prize.name
+                        str_award = prize.name + '禮物'
                 else:
                     str_award = '{}{}'.format(
                         award_item['award']['value'],
@@ -2635,13 +3198,37 @@ class Activity(EntityModel):
             return '貢獻值'
         return None
 
+    def save(self, *args, **kwargs):
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_staff and self.id and not self.is_del:
+            super().save(*args, **kwargs)
+            AdminLog.make(user, AdminLog.TYPE_UPDATE, self, '修改活動')
+        elif user.is_staff and not self.is_del:
+            super().save(*args, **kwargs)
+            AdminLog.make(user, AdminLog.TYPE_CREATE, self, '新增活動')
+        else:
+            super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_staff:
+            AdminLog.make(
+                user,
+                AdminLog.TYPE_DELETE,
+                self,
+                '刪除活動',
+            )
+        super().delete(*args, **kwargs)
+
     def settle(self):
         """ 结算当次活动，找出所有参与记录，然后统计满足条件的自动发放奖励
         :return:
         """
 
 
-class ActivityPage(models.Model):
+class ActivityPage(EntityModel):
     banner = models.ForeignKey(
         verbose_name='海报',
         to=ImageModel,
@@ -2790,10 +3377,50 @@ class Movie(UserOwnedModel,
         default='',
     )
 
+    TYPE_MOVIE = 'MOVIE'
+    TYPE_LIVE = 'LIVE'
+    TYPE_CHOICES = (
+        (TYPE_MOVIE, '影片'),
+        (TYPE_LIVE, '直播'),
+    )
+
+    type = models.CharField(
+        verbose_name='類型',
+        max_length=20,
+        choices=TYPE_CHOICES,
+        blank=True,
+        default='',
+        help_text='當影片分類爲熱門視頻時需要選擇',
+    )
+
     class Meta:
         verbose_name = '影片节目'
         verbose_name_plural = '影片节目'
         db_table = 'core_movie'
+
+    def save(self, *args, **kwargs):
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_staff and self.id and not self.is_del:
+            super().save(*args, **kwargs)
+            AdminLog.make(user, AdminLog.TYPE_UPDATE, self, '修改影片節目')
+        elif user.is_staff and not self.is_del:
+            super().save(*args, **kwargs)
+            AdminLog.make(user, AdminLog.TYPE_CREATE, self, '新增影片節目')
+        else:
+            super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_staff:
+            AdminLog.make(
+                user,
+                AdminLog.TYPE_DELETE,
+                self,
+                '刪除影片節目',
+            )
+        super().delete(*args, **kwargs)
 
 
 class StarBox(EntityModel):
@@ -2868,18 +3495,33 @@ class StarBoxRecord(UserOwnedModel):
         db_table = 'core_star_box_record'
 
     @staticmethod
-    def receiver_open_star_box(user, live):
-        """主播开星光宝盒
+    def open_star_box(user, live, identity):
+        """开星光宝盒
+        identity = 'receiver' 主播開盒
+        identity = 'sender'   观众开盒
         """
-        assert user.member.get_star_index_receiver_balance() > 500, '打開寶盒失敗:你的元氣指數不夠,請再努力直播!'
-
+        receiver_star_credit = None
+        sender_star_credit = None
+        if identity == 'receiver':
+            assert user.member.get_star_index_receiver_balance() > 500, '打開寶盒失敗:你的元氣指數不夠,請再努力直播!'
+            receiver_star_credit = CreditStarIndexReceiverTransaction.objects.create(
+                user_credit=user,
+                amount=500,
+                remark='主播打开元气宝盒',
+                type=CreditStarIndexReceiverTransaction.TYPE_BOX_EXPENSE,
+            )
+        elif identity == 'sender':
+            assert user.member.get_star_index_sender_balance() > 500, '打開寶盒失敗:你的元氣指數不夠,請再努力直播!'
+            sender_star_credit = CreditStarIndexSenderTransaction.objects.create(
+                user_credit=user,
+                amount=500,
+                remark='觀衆開元氣寶盒',
+                type=CreditStarIndexSenderTransaction.TYPE_BOX_EXPENSE,
+            )
+        else:
+            return False
         # 元气指数消耗
-        star_index_credit = CreditStarIndexReceiverTransaction.objects.create(
-            user_credit=user,
-            amount=500,
-            remark='主播打开元气宝盒',
-            type=CreditStarIndexReceiverTransaction.TYPE_BOX_EXPENSE,
-        )
+
         # 随机奖励 0->金币，１->钻石，2->礼物
         award = random.randint(0, 2)
         coin_debit = None
@@ -2924,7 +3566,8 @@ class StarBoxRecord(UserOwnedModel):
         box_record = StarBoxRecord.objects.create(
             author=user,
             live=live,
-            receiver_star_index_transaction=star_index_credit,
+            receiver_star_index_transaction=receiver_star_credit,
+            sender_star_index_transaction=sender_star_credit,
             coin_transaction=coin_debit,
             diamond_transaction=diamond_debit,
             prize_transaction=prize_debit,
@@ -3066,6 +3709,31 @@ class Inform(UserOwnedModel,
         verbose_name_plural = '举报'
         db_table = 'core_inform'
 
+    def get_accused_object(self):
+        if self.lives.first():
+            return self.lives.first()
+        elif self.activeevents.first():
+            return self.activeevents.first()
+        return None
+
+    def accused_person(self):
+        accused_object = self.get_accused_object()
+        return dict(
+            accused_id=accused_object.author.id,
+            accused_mobile=accused_object.author.member.mobile,
+        )
+
+    def accused_object_info(self):
+        accused_object = self.get_accused_object()
+        if not accused_object:
+            return None
+        return dict(
+            object_id=accused_object.id,
+            object_type=type(accused_object)._meta.model_name,
+            object_name=accused_object.name if hasattr(accused_object,
+                                                       'name') else accused_object.author.member.nickname,
+        )
+
 
 class Feedback(AbstractMessageModel,
                UserOwnedModel):
@@ -3137,6 +3805,30 @@ class Banner(models.Model):
         verbose_name = '节目Banner'
         verbose_name_plural = '节目Banner'
         db_table = 'core_banner'
+
+    def save(self, *args, **kwargs):
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_staff and self.id and not self.is_del:
+            super().save(*args, **kwargs)
+            AdminLog.make(user, AdminLog.TYPE_UPDATE, self, '修改節目Banner')
+        elif user.is_staff and not self.is_del:
+            super().save(*args, **kwargs)
+            AdminLog.make(user, AdminLog.TYPE_CREATE, self, '新增節目Banner')
+        else:
+            super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_staff:
+            AdminLog.make(
+                user,
+                AdminLog.TYPE_DELETE,
+                self,
+                '刪除節目Banner',
+            )
+        super().delete(*args, **kwargs)
 
 
 class SensitiveWord(models.Model):
