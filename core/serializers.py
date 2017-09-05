@@ -486,7 +486,7 @@ class MemberSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
     level = serializers.ReadOnlyField(source='get_level')
 
-    vip_level = serializers.ReadOnlyField(source='get_vip_level')
+    # vip_level = serializers.ReadOnlyField(source='get_vip_level')
 
     is_living = serializers.ReadOnlyField()
 
@@ -1089,6 +1089,8 @@ class ActivitySerializer(QueryFieldsMixin, serializers.ModelSerializer):
     draw_condition_value = serializers.ReadOnlyField()
 
     award_way = serializers.ReadOnlyField()
+
+    date_end_countdown = serializers.ReadOnlyField()
 
     class Meta:
         model = m.Activity
