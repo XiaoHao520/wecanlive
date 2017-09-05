@@ -2297,7 +2297,8 @@ class ActivityViewSet(viewsets.ModelViewSet):
             完成概率抽奖和对应的流水插入等动作，返回1-8抽奖结果给前端的转盘显示
         """
         activity = m.Activity.objects.get(pk=pk)
-        activity.join_draw_activity(self.request.user)
+        if not activity.join_draw_activity(self.request.user):
+            return response_fail('您當前還未滿足參與活動的條件，不能參與活動')
         awards = json.loads(activity.rules)['awards']
         r = random.random()
         weight_local = 0
@@ -2311,8 +2312,8 @@ class ActivityViewSet(viewsets.ModelViewSet):
                 result = award
                 result_number = number
             weight_local = new_weight_local
-
-        activity.activity_draw_award(result['award'], self.request.user)
+        # 獎勵
+        self.request.user.member.member_activity_award(activity, result['award'])
         return Response(data=dict(
             result_number=result_number,
             result=result,

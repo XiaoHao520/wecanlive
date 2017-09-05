@@ -3535,10 +3535,9 @@ class Activity(EntityModel):
             判断用户是否满足活动参与条件，满足就创建活动参与记录，状态为进行中
         """
         assert datetime.now() > self.date_begin, '活動還沒開始'
-        assert datetime.now() < self.date_end, '活動已結束'
+        assert datetime.now() < self.date_end and not self.is_settle, '活動已結束'
         assert not ActivityParticipation.objects.filter(author=user, activity=self).exists(), '您已經參與過抽獎'
 
-        user = User.objects.get(pk=user.id)
         condition = json.loads(self.rules)
         # 活动条件完成数量。到达活动所规定的数量才能参与活动
         condition_complete_count = 0
@@ -3551,7 +3550,11 @@ class Activity(EntityModel):
             ).all().aggregate(amount=models.Sum("coin_transaction__amount")).get('amount') or 0
         elif json.loads(self.rules)['condition_code'] == '000002':
             # 觀看時長
-            print(1)
+            condition_complete_count = LiveWatchLog.objects.filter(
+                author=user,
+                live__date_created__gt=self.date_begin,
+                live__date_created__lt=self.date_end,
+            ).all().aggregate(total_duration=models.Sum('duration')).get('total_duration') or 0
         elif json.loads(self.rules)['condition_code'] == '000003':
             # 累計觀看數
             condition_complete_count = LiveWatchLog.objects.filter(
@@ -3589,6 +3592,7 @@ class Activity(EntityModel):
             ).count()
         elif json.loads(self.rules)['condition_code'] == '000007':
             # 分享直播間數
+            # todo
             print(1)
         elif condition['condition_code'] == '000008':
             # 邀請好友註冊數
@@ -3597,9 +3601,10 @@ class Activity(EntityModel):
                 referrer=user).count()
         elif json.loads(self.rules)['condition_code'] == '000009':
             # 連續登入X天
-            # todo
-            LoginRecord.objects.filter(author=user, date_created__date=self.date_begin)
-            print(1)
+            login_record = LoginRecord.objects.filter(
+                author=user,
+                date_login__date__gt=self.date_begin.date()
+            ).all()
         elif condition['condition_code'] == '000010':
             # 連續開播X天
             lives = Live.objects.filter(date_created__gt=self.date_begin, author=user).all()
@@ -3611,42 +3616,8 @@ class Activity(EntityModel):
                 diamond_transaction__user_debit=user,
                 date_created__gt=self.date_begin,
             ).all().aggregate(amount=models.Sum("diamond_transaction__amount")).get('amount') or 0
-
-        assert condition_complete_count >= condition['condition_value'], '您當前還未滿足參與活動的條件，不能參與活動'
-        ActivityParticipation.objects.create(
-            author=user,
-            activity=self,
-            status=ActivityParticipation.STATUS_ACTIVE
-        )
-
-    def activity_draw_award(self, award, user):
-        """领取抽獎活动奖励
-        """
-        coin_transaction = None
-        diamond_transaction = None
-        if award['type'] == 'coin':
-            coin_transaction = CreditCoinTransaction.objects.create(
-                user_debit=user,
-                type=CreditCoinTransaction.TYPE_ACTIVITY,
-                amount=int(award['value'])
-            )
-            print(coin_transaction)
-        if award['type'] == 'diamond':
-            diamond_transaction = CreditDiamondTransaction.objects.create(
-                user_Debit=user,
-                type=CreditDiamondTransaction.TYPE_ACTIVITY,
-                amount=int(award['value'])
-            )
-
-        activity_participation = ActivityParticipation.objects.filter(
-            author=user,
-            activity=self,
-        ).first()
-        # todo 經驗 i幣 禮物等
-        activity_participation.coin_transaction = coin_transaction
-        activity_participation.diamond_transaction = diamond_transaction
-        activity_participation.status = ActivityParticipation.STATUS_COMPLETE
-        activity_participation.save()
+        if condition_complete_count < condition['condition_value']:
+            return False
         return True
 
 
