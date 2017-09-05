@@ -3470,10 +3470,10 @@ class Activity(EntityModel):
         :return:
         """
         rules = json.loads(self.rules)
+        if datetime.now() < self.date_end or self.is_settle:
+            # 活动没结束 或者 活动已经结束 不做结算动作
+            return
         if self.type == Activity.TYPE_WATCH:
-            if datetime.now() < self.date_end or self.is_settle:
-                # 活动没结束 或者 活动已经结束 不做结算动作
-                return
             # 观看任务结算
             awards = rules['award']
             watch_logs = LiveWatchLog.objects.filter(
@@ -3493,21 +3493,8 @@ class Activity(EntityModel):
                 if logs_count >= int(rules['min_watch']):
                     # 符合条件的会员，添加奖励和参加活动记录
                     member.member_activity_award(self, awards)
-            # 处理完成更改结算状态
-            self.is_settle = True
-            self.save()
-        if self.type == Activity.TYPE_DRAW or self.type == Activity.TYPE_DIAMOND:
-            # 转盘活动 或者鑽石活動
-            if datetime.now() < self.date_end or self.is_settle:
-                return
-            self.is_settle = True
-            self.save()
-
         if self.type == Activity.TYPE_VOTE:
             # 投票活动
-            if datetime.now() < self.date_end or self.is_settle:
-                # 活动没结束 或者 活动已经结束 不做结算动作
-                return
             awards = rules['awards']
             # members: 活动时间内所有会员按收到礼物排序
             members = Member.objects.extra(
@@ -3530,8 +3517,9 @@ class Activity(EntityModel):
                             members[i].member_activity_award(self, award['award'])
                     except Exception as e:
                         print(e)
-            self.is_settle = True
-            self.save()
+        # 转盘活动 或者鑽石活動 直接改結算狀態
+        self.is_settle = True
+        self.save()
         return
 
     def date_end_countdown(self):

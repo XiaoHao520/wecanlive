@@ -1631,6 +1631,14 @@ class PlannedTask(models.Model):
             member.check_member_history = None
             member.save()
 
+    @staticmethod
+    def settle_activity():
+        from core.models import Activity
+        for activity in Activity.objects.filter(
+            is_settle=False,
+        ).all():
+            activity.settle()
+
 
 class AdminLog(UserOwnedModel):
     date_created = models.DateTimeField(
