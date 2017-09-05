@@ -250,6 +250,9 @@ class AESCipher:
     def __init__(self, key):
         self.key = key
         self.iv = bytes(key[0:16], 'utf-8')
+        self.BS = 16
+        self.pad = lambda s: s + (self.BS - len(s) % self.BS) * chr(self.BS - len(s) % self.BS)
+        self.unpad = lambda s: s[0:-ord(s[-1])]
 
     def __pad(self, text):
         from Crypto.Cipher import AES
@@ -263,6 +266,8 @@ class AESCipher:
     def __unpad(self, text):
         pad = ord(text[-1])
         from Crypto.Cipher import AES
+        if text[-1] == '\0':
+            return text.rstrip('\0')
         return text[:-pad] if pad <= AES.block_size else text
 
     def encrypt(self, raw):
@@ -275,4 +280,7 @@ class AESCipher:
         from Crypto.Cipher import AES
         enc = base64.b64decode(enc)
         cipher = AES.new(self.key, AES.MODE_CBC, self.iv)
-        return self.__unpad(cipher.decrypt(enc).decode())
+        data = cipher.decrypt(enc).decode().rstrip('\0')
+        return data
+        # return self.__unpad(cipher.decrypt(enc).decode())
+
