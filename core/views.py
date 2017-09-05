@@ -373,7 +373,7 @@ class UserViewSet(viewsets.ModelViewSet):
         session = request.data.get('session')
         aes = u.AESCipher(settings.WECAN_AES_KEY_SERVER)
         data = aes.decrypt(session)
-        return u.response_fail(data)
+        # return u.response_fail(data)
         account = data.split('|')[1]
         user = m.User.objects.filter(username=account).first() or \
                m.User.objects.create_user(username=account)
