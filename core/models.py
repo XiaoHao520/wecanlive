@@ -3463,10 +3463,10 @@ class Activity(EntityModel):
     def settle(self):
         """ 结算当次活动，找出所有参与记录，然后统计满足条件的自动发放奖励
             跑批用，每天执行1次
-            转盘活动  不用做结算动作 is_settle = True
+            转盘活动  過期結算，不做任何獎勵流水 is_settle = True
+            钻石活动  過期結算，不做任何獎勵流水 is_settle = True
             观看任务  全部用户，在结束日期之后做一次结算，全部用户排序结算 is_settle = True
             投票活动  全部用户，在结束日期之后做一次结算，全部用户排序结算 is_settle = True
-            钻石活动  每一日做一次结算，将活动五个等级的分别结算 活动结束时候才is_settle = True
         :return:
         """
         rules = json.loads(self.rules)
@@ -3496,21 +3496,43 @@ class Activity(EntityModel):
             # 处理完成更改结算状态
             self.is_settle = True
             self.save()
-        if self.type == Activity.TYPE_DRAW:
-            # 转盘活动
-            if datetime.now < self.date_end or self.is_settle:
+        if self.type == Activity.TYPE_DRAW or self.type == Activity.TYPE_DIAMOND:
+            # 转盘活动 或者鑽石活動
+            if datetime.now() < self.date_end or self.is_settle:
                 return
             self.is_settle = True
             self.save()
 
         if self.type == Activity.TYPE_VOTE:
             # 投票活动
-            return
-        if self.type == Activity.TYPE_DIAMOND:
-            # 钻石活动
-            return
+            if datetime.now() < self.date_end or self.is_settle:
+                # 活动没结束 或者 活动已经结束 不做结算动作
+                return
+            awards = rules['awards']
+            # members: 活动时间内所有会员按收到礼物排序
+            members = Member.objects.extra(
+                select=dict(
+                    prize_amount="""
+                        select sum(t.amount)
+                        from  core_prize_transaction t, core_prize_order o, core_activity a
+                        where user_id = t.user_debit_id and user_id = t.user_credit_id
+                        and t.prize_id = {prize_id} and a.id = {activity_id}
+                        and o.receiver_prize_transaction_id = t.id
+                        and o.date_created >= a.date_begin and o.date_created <= a.date_end
+                    """.format(prize_id=rules['prize'], activity_id=self.id)
+                )).order_by('-prize_amount').all()
+            # 活动奖励列表
+            for award in awards:
+                # 其中一项奖励将from 和 to组成一个range范围，members[i]范围内的会员
+                for i in range(int(award['from']) - 1, int(award['to'])):
+                    try:
+                        if members[i].prize_amount:
+                            members[i].member_activity_award(self, award['award'])
+                    except Exception as e:
+                        print(e)
+            self.is_settle = True
+            self.save()
         return
-
 
     def date_end_countdown(self):
         """ 活动倒计时，返回分钟

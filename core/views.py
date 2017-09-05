@@ -934,6 +934,7 @@ class MemberViewSet(viewsets.ModelViewSet):
         rank_type = self.request.query_params.get('rank_type')
 
         if rank_type and rank_type == 'rank_diamond':
+            # 收到礼物钻石数量
             qs = m.Member.objects.annotate(
                 amount=m.models.Sum(
                     'user__creditdiamondtransactions_debit__prize_orders__diamond_transaction__amount'
@@ -975,6 +976,13 @@ class MemberViewSet(viewsets.ModelViewSet):
             ).exclude(
                 user__in=[member.user for member in follow],
             )
+
+        # 使用鑽石消費排行
+        diamond_rank = self.request.query_params.get('diamond_rank')
+        if diamond_rank and diamond_rank == 'credit':
+            qs = m.Member.objects.annotate(
+                credit_diamond_amount=m.models.Sum('user__prizeorders_owned__diamond_transaction__amount')
+            ).filter(credit_diamond_amount__gt=0)
 
         return qs
 
@@ -2378,49 +2386,51 @@ class ActivityViewSet(viewsets.ModelViewSet):
     def get_activity_diamond_list(self, request, pk):
         """
         鑽石活動，獲得鑽石數排序
+        获奖名单： 已经领取奖励的用户，钻石余额排行
+        助力名单： 用户送的钻石排行
         """
         activity = m.Activity.objects.get(pk=pk)
-        prize_orders = m.PrizeOrder.objects.filter(
-            date_created__gt=activity.date_begin,
-            date_created__lt=activity.date_end,
-            diamond_transaction__id__gt=0,
-        )
-        # 收钻石用户
-        receiver_members = m.Member.objects.filter(
-            user__in=[order.diamond_transaction.user_debit for order in prize_orders],
-        )
-        # 送礼物用户
-        sender_members = m.Member.objects.filter(
-            user__in=[order.author for order in prize_orders],
-        )
+        # 已经领取奖励的用户
+        members = m.Member.objects.filter(
+            user__activityparticipations_owned__activity=activity,
+        ).all()
         receiver_list = []
-        sender_list = []
-        for receiver_member in receiver_members:
-            # 收鑽石列表
-            diamond_amount = receiver_member.user.creditdiamondtransactions_debit.filter(
-                prize_orders__id__gt=0,
-                prize_orders__date_created__gt=activity.date_begin,
-                prize_orders__date_created__lt=activity.date_end,
-            ).all().aggregate(amount=m.models.Sum('amount')).get('amount') or 0
-            receiver_list.append(dict(member=s.MemberSerializer(receiver_member).data, amount=diamond_amount))
-        # 收鑽石列表排序
-        receiver_list = sorted(receiver_list, key=lambda item: item['amount'], reverse=True)[:10]
+        send_list = []
+        for member in members:
+            amount = member.get_diamond_balance()
+            receiver_list.append(dict(
+                member=s.MemberSerializer(member).data,
+                amount=amount,
+            ))
+        receiver_list = sorted(receiver_list, key=lambda item: item['amount'], reverse=True)[:20]
 
-        for sender_member in sender_members:
-            # 送鑽石列表
-            diamond_amount = sender_member.user.prizeorders_owned.filter(
-                date_created__gt=activity.date_begin,
-                date_created__lt=activity.date_end,
-                diamond_transaction__id__gt=0,
-            ).all().aggregate(amount=m.models.Sum('diamond_transaction__amount')).get('amount') or 0
-            sender_list.append(dict(member=s.MemberSerializer(sender_member).data, amount=diamond_amount))
-        sender_list = sorted(sender_list, key=lambda item: item['amount'], reverse=True)[:10]
-        return Response(data=dict(receiver_list=receiver_list, sender_list=sender_list))
+        return Response(data=receiver_list)
+
+    # @detail_route(methods=['POST'])
+    # def activity_award(self, request, pk):
+    #     activity = m.Activity.objects.get(pk=pk)
+    #     activity.settle()
+    #     return Response(data=True)
 
     @detail_route(methods=['POST'])
-    def activity_award(self, request, pk):
+    def diamond_activity_receive_award(self, request, pk):
+        # 钻石活动领取阶段奖励，
+        # 领取奖励之后不能再领取其他阶段奖励
         activity = m.Activity.objects.get(pk=pk)
-        activity.settle()
+        me = self.request.user.member
+        assert datetime.now() > activity.date_begin, '活動還沒開始'
+        assert datetime.now() < activity.date_end and not activity.is_settle, '活動已經結束'
+        assert not m.ActivityParticipation.objects.filter(
+            activity=activity,
+            author__member=me,
+        ).exists(), '你已經領取過階段獎勵了，不能再領取其他獎勵'
+        # stage 第几阶段
+        stage = request.data.get('stage')
+        awards = json.loads(activity.rules)['awards']
+        stage_award = awards[stage]
+        diamond_balance = me.get_diamond_balance()
+        assert diamond_balance >= stage_award['from'], '你的鑽石數量不足領取這個階段的獎勵要求'
+        me.member_activity_award(activity, stage_award['award'])
         return Response(data=True)
 
 
