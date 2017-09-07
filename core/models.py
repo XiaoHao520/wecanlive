@@ -3601,15 +3601,35 @@ class Activity(EntityModel):
                 referrer=user).count()
         elif json.loads(self.rules)['condition_code'] == '000009':
             # 連續登入X天
-            login_record = LoginRecord.objects.filter(
-                author=user,
-                date_login__date__gt=self.date_begin.date()
-            ).all()
+            # 從活動開始第一日起连续登录
+            date_login = self.date_begin.date()
+            continue_login_days = 0
+            while date_login <= datetime.now().date():
+                if LoginRecord.objects.filter(author=user, date_login__date=date_login).exists():
+                    # 连续登录天数
+                    continue_login_days += 1
+                else:
+                    continue_login_days = 0
+                date_login += timedelta(days=1)
+                if continue_login_days == condition['condition_value']:
+                    # 连续登录天数
+                    condition_complete_count = continue_login_days
+                    break
         elif condition['condition_code'] == '000010':
             # 連續開播X天
-            lives = Live.objects.filter(date_created__gt=self.date_begin, author=user).all()
-            # todo
-            print(lives[0])
+            date_live = self.date_begin.date()
+            continue_live_days = 0
+            while date_live <= datetime.now().date():
+                if Live.objects.filter(author=user,date_created=date_live).exists():
+                    # 连续登录
+                    continue_live_days += 1
+                else:
+                    continue_live_days = 0
+                date_live += timedelta(days=1)
+                if continue_live_days == condition['condition_value']:
+                    # 连续开播达到条件
+                    condition_complete_count = continue_live_days
+                    break
         elif condition['condition_code'] == '000011':
             # 收到鑽石額度
             condition_complete_count = PrizeOrder.objects.filter(
