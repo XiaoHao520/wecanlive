@@ -1428,6 +1428,45 @@ class MemberViewSet(viewsets.ModelViewSet):
         data = dict(labels=labels, amounts=amounts)
         return Response(data=data)
 
+    @list_route(methods=['GET'])
+    def get_qrcode(self, request):
+        from urllib.request import urlopen
+        from django.core.files import File
+        from django.core.files.temp import NamedTemporaryFile
+        code_type = self.request.query_params.get('type')
+        id = self.request.query_params.get('object_id')
+        member = None
+        family = None
+        if not code_type:
+            return
+        if code_type == 'member':
+            member = m.Member.objects.get(user=id)
+            if member.qrcode:
+                return Response(data=member.qrcode.url())
+        if code_type == 'family':
+            family = m.Family.objects.get(id=id)
+            if family.qrcode:
+                return Response(data=family.qrcode.url())
+        url = 'http://qr.liantu.com/api.php?text=wecan_membercode-{}-{}-wecan_membercode&fg=0B1171{}'.format(
+            code_type,
+            id,
+            '&logo=' if None else '',
+        )
+        img_temp = NamedTemporaryFile(delete=True)
+        img_temp.write(urlopen(url).read())
+        img_temp.flush()
+        image = m.ImageModel.objects.create(
+            image=File(img_temp, name='qrcode_{}_{}_{}.png'.format(code_type, id, random.randint(1e8, 1e9))),
+        )
+        if member:
+            member.qrcode = image
+            member.save()
+            return Response(data=image.url())
+        if family:
+            family.qrcode = image
+            family.save()
+            return Response(data=image.url())
+
 
 class RobotViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'

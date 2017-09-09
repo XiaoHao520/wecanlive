@@ -278,7 +278,7 @@ class UserDetailedSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     star_index_receiver_balance = serializers.ReadOnlyField(source='member.get_star_index_receiver_balance')
 
     member_level = serializers.ReadOnlyField(source='member.get_level')
-    member_experience = serializers.ReadOnlyField(source='member.experience')
+    member_experience = serializers.ReadOnlyField(source='member.total_experience')
     member_vip_level = serializers.ReadOnlyField(source='member.vip_level')
 
     # 跟踪数量
@@ -554,6 +554,7 @@ class RobotSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
 class CelebrityCategorySerializer(QueryFieldsMixin, serializers.ModelSerializer):
     leader_nickname = serializers.ReadOnlyField(source='leader.member.nickname')
+    leader_mobile = serializers.ReadOnlyField(source='leader.member.mobile')
 
     category = serializers.ReadOnlyField(source='get_category')
 
