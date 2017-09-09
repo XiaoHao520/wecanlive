@@ -791,7 +791,8 @@ class Member(AbstractMember,
                 user_debit=self.user,
                 amount=1,
                 type=PrizeTransaction.TYPE_ACTIVITY_GAIN,
-                prize=Prize.objects.get(pk=awards['value'])
+                prize=Prize.objects.get(pk=awards['value']),
+                source_tag=PrizeTransaction.SOURCE_TAG_ACTIVITY,
             )
         if awards['type'] == 'experience':
             # 经验
@@ -2773,6 +2774,25 @@ class Prize(EntityModel):
             )
         super().delete(*args, **kwargs)
 
+    def get_activity_prize_balance(self, user, source_tag):
+        """
+        user 获得这个活动礼物的剩余数量
+        source_tag 礼物来源 ACTIVITY STAR_BOX VIP
+        """
+        receive_count = PrizeTransaction.objects.filter(
+            prize=self,
+            user_credit=None,
+            user_debit=user,
+            source_tag=source_tag,
+        ).all().aggregate(amount=models.Sum('amount')).get('amount') or 0
+        send_count = PrizeTransaction.objects.filter(
+            prize=self,
+            user_debit=None,
+            user_credit=user,
+            source_tag=source_tag,
+        ).all().aggregate(amount=models.Sum('amount')).get('amount') or 0
+        return receive_count - send_count
+
 
 class PrizeTransaction(AbstractTransactionModel):
     prize = models.ForeignKey(
@@ -2786,12 +2806,14 @@ class PrizeTransaction(AbstractTransactionModel):
     TYPE_LIVE_SEND_BAG = 'LIVE_SEND_BAG'
     TYPE_ACTIVITY_GAIN = 'ACTIVITY_GAIN'
     TYPE_STAR_BOX_GAIN = 'STAR_BOX_GAIN'
+    TYPE_VIP_GAIN = 'STAR_VIP_GAIN'
     TYPE_CHOICES = (
         (TYPE_LIVE_RECEIVE, '直播獲得'),
         (TYPE_LIVE_SEND_BUY, '直播赠送-購買'),
         (TYPE_LIVE_SEND_BAG, '直播贈送-揹包'),
         (TYPE_ACTIVITY_GAIN, '活動獲得'),
         (TYPE_STAR_BOX_GAIN, '元氣寶盒獲得'),
+        (TYPE_VIP_GAIN, 'VIP回馈獲得'),
     )
 
     type = models.CharField(
@@ -2826,28 +2848,28 @@ class PrizeTransaction(AbstractTransactionModel):
         verbose_name_plural = '礼物记录'
         db_table = 'core_prize_transaction'
 
-    @staticmethod
-    def viewer_open_starbox(user_id):
-        me = User.objects.get(pk=user_id)
-        # todo 这里应该用送了多少礼物的元气
-        assert me.member.get_star_balance() >= 500, '你的元氣不足，不能打開寶盒'
-        prize = Prize.objects.filter(
-            category__name='宝盒礼物',
-            is_active=True,
-        ).order_by('?').first()
-        assert prize, '暫無禮物可選'
-        # todo: 数量
-        # 礼物记录
-        me.prizetransactions_debit.create(
-            prize=prize,
-            amount=prize.price,
-            remark='打開星光寶盒獲得禮物',
-        )
-        # todo: -500消耗了的元气值 应该要增加一个宝盒记录
-        # # 元气流水
-        # me.creditstartransactions_credit.create(
-        #     amount=500,
-        # )
+        # @staticmethod
+        # def viewer_open_starbox(user_id):
+        #     me = User.objects.get(pk=user_id)
+        #     # todo 这里应该用送了多少礼物的元气
+        #     assert me.member.get_star_balance() >= 500, '你的元氣不足，不能打開寶盒'
+        #     prize = Prize.objects.filter(
+        #         category__name='宝盒礼物',
+        #         is_active=True,
+        #     ).order_by('?').first()
+        #     assert prize, '暫無禮物可選'
+        #     # todo: 数量
+        #     # 礼物记录
+        #     me.prizetransactions_debit.create(
+        #         prize=prize,
+        #         amount=prize.price,
+        #         remark='打開星光寶盒獲得禮物',
+        #     )
+        #     # todo: -500消耗了的元气值 应该要增加一个宝盒记录
+        #     # # 元气流水
+        #     # me.creditstartransactions_credit.create(
+        #     #     amount=500,
+        #     # )
 
 
 class PrizeOrder(UserOwnedModel):
@@ -3886,15 +3908,35 @@ class Activity(EntityModel):
                 referrer=user).count()
         elif json.loads(self.rules)['condition_code'] == '000009':
             # 連續登入X天
-            login_record = LoginRecord.objects.filter(
-                author=user,
-                date_login__date__gt=self.date_begin.date()
-            ).all()
+            # 從活動開始第一日起连续登录
+            date_login = self.date_begin.date()
+            continue_login_days = 0
+            while date_login <= datetime.now().date():
+                if LoginRecord.objects.filter(author=user, date_login__date=date_login).exists():
+                    # 连续登录天数
+                    continue_login_days += 1
+                else:
+                    continue_login_days = 0
+                date_login += timedelta(days=1)
+                if continue_login_days == condition['condition_value']:
+                    # 连续登录天数
+                    condition_complete_count = continue_login_days
+                    break
         elif condition['condition_code'] == '000010':
             # 連續開播X天
-            lives = Live.objects.filter(date_created__gt=self.date_begin, author=user).all()
-            # todo
-            print(lives[0])
+            date_live = self.date_begin.date()
+            continue_live_days = 0
+            while date_live <= datetime.now().date():
+                if Live.objects.filter(author=user, date_created=date_live).exists():
+                    # 连续登录
+                    continue_live_days += 1
+                else:
+                    continue_live_days = 0
+                date_live += timedelta(days=1)
+                if continue_live_days == condition['condition_value']:
+                    # 连续开播达到条件
+                    condition_complete_count = continue_live_days
+                    break
         elif condition['condition_code'] == '000011':
             # 收到鑽石額度
             condition_complete_count = PrizeOrder.objects.filter(
@@ -3904,6 +3946,37 @@ class Activity(EntityModel):
         if condition_complete_count < condition['condition_value']:
             return False
         return True
+
+    def draw_activity_award(self):
+        """
+           前段用，输出抽奖活动各区域的奖励
+        """
+        if not self.type == Activity.TYPE_DRAW:
+            return False
+        rules = json.loads(self.rules)
+        # print(rules['awards'])
+        data = []
+        award_type = dict(
+            coin='金幣',
+            diamond='鑽石',
+            experience='經驗值',
+            icoin='i幣',
+            star='元氣',
+            contribution='貢獻值',
+        )
+        for award_item in rules['awards']:
+            award = award_item['award']
+            if not award['type'] == 'prize' and not award['type'] == 'badge':
+                data.append('{} {}'.format(award['value'], award_type[award['type']]))
+            elif award['type'] == 'prize':
+                prize = Prize.objects.get(pk=award['value'])
+                data.append('禮物:{}'.format(prize.name))
+            elif award['type'] == 'badge':
+                badge = Badge.objects.get(pk=award['value'])
+                data.append('徽章:{}'.format(badge.name))
+            else:
+                data.append('')
+        return data
 
 
 class ActivityPage(EntityModel):
@@ -4277,15 +4350,14 @@ class StarBoxRecord(UserOwnedModel):
             )
         elif award == 2:
             # 禮物
-            # todo:　以后生成系统配置项json要更改
-            prize = Prize.objects.filter(
-                category__name='宝盒礼物',
-            ).order_by('?').first()
-            assert prize, '沒有寶盒禮物列表，請重新抽獎'
-            amount = random.randint(1, 10)
+            prize_option = json.loads(Option.get(key='star_box_prize_list') or '[]')
+            assert len(prize_option) > 0, '沒有寶盒禮物列表，請等待寶盒禮物設置後重新抽獎'
+            prize_num = random.randint(0, len(prize_option) - 1)
+            prize_award = prize_option[prize_num]
+            prize = Prize.objects.get(pk=prize_award['prize'])
             prize_debit = PrizeTransaction.objects.create(
                 user_debit=user,
-                amount=amount,
+                amount=prize_award['amount'],
                 remark='打開寶盒贈送禮物',
                 prize=prize,
                 type=PrizeTransaction.TYPE_STAR_BOX_GAIN,
