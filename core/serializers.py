@@ -557,6 +557,8 @@ class CelebrityCategorySerializer(QueryFieldsMixin, serializers.ModelSerializer)
 
     category = serializers.ReadOnlyField(source='get_category')
 
+    leader_avatar = serializers.ReadOnlyField(source='leader.member.avatar.image.url')
+
     class Meta:
         model = m.CelebrityCategory
         fields = '__all__'
@@ -1091,6 +1093,8 @@ class ActivitySerializer(QueryFieldsMixin, serializers.ModelSerializer):
     award_way = serializers.ReadOnlyField()
 
     date_end_countdown = serializers.ReadOnlyField()
+
+    draw_activity_award = serializers.ReadOnlyField()
 
     class Meta:
         model = m.Activity
