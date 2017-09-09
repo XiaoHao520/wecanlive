@@ -132,11 +132,34 @@ class Member(AbstractMember,
         help_text='当天内查看非好友会员的id'
     )
 
-    experience = models.IntegerField(
-        verbose_name='经验值',
+    qrcode = models.OneToOneField(
+        verbose_name='二维码',
+        to=ImageModel,
+        related_name='members',
+        null=True,
+        blank=True,
+    )
+
+    total_experience = models.IntegerField(
+        verbose_name='总经验值',
         default=0,
     )
-    #
+
+    current_level_experience = models.IntegerField(
+        verbose_name='当前等级经验',
+        default=0,
+    )
+
+    large_level = models.IntegerField(
+        verbose_name='大等级',
+        default=1,
+    )
+
+    small_level = models.IntegerField(
+        verbose_name='小等级',
+        default=1,
+    )
+
     vip_level = models.IntegerField(
         verbose_name='VIP等级',
         default=0,
@@ -146,6 +169,13 @@ class Member(AbstractMember,
         verbose_name='VIP等级更新时间',
         null=True,
         blank=True,
+    )
+
+    amount_extend = models.DecimalField(
+        verbose_name='VIP续等余额',
+        decimal_places=2,
+        max_digits=18,
+        default=0,
     )
 
     is_demote = models.BooleanField(
@@ -410,63 +440,74 @@ class Member(AbstractMember,
     #         amount=models.Sum('amount')).get('amount') or 0
     #     return transitions_amount - self.user.starboxrecords_owned.count() * 500
 
+    # def get_level(self):
+    #     """ 根据经验值获取用户等级
+    #     :return:
+    #     """
+    #     import json
+    #     # 获取等级规则
+    #     if Option.objects.filter(key='level_rules').exists():
+    #         # return 1
+    #         level_rules = json.loads(Option.objects.filter(key='level_rules').first().value)
+    #
+    #         # 获取经验
+    #         memberExp = self.experience
+    #
+    #         # 根据经验获取等级，等级以对象的形式传送
+    #         memberLevel = {}
+    #         cc = {'a': 'a'}
+    #         if 'level_1' in level_rules:
+    #             amount = 0  # 经验总值
+    #             n = 0  # 等级
+    #             for item in level_rules['level_1']:
+    #                 startLevel = str(item['key']).split('_')[1]
+    #                 endLevel = str(item['key']).split('_')[3]
+    #                 preAmount = amount
+    #                 amount += (int(endLevel) - int(startLevel) + 1) * item['value']
+    #                 if memberExp < amount:
+    #                     n += (memberExp - preAmount) // item['value']
+    #                     memberLevel = {
+    #                         'topLevel': 1,  # 图案等级
+    #                         'subLevel': n,
+    #                         'currentLevelExp': (memberExp - preAmount) % item['value'],  # 当前等级拥有经验
+    #                         'upgradeExp': item['value'],  # 升级所需经验
+    #                         'bigLevelExp': amount  # 图案等级经验总值
+    #                     }
+    #                     return memberLevel
+    #                 n = int(endLevel)
+    #             if 'level_more' in level_rules:  # 如果等级不为星星的时候
+    #                 topLevel = 2  # 图案等级
+    #                 for item in level_rules['level_more']:
+    #                     preAmount = amount
+    #                     amount += 100 * item['value']
+    #                     if memberExp < amount:
+    #                         subLevel = (memberExp - preAmount) // item['value'] + 1
+    #                         memberLevel = {
+    #                             'topLevel': topLevel,
+    #                             'subLevel': subLevel,
+    #                             'currentLevelExp': (memberExp - preAmount) % item['value'],  # 当前等级拥有经验
+    #                             'upgradeExp': item['value'],  # 升级所需经验
+    #                             'bigLevelExp': amount  # 图案等级经验总值
+    #                         }
+    #                         return memberLevel
+    #                     topLevel += 1
+    #             else:
+    #                 raise ValueError('level_rules 没有定义好 ： \'level_more\'')
+    #         else:
+    #             raise ValueError('level_rules 没有定义好 ： \'level_1\'')
+    #
+    #     # TODO: 未实现
+    #     return 1
+
     def get_level(self):
-        """ 根据经验值获取用户等级
+        """
+        獲得用戶等級
         :return:
         """
-        import json
-        # 获取等级规则
-        if Option.objects.filter(key='level_rules').exists():
+        level_rules = json.loads(Option.get('level_rules'))
+        if not level_rules:
             return 1
-            level_rules = json.loads(Option.objects.filter(key='level_rules').first().value)
 
-            # 获取经验
-            memberExp = Member.objects.filter(user=self.user.id).first().experience
-
-            # 根据经验获取等级，等级以对象的形式传送
-            memberLevel = {}
-            cc = {'a': 'a'}
-            if 'level_1' in level_rules:
-                amount = 0  # 经验总值
-                n = 0  # 等级
-                for item in level_rules['level_1']:
-                    startLevel = str(item['key']).split('_')[1]
-                    endLevel = str(item['key']).split('_')[3]
-                    preAmount = amount
-                    amount += (int(endLevel) - int(startLevel) + 1) * item['value']
-                    if memberExp < amount:
-                        n += (memberExp - preAmount) // item['value']
-                        memberLevel = {
-                            'topLevel': 1,  # 图案等级
-                            'subLevel': n,
-                            'currentLevelExp': (memberExp - preAmount) % item['value'],  # 当前等级拥有经验
-                            'upgradeExp': item['value'],  # 升级所需经验
-                            'bigLevelExp': amount  # 图案等级经验总值
-                        }
-                        return memberLevel
-                    n = int(endLevel)
-                if 'level_more' in level_rules:  # 如果等级不为星星的时候
-                    topLevel = 2  # 图案等级
-                    for item in level_rules['level_more']:
-                        preAmount = amount
-                        amount += 100 * item['value']
-                        if memberExp < amount:
-                            subLevel = (memberExp - preAmount) // item['value'] + 1
-                            memberLevel = {
-                                'topLevel': topLevel,
-                                'subLevel': subLevel,
-                                'currentLevelExp': (memberExp - preAmount) % item['value'],  # 当前等级拥有经验
-                                'upgradeExp': item['value'],  # 升级所需经验
-                                'bigLevelExp': amount  # 图案等级经验总值
-                            }
-                            return memberLevel
-                        topLevel += 1
-                else:
-                    raise ValueError('level_rules 没有定义好 ： \'level_more\'')
-            else:
-                raise ValueError('level_rules 没有定义好 ： \'level_1\'')
-
-        # TODO: 未实现
         return 1
 
     def get_vip_level(self):
@@ -484,55 +525,69 @@ class Member(AbstractMember,
             return 0
         vip_rules = json.loads(Option.get('vip_rules'))
         current_vip_level = self.vip_level
-        now = datetime.now()
-        if not self.is_demote:
-            # 最近一个月的储值量
-            amount_this_month = RechargeRecord.objects.filter(
-                author=recharge_record.author,
-                date_created__lte=now,
-                date_created__gte=now - timedelta(days=30),
-            ).aggregate(amount=models.Sum('amount')).get('amount') or 0
-        if self.date_update_vip and self.is_demote:
-            # 降级后的储值量
-            amount_after_demote = RechargeRecord.objects.filter(
-                author=recharge_record.author,
-                date_created__lte=now,
-                date_created__gte=self.date_update_vip,
-            ).aggregate(amount=models.Sum('amount')).get('amount') or 0
-        if not self.date_update_vip or not self.is_demote:
-            for i in range(current_vip_level, len(vip_rules)):
-                if i == len(vip_rules) - 1 and amount_this_month >= vip_rules[i].get('recharge'):
-                    self.upgrade(i + 1, recharge_record.date_created)
-                elif i < len(vip_rules) - 1 and vip_rules[i].get('recharge') <= amount_this_month < vip_rules[
-                            i + 1].get('recharge'):
-                    self.upgrade(i + 1, recharge_record.date_created)
+        # 最近一个月的储值量
+        amount_this_month = RechargeRecord.objects.filter(
+            author=recharge_record.author,
+            date_created__lte=recharge_record.date_created,
+            date_created__gt=recharge_record.date_created - timedelta(days=30),
+        ).aggregate(amount=models.Sum('amount')).get('amount') or 0
+        # 当前vip为0，而且最近一个月储值低于vip1的储值要求，直接返回
+        if current_vip_level == 0 and amount_this_month < vip_rules[0].get('recharge'):
+            return
+        for i in range(current_vip_level, len(vip_rules)):
+            if 1 <= current_vip_level == i:
+                if vip_rules[i].get('recharge') <= amount_this_month < vip_rules[i + 1].get('recharge'):
+                    # 升级vip
+                    self.upgrade(i + 1, recharge_record.date_created, amount_this_month - vip_rules[i].get('recharge'))
                     break
-        if self.date_update_vip and (now - self.date_update_vip).days <= 30 and self.is_demote:
-            for i in range(current_vip_level, len(vip_rules)):
-                if i == len(vip_rules) - 1 and amount_after_demote >= vip_rules[len(vip_rules) - 1].get(
-                        'recharge_next_month'):
-                    self.upgrade(i + 1, recharge_record.date_created)
-                elif i == current_vip_level and vip_rules[i].get('recharge_next_month') <= amount_after_demote < \
-                        vip_rules[i + 1].get('recharge'):
-                    self.upgrade(i + 1, recharge_record.date_created)
+                elif amount_this_month < vip_rules[i].get('recharge') and recharge_record.amount + self.amount_extend >= \
+                        vip_rules[i - 1].get('recharge_next_month'):
+                    # 续等vip
+                    self.upgrade(i, 0, 0)
                     break
-                elif vip_rules[i].get('recharge') <= amount_after_demote < vip_rules[i + 1].get('recharge'):
-                    self.upgrade(i + 1, recharge_record.date_created)
+                elif amount_this_month < vip_rules[i].get('recharge') and recharge_record.amount + self.amount_extend < \
+                        vip_rules[i - 1].get('recharge_next_month'):
+                    # 不够续等vip，把钱存在续等余额
+                    self.upgrade(i, None, recharge_record.amount)
                     break
-        return 0
+            if i == len(vip_rules) - 1:
+                if amount_this_month >= vip_rules[i].get('recharge'):
+                    # 升级vip
+                    self.upgrade(i + 1, recharge_record.date_created, amount_this_month - vip_rules[i].get('recharge'))
+                    break
+                elif amount_this_month < vip_rules[i].get('recharge') and recharge_record.amount + self.amount_extend >= \
+                        vip_rules[i - 1].get('recharge_next_month'):
+                    # 续等vip
+                    self.upgrade(i, 0, 0)
+                    break
+                elif amount_this_month < vip_rules[i].get('recharge') and recharge_record.amount + self.amount_extend < \
+                        vip_rules[i - 1].get('recharge_next_month'):
+                    # 不够续等vip,把钱存在续等余额
+                    self.upgrade(i, None, recharge_record.amount)
+                    break
+            elif i < len(vip_rules) - 1:
+                if vip_rules[i].get('recharge') <= amount_this_month < vip_rules[i + 1].get('recharge'):
+                    self.upgrade(i + 1, recharge_record.date_created, amount_this_month - vip_rules[i].get('recharge'))
+                    break
 
-    def upgrade(self, level, date_update_vip):
+    def upgrade(self, level, date_update_vip, amount_extend):
         """
-        执行更新vip等级
+        执行更新vip等级,把多出的充值额放在 amount_extend
         :param level:
         :param date_update_vip:
         :return:
         """
         self.vip_level = level
-        self.date_update_vip = date_update_vip
-        self.is_demote = False
+        if date_update_vip:
+            self.date_update_vip = date_update_vip
+            self.make_update_vip_plan(date_update_vip + timedelta(days=30 * level), self.id)
+        elif date_update_vip == 0:
+            self.make_update_vip_plan(None, self.id)
+        if amount_extend:
+            self.amount_extend += amount_extend
+        else:
+            self.amount_extend = 0
         self.save()
-        self.make_update_vip_plan(date_update_vip + timedelta(days=30), self.id)
 
     @staticmethod
     def make_update_vip_plan(date_planned, member_id):
@@ -543,7 +598,10 @@ class Member(AbstractMember,
         if not planned_task:
             PlannedTask.make('change_vip_level', date_planned, json.dumps([member_id]))
             return
-        planned_task.date_planned = date_planned
+        if not date_planned:
+            planned_task.date_planned += timedelta(days=30)
+        else:
+            planned_task.date_planned = date_planned
         planned_task.save()
 
     def get_today_watch_mission_count(self):
@@ -712,6 +770,7 @@ class Member(AbstractMember,
         prize_transaction = None
         star_transaction = None
         badge_record = None
+        exp_transaction = None
         if awards['type'] == 'coin':
             # 金币
             coin_transaction = CreditCoinTransaction.objects.create(
@@ -732,12 +791,15 @@ class Member(AbstractMember,
                 user_debit=self.user,
                 amount=1,
                 type=PrizeTransaction.TYPE_ACTIVITY_GAIN,
-                prize=Prize.objects.get(pk=awards['value'])
+                prize=Prize.objects.get(pk=awards['value']),
+                source_tag=PrizeTransaction.SOURCE_TAG_ACTIVITY,
             )
         if awards['type'] == 'experience':
             # 经验
-            self.experience += awards['value']
-            self.save()
+            # self.experience += awards['value']
+            exp_transaction = ExperienceTransaction.make(self.user, awards['value'], ExperienceTransaction.TYPE_ACTIVITY)
+            exp_transaction.update_level()
+            # self.save()
         if awards['type'] == 'star':
             # 元气
             star_transaction = CreditStarTransaction(
@@ -761,6 +823,7 @@ class Member(AbstractMember,
             prize_transaction=prize_transaction,
             star_transaction=star_transaction,
             badge_record=badge_record,
+            experience_transaction=exp_transaction,
         )
 
 
@@ -773,9 +836,132 @@ class LoginRecord(UserOwnedModel):
         auto_now_add=True,
     )
 
+    class Meta:
+        verbose_name = '登录记录'
+        verbose_name_plural = '登录记录'
+        db_table = 'core_login_record'
+
     @staticmethod
     def make(author):
         return LoginRecord.objects.create(author=author)
+
+
+class ExperienceTransaction(EntityModel, UserOwnedModel):
+    """
+    经验流水
+    """
+    experience = models.IntegerField(
+        verbose_name='经验值',
+    )
+
+    TYPE_SIGN = 'SIGN'
+    TYPE_SHARE = 'SHARE'
+    TYPE_RECEIVE = 'RECEIVE'
+    TYPE_SEND = 'SEND'
+    TYPE_WATCH = 'WATCH'
+    TYPE_LIVE = 'LIVE'
+    TYPE_ACTIVITY = 'ACTIVITY'
+    TYPE_OTHER = 'OTHER'
+    TYPE_CHOICES = (
+        (TYPE_SIGN, '登录'),
+        (TYPE_SHARE, '分享'),
+        (TYPE_RECEIVE, '收礼'),
+        (TYPE_SEND, '送礼'),
+        (TYPE_WATCH, '观看直播'),
+        (TYPE_LIVE, '直播'),
+        (TYPE_LIVE, '活动'),
+        (TYPE_OTHER, '其他'),
+    )
+
+    type = models.CharField(
+        verbose_name='类型',
+        max_length=10,
+        choices=TYPE_CHOICES,
+    )
+
+    class Meta:
+        verbose_name = '经验流水'
+        verbose_name_plural = '经验流水'
+        db_table = 'core_experience_transaction'
+
+    @staticmethod
+    def make(author, experience, transaction_type):
+        experience_transaction = ExperienceTransaction.objects.create(
+            author=author,
+            experience=experience,
+            type=transaction_type,
+        )
+        return experience_transaction
+
+    def update_level(self):
+        """
+        根据当前经验流水，更新用户等级
+        :return:
+        """
+        member = self.author.member
+        large_level = member.large_level
+        small_level = member.small_level
+        current_level_exp = member.current_level_experience
+        total_exp = member.total_experience
+        total_exp += self.experience
+        if not Option.get('level_rules'):
+            return
+        rules = json.loads(Option.get('level_rules'))
+        if large_level == 1 and small_level <= 20:
+            demand = rules.get('level_1')[0].get('value')
+            if current_level_exp + self.experience >= demand:
+                current_level_exp = current_level_exp + self.experience - demand
+                small_level += 1
+            else:
+                current_level_exp += self.experience
+        elif large_level == 2 and 20 < small_level <= 40:
+            demand = rules.get('level_1')[1].get('value')
+            if current_level_exp + self.experience >= demand:
+                current_level_exp = current_level_exp + self.experience - demand
+                small_level += 1
+            else:
+                current_level_exp += self.experience
+        elif large_level == 1 and 40 < small_level <= 60:
+            demand = rules.get('level_1')[2].get('value')
+            if current_level_exp + self.experience >= demand:
+                current_level_exp = current_level_exp + self.experience - demand
+                small_level += 1
+            else:
+                current_level_exp += self.experience
+        elif large_level == 1 and 60 < small_level <= 80:
+            demand = rules.get('level_1')[3].get('value')
+            if current_level_exp + self.experience >= demand:
+                current_level_exp = current_level_exp + self.experience - demand
+                small_level += 1
+            else:
+                current_level_exp += self.experience
+        elif large_level == 1 and 80 < small_level <= 99:
+            demand = rules.get('level_1')[4].get('value')
+            if current_level_exp + self.experience >= demand and small_level == 99:
+                current_level_exp = current_level_exp + self.experience - demand
+                small_level = 1
+                large_level = 2
+            elif current_level_exp + self.experience >= demand and small_level < 99:
+                current_level_exp = current_level_exp + self.experience - demand
+                small_level += 1
+            else:
+                current_level_exp += self.experience
+        elif large_level > 1:
+            demand = rules.get('level_more')[large_level - 2].get('value')
+            if current_level_exp + self.experience >= demand and small_level == 99:
+                current_level_exp = current_level_exp + self.experience - demand
+                small_level = 1
+                large_level += 1
+            elif current_level_exp + self.experience >= demand and small_level < 99:
+                current_level_exp = current_level_exp + self.experience - demand
+                small_level += 1
+            else:
+                current_level_exp += self.experience
+        member.small_level = small_level
+        member.large_level = large_level
+        member.total_experience = total_exp
+        member.current_level_experience = current_level_exp
+        member.save()
 
 
 class Robot(models.Model):
@@ -1231,6 +1417,14 @@ class DailyCheckInLog(UserOwnedModel):
         default=False,
     )
 
+    sign_experience_transaction = models.ForeignKey(
+        verbose_name='签到经验流水',
+        to='ExperienceTransaction',
+        related_name='daily_check_in_log',
+        null=True,
+        blank=True,
+    )
+
     class Meta:
         verbose_name = '每日签到'
         verbose_name_plural = '每日签到'
@@ -1254,6 +1448,8 @@ class DailyCheckInLog(UserOwnedModel):
         continue_daily_check = None
         coin_transaction = None
         star_transaction = None
+        sign_exp_transaction = None
+
         if today_daily_award['type'] == 'star':
             star_transaction = CreditStarTransaction.objects.create(
                 user_debit=user,
@@ -1268,6 +1464,8 @@ class DailyCheckInLog(UserOwnedModel):
                 remark='每日签到获得',
                 type=CreditCoinTransaction.TYPE_DAILY,
             )
+        sign_exp_transaction = ExperienceTransaction.make(user, int(Option.get('experience_points_login') or 5), ExperienceTransaction.TYPE_SIGN)
+        sign_exp_transaction.update_level()
         daily_check = DailyCheckInLog.objects.create(
             author=user,
             prize_star_transaction=star_transaction,
@@ -1335,6 +1533,14 @@ class Family(UserOwnedModel,
         verbose_name='图标',
         to=ImageModel,
         related_name='family',
+        null=True,
+        blank=True,
+    )
+
+    qrcode = models.OneToOneField(
+        verbose_name='二维码',
+        to=ImageModel,
+        related_name='familys',
         null=True,
         blank=True,
     )
@@ -2568,6 +2774,25 @@ class Prize(EntityModel):
             )
         super().delete(*args, **kwargs)
 
+    def get_activity_prize_balance(self, user, source_tag):
+        """
+        user 获得这个活动礼物的剩余数量
+        source_tag 礼物来源 ACTIVITY STAR_BOX VIP
+        """
+        receive_count = PrizeTransaction.objects.filter(
+            prize=self,
+            user_credit=None,
+            user_debit=user,
+            source_tag=source_tag,
+        ).all().aggregate(amount=models.Sum('amount')).get('amount') or 0
+        send_count = PrizeTransaction.objects.filter(
+            prize=self,
+            user_debit=None,
+            user_credit=user,
+            source_tag=source_tag,
+        ).all().aggregate(amount=models.Sum('amount')).get('amount') or 0
+        return receive_count - send_count
+
 
 class PrizeTransaction(AbstractTransactionModel):
     prize = models.ForeignKey(
@@ -2581,12 +2806,14 @@ class PrizeTransaction(AbstractTransactionModel):
     TYPE_LIVE_SEND_BAG = 'LIVE_SEND_BAG'
     TYPE_ACTIVITY_GAIN = 'ACTIVITY_GAIN'
     TYPE_STAR_BOX_GAIN = 'STAR_BOX_GAIN'
+    TYPE_VIP_GAIN = 'STAR_VIP_GAIN'
     TYPE_CHOICES = (
         (TYPE_LIVE_RECEIVE, '直播獲得'),
         (TYPE_LIVE_SEND_BUY, '直播赠送-購買'),
         (TYPE_LIVE_SEND_BAG, '直播贈送-揹包'),
         (TYPE_ACTIVITY_GAIN, '活動獲得'),
         (TYPE_STAR_BOX_GAIN, '元氣寶盒獲得'),
+        (TYPE_VIP_GAIN, 'VIP回馈獲得'),
     )
 
     type = models.CharField(
@@ -2621,28 +2848,28 @@ class PrizeTransaction(AbstractTransactionModel):
         verbose_name_plural = '礼物记录'
         db_table = 'core_prize_transaction'
 
-    @staticmethod
-    def viewer_open_starbox(user_id):
-        me = User.objects.get(pk=user_id)
-        # todo 这里应该用送了多少礼物的元气
-        assert me.member.get_star_balance() >= 500, '你的元氣不足，不能打開寶盒'
-        prize = Prize.objects.filter(
-            category__name='宝盒礼物',
-            is_active=True,
-        ).order_by('?').first()
-        assert prize, '暫無禮物可選'
-        # todo: 数量
-        # 礼物记录
-        me.prizetransactions_debit.create(
-            prize=prize,
-            amount=prize.price,
-            remark='打開星光寶盒獲得禮物',
-        )
-        # todo: -500消耗了的元气值 应该要增加一个宝盒记录
-        # # 元气流水
-        # me.creditstartransactions_credit.create(
-        #     amount=500,
-        # )
+        # @staticmethod
+        # def viewer_open_starbox(user_id):
+        #     me = User.objects.get(pk=user_id)
+        #     # todo 这里应该用送了多少礼物的元气
+        #     assert me.member.get_star_balance() >= 500, '你的元氣不足，不能打開寶盒'
+        #     prize = Prize.objects.filter(
+        #         category__name='宝盒礼物',
+        #         is_active=True,
+        #     ).order_by('?').first()
+        #     assert prize, '暫無禮物可選'
+        #     # todo: 数量
+        #     # 礼物记录
+        #     me.prizetransactions_debit.create(
+        #         prize=prize,
+        #         amount=prize.price,
+        #         remark='打開星光寶盒獲得禮物',
+        #     )
+        #     # todo: -500消耗了的元气值 应该要增加一个宝盒记录
+        #     # # 元气流水
+        #     # me.creditstartransactions_credit.create(
+        #     #     amount=500,
+        #     # )
 
 
 class PrizeOrder(UserOwnedModel):
@@ -3681,15 +3908,35 @@ class Activity(EntityModel):
                 referrer=user).count()
         elif json.loads(self.rules)['condition_code'] == '000009':
             # 連續登入X天
-            login_record = LoginRecord.objects.filter(
-                author=user,
-                date_login__date__gt=self.date_begin.date()
-            ).all()
+            # 從活動開始第一日起连续登录
+            date_login = self.date_begin.date()
+            continue_login_days = 0
+            while date_login <= datetime.now().date():
+                if LoginRecord.objects.filter(author=user, date_login__date=date_login).exists():
+                    # 连续登录天数
+                    continue_login_days += 1
+                else:
+                    continue_login_days = 0
+                date_login += timedelta(days=1)
+                if continue_login_days == condition['condition_value']:
+                    # 连续登录天数
+                    condition_complete_count = continue_login_days
+                    break
         elif condition['condition_code'] == '000010':
             # 連續開播X天
-            lives = Live.objects.filter(date_created__gt=self.date_begin, author=user).all()
-            # todo
-            print(lives[0])
+            date_live = self.date_begin.date()
+            continue_live_days = 0
+            while date_live <= datetime.now().date():
+                if Live.objects.filter(author=user, date_created=date_live).exists():
+                    # 连续登录
+                    continue_live_days += 1
+                else:
+                    continue_live_days = 0
+                date_live += timedelta(days=1)
+                if continue_live_days == condition['condition_value']:
+                    # 连续开播达到条件
+                    condition_complete_count = continue_live_days
+                    break
         elif condition['condition_code'] == '000011':
             # 收到鑽石額度
             condition_complete_count = PrizeOrder.objects.filter(
@@ -3699,6 +3946,37 @@ class Activity(EntityModel):
         if condition_complete_count < condition['condition_value']:
             return False
         return True
+
+    def draw_activity_award(self):
+        """
+           前段用，输出抽奖活动各区域的奖励
+        """
+        if not self.type == Activity.TYPE_DRAW:
+            return False
+        rules = json.loads(self.rules)
+        # print(rules['awards'])
+        data = []
+        award_type = dict(
+            coin='金幣',
+            diamond='鑽石',
+            experience='經驗值',
+            icoin='i幣',
+            star='元氣',
+            contribution='貢獻值',
+        )
+        for award_item in rules['awards']:
+            award = award_item['award']
+            if not award['type'] == 'prize' and not award['type'] == 'badge':
+                data.append('{} {}'.format(award['value'], award_type[award['type']]))
+            elif award['type'] == 'prize':
+                prize = Prize.objects.get(pk=award['value'])
+                data.append('禮物:{}'.format(prize.name))
+            elif award['type'] == 'badge':
+                badge = Badge.objects.get(pk=award['value'])
+                data.append('徽章:{}'.format(badge.name))
+            else:
+                data.append('')
+        return data
 
 
 class ActivityPage(EntityModel):
@@ -3784,6 +4062,14 @@ class ActivityParticipation(UserOwnedModel):
     badge_record = models.OneToOneField(
         verbose_name='奖励徽章记录',
         to='BadgeRecord',
+        related_name='activity_participation',
+        null=True,
+        blank=True,
+    )
+
+    experience_transaction = models.ForeignKey(
+        verbose_name='经验流水',
+        to='ExperienceTransaction',
         related_name='activity_participation',
         null=True,
         blank=True,
@@ -4064,15 +4350,14 @@ class StarBoxRecord(UserOwnedModel):
             )
         elif award == 2:
             # 禮物
-            # todo:　以后生成系统配置项json要更改
-            prize = Prize.objects.filter(
-                category__name='宝盒礼物',
-            ).order_by('?').first()
-            assert prize, '沒有寶盒禮物列表，請重新抽獎'
-            amount = random.randint(1, 10)
+            prize_option = json.loads(Option.get(key='star_box_prize_list') or '[]')
+            assert len(prize_option) > 0, '沒有寶盒禮物列表，請等待寶盒禮物設置後重新抽獎'
+            prize_num = random.randint(0, len(prize_option) - 1)
+            prize_award = prize_option[prize_num]
+            prize = Prize.objects.get(pk=prize_award['prize'])
             prize_debit = PrizeTransaction.objects.create(
                 user_debit=user,
-                amount=amount,
+                amount=prize_award['amount'],
                 remark='打開寶盒贈送禮物',
                 prize=prize,
                 type=PrizeTransaction.TYPE_STAR_BOX_GAIN,

@@ -1648,22 +1648,20 @@ class PlannedTask(models.Model):
         member.vip_level = pre_vip_level - 1
         if pre_vip_level - 1 >= 0:
             member.date_update_vip = datetime.now()
-            member.is_demote = True
         else:
             member.date_update_vip = None
-            member.is_demote = False
         member.save()
         planned_task = PlannedTask.objects.filter(
             method='change_vip_level',
             args__exact=json.dumps([member_id_list[0]]),
         ).first()
         # 降为等级0，依然可以有一个月以续费价升vip1的权利
-        if planned_task and pre_vip_level - 1 >= 0:
-            planned_task.date_planned = datetime.now() + timedelta(days=30)
+        if planned_task and pre_vip_level - 1 > 0:
+            planned_task.date_planned = planned_task.date_planned + timedelta(days=30)
             planned_task.status = PlannedTask.STATUS_PLANNED
             planned_task.save()
         # 如果降到没有vip等级，切超过一个月，则删除计划任务
-        elif planned_task and pre_vip_level - 1 < 0:
+        else:
             planned_task.delete()
 
 
