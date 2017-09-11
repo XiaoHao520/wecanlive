@@ -1839,6 +1839,34 @@ class FamilyMissionViewSet(viewsets.ModelViewSet):
             qs = qs.filter(family=family)
         return qs
 
+    @detail_route(methods=['GET'])
+    def family_mission_achievement(self, request, pk):
+        family_mission = m.FamilyMission.objects.get(pk=pk)
+        achievement = m.FamilyMissionAchievement.objects.filter(
+            author=self.request.user,
+            mission=family_mission,
+        )
+        if not achievement.exists():
+            # 還沒領取任務
+            return Response(data='UNRECEIVED')
+
+        if achievement.first().status == m.FamilyMissionAchievement.STATUS_START:
+            # 已經領取任務，檢測是否滿足條件
+            check_mission_achievement = achievement.first().check_mission_achievement()
+            if check_mission_achievement:
+                # 已经完成任务，未领取奖励
+                return Response(data='ACHIEVE')
+            else:
+                # 未完成任务
+                return Response(data='START')
+        if achievement.first().status == m.FamilyMissionAchievement.STATUS_ACHIEVE:
+            # 已经完成任务，未领取奖励
+            return Response(data='ACHIEVE')
+        if achievement.first().status == m.FamilyMissionAchievement.STATUS_FINISH:
+            # 已经领取奖励
+            return Response(data='FINISH')
+        return Response(data=True)
+
 
 class FamilyMissionAchievementViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
@@ -2363,11 +2391,11 @@ class PrizeTransactionViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return interceptor_get_queryset_kw_field(self)
 
-    # @list_route(methods=['POST'])
-    # def open_star_box(self, request):
-    #     # 观众开星光宝盒
-    #     m.PrizeTransaction.viewer_open_starbox(request.user.id)
-    #     return Response(True)
+        # @list_route(methods=['POST'])
+        # def open_star_box(self, request):
+        #     # 观众开星光宝盒
+        #     m.PrizeTransaction.viewer_open_starbox(request.user.id)
+        #     return Response(True)
 
 
 class PrizeOrderViewSet(viewsets.ModelViewSet):
