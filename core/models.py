@@ -504,7 +504,7 @@ class Member(AbstractMember,
         獲得用戶等級
         :return:
         """
-        level_rules = json.loads(Option.get('level_rules'))
+        level_rules = json.loads(Option.get('level_rules') or '[]')
         if not level_rules:
             return 1
 
