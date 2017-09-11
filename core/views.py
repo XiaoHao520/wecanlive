@@ -1972,6 +1972,8 @@ class LiveViewSet(viewsets.ModelViewSet):
         live = m.Live.objects.get(pk=pk)
         live.date_end = datetime.now()
         live.save()
+        # 计算经验值
+        live.live_experience()
         return Response(data=True)
 
     @detail_route(methods=['POST'])
@@ -2363,11 +2365,11 @@ class PrizeTransactionViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return interceptor_get_queryset_kw_field(self)
 
-    # @list_route(methods=['POST'])
-    # def open_star_box(self, request):
-    #     # 观众开星光宝盒
-    #     m.PrizeTransaction.viewer_open_starbox(request.user.id)
-    #     return Response(True)
+        # @list_route(methods=['POST'])
+        # def open_star_box(self, request):
+        #     # 观众开星光宝盒
+        #     m.PrizeTransaction.viewer_open_starbox(request.user.id)
+        #     return Response(True)
 
 
 class PrizeOrderViewSet(viewsets.ModelViewSet):
@@ -3144,11 +3146,27 @@ class RechargeRecordViewSet(viewsets.ModelViewSet):
             #     注意这里的remark会在下面的 get_recharge_coin_transactions 里面使用
         )
         # 金币充值奖励流水
+        recharge_award_amount = m.CreditCoinTransaction.get_award_coin_by_product_id(productid,
+                                                                                     m.RechargeRecord.objects.filter(
+                                                                                         author=author,
+                                                                                         payment_record__product_id=productid).count() <= 1)
+        level_award_amount = 0
+        vip_award_amount = 0
+        if m.Option.get('level_rules') and m.Option.get('vip_rules'):
+            level_rules = json.loads(m.Option.get('level_rules'))
+            vip_rules = json.loads(m.Option.get('vip_rules'))
+            # 等级储值返点
+            if author.member.large_level > 1:
+                level_award_amount = int(int(level_rules.get('level_more')[author.member.large_level - 2].get(
+                    'rebate')) * m.CreditCoinTransaction.get_coin_by_product_id(productid) / 100)
+            # vip等级储值返点
+            if author.member.vip_level > 0:
+                vip_award_amount = int(vip_rules[author.member.vip_level - 1].get(
+                    'rebate') * m.CreditCoinTransaction.get_coin_by_product_id(productid) / 100)
         award_coin_transaction = m.CreditCoinTransaction.objects.create(
             type=m.CreditCoinTransaction.TYPE_RECHARGE,
             user_debit=author,
-            amount=m.CreditCoinTransaction.get_award_coin_by_product_id(productid, m.RechargeRecord.objects.filter(
-                author=author, payment_record__product_id=productid).count() <= 1),
+            amount=recharge_award_amount + level_award_amount + vip_award_amount,
             remark='充值奖励{}'.format(orderid),
             #     注意这里的remark会在下面的 get_recharge_coin_transactions 里面使用
         )
