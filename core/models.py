@@ -892,6 +892,7 @@ class ExperienceTransaction(EntityModel, UserOwnedModel):
     TYPE_LIVE = 'LIVE'
     TYPE_ACTIVITY = 'ACTIVITY'
     TYPE_OTHER = 'OTHER'
+    TYPE_MISSION = 'MISSION'
     TYPE_CHOICES = (
         (TYPE_SIGN, '登录'),
         (TYPE_SHARE, '分享'),
@@ -901,6 +902,7 @@ class ExperienceTransaction(EntityModel, UserOwnedModel):
         (TYPE_LIVE, '直播'),
         (TYPE_LIVE, '活动'),
         (TYPE_OTHER, '其他'),
+        (TYPE_MISSION, '任務'),
     )
 
     type = models.CharField(
@@ -1270,6 +1272,7 @@ class CreditCoinTransaction(AbstractTransactionModel):
     TYPE_FAMILY_MODIFY = 'FAMILY_MODIFY'
     TYPE_DAILY = 'DAILY'
     TYPE_ACTIVITY = 'ACTIVITY'
+    TYPE_MISSION = 'MISSION'
     TYPE_CHOICES = (
         (TYPE_ADMIN, '管理員發放'),
         (TYPE_LIVE_GIFT, '直播赠送'),
@@ -1280,6 +1283,7 @@ class CreditCoinTransaction(AbstractTransactionModel):
         (TYPE_FAMILY_MODIFY, '家族長修改頭銜'),
         (TYPE_DAILY, '每日签到获得'),
         (TYPE_ACTIVITY, '活动'),
+        (TYPE_MISSION, '任務'),
     )
 
     type = models.CharField(
@@ -2105,7 +2109,7 @@ class FamilyMission(UserOwnedModel,
         return datetime.now().date() > self.date_end
 
     def is_begin(self):
-        return datetime.now().date() > self.date_begin
+        return datetime.now().date() >= self.date_begin
 
 
 class FamilyMissionAchievement(UserOwnedModel):
@@ -2145,6 +2149,7 @@ class FamilyMissionAchievement(UserOwnedModel):
     prize_star_transaction = models.OneToOneField(
         verbose_name='奖励星星流水记录',
         to='CreditStarTransaction',
+        related_name='family_mission_achievement',
         null=True,
         blank=True,
     )
@@ -2160,6 +2165,15 @@ class FamilyMissionAchievement(UserOwnedModel):
     badge_record = models.OneToOneField(
         verbose_name='奖励勋章记录',
         to='BadgeRecord',
+        related_name='family_mission_achievement',
+        null=True,
+        blank=True,
+    )
+
+    experience_transaction = models.OneToOneField(
+        verbose_name='奖励經驗记录',
+        to='ExperienceTransaction',
+        related_name='family_mission_achievement',
         null=True,
         blank=True,
     )
@@ -2185,6 +2199,9 @@ class FamilyMissionAchievement(UserOwnedModel):
         """
         mission = self.mission
         mission_item = mission.mission_item
+        if datetime.now().date() > mission.date_end:
+            # 活动结束
+            return False
         # 当前完成额度
         condition_complete_count = 0
         if mission_item == FamilyMission.ITEM_WATCH_MASTER_PRIZE:
@@ -2206,8 +2223,8 @@ class FamilyMissionAchievement(UserOwnedModel):
         elif mission_item == FamilyMission.ITEM_COUNT_WATCH_LOG:
             # 累计观看数
             condition_complete_count = LiveWatchLog.objects.filter(
-                date_enter__gt=mission.date_begin,
-                date_enter__lt=mission.date_end,
+                live__date_created__gt=mission.date_begin,
+                live__date_created__lt=mission.date_end,
                 author=self.author,
             ).count()
         elif mission_item == FamilyMission.ITEM_COUNT_FOLLOWED:
@@ -2261,14 +2278,14 @@ class FamilyMissionAchievement(UserOwnedModel):
                 lives__date_created__gt=mission.date_begin,
                 lives__date_created__lt=mission.date_end,
                 lives__author=mission.family.author,
+                author=self.author,
             ).count()
         elif mission_item == FamilyMission.ITEM_COUNT_LIVE:
             # 连续开播的天数
             date_live = mission.date_begin
             continue_live_days = 0
             while date_live <= datetime.now().date():
-                if Live.objects.filter(author=self.author, date_created__date=continue_live_days).exists():
-                    # 连续登录天数
+                if Live.objects.filter(author=self.author, date_created__date=date_live).exists():
                     continue_live_days += 1
                 else:
                     continue_live_days = 0
@@ -2281,13 +2298,71 @@ class FamilyMissionAchievement(UserOwnedModel):
             condition_complete_count = PrizeOrder.objects.filter(
                 diamond_transaction__user_debit=self.author,
                 date_created__gt=mission.date_begin,
+                date_created__lt=mission.date_end,
             ).all().aggregate(amount=models.Sum("diamond_transaction__amount")).get('amount') or 0
-
         if condition_complete_count >= self.mission.mission_item_value:
             self.status = FamilyMissionAchievement.STATUS_ACHIEVE
             self.save()
             return True
         return False
+
+    def mission_achievement(self):
+        # 領取獎勵
+        # todo ibi 贡献
+        mission = self.mission
+        if mission.award_item == FamilyMission.AWARD_EXPERIENCE_POINTS:
+            # 經驗值
+            experience_transaction = ExperienceTransaction.make(self.author,
+                                                                mission.award_item_value,
+                                                                ExperienceTransaction.TYPE_MISSION)
+            experience_transaction.update_level()
+            self.experience_transaction = experience_transaction
+        # elif mission.award_item == FamilyMission.AWARD_ICOIN:
+        #     # i幣
+        elif mission.award_item == FamilyMission.AWARD_COIN:
+            # 金幣
+            coin_transaction = CreditCoinTransaction.objects.create(
+                user_debit=self.author,
+                amount=mission.award_item_value,
+                type=CreditCoinTransaction.TYPE_MISSION,
+                remark='完成家族任務獎勵',
+            )
+            self.coin_transaction = coin_transaction
+        elif mission.award_item == FamilyMission.AWARD_PRIZE:
+            # 禮物
+            prize_transaction = PrizeTransaction.objects.create(
+                user_debit=self.author,
+                amount=mission.award_item_value,
+                prize=mission.prize,
+                type=PrizeTransaction.TYPE_ACTIVITY_GAIN,
+                source_tag=PrizeTransaction.SOURCE_TAG_ACTIVITY,
+            )
+            self.prize_transaction = prize_transaction
+        # elif mission.award_item == FamilyMission.AWARD_CONTRIBUTION:
+        #     # 貢獻值
+        elif mission.award_item == FamilyMission.AWARD_BADGE:
+            # 勳章
+            if not BadgeRecord.objects.filter(
+                author=self.author,
+                badge=mission.badge
+            ).exists():
+                badge_record = BadgeRecord.objects.create(
+                    author=self.author,
+                    badge=mission.badge,
+                )
+                self.badge_record = badge_record
+        # elif mission.award_item == FamilyMission.AWARD_MARQUEE_CONTENT:
+        #     # 跑馬燈內容
+        elif mission.award_item == FamilyMission.AWARD_STAR:
+            # 元氣
+            start_transaction = CreditStarTransaction.objects.create(
+                user_debit=self.author,
+                amount=mission.award_item_value,
+                type=CreditStarTransaction.TYPE_EARNING
+            )
+            self.prize_star_transaction=start_transaction
+        self.status = FamilyMissionAchievement.STATUS_FINISH
+        self.save()
 
 
 class LiveCategory(EntityModel):
@@ -4132,7 +4207,9 @@ class Activity(EntityModel):
         elif json.loads(self.rules)['condition_code'] == '000003':
             # 累計觀看數
             condition_complete_count = LiveWatchLog.objects.filter(
-                date_enter__gt=self.date_begin,
+                # date_enter__gt=self.date_begin,
+                live__date_created__gt=self.date_begin,
+                live__date_created__lt=self.date_end,
                 author=user,
             ).count()
         elif json.loads(self.rules)['condition_code'] == '000004':

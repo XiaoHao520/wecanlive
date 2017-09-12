@@ -185,8 +185,8 @@ class MessageViewSet(viewsets.ModelViewSet):
                 family__id=family,
             ).first()
             qs = m.Message.objects.filter(families__id=family,
-                           date_created__gt=family_member.date_approved,
-                           ).order_by('date_created')
+                                          date_created__gt=family_member.date_approved,
+                                          ).order_by('date_created')
         if chat:
             qs = qs.filter(
                 m.models.Q(sender__id=chat, receiver=self.request.user) |
@@ -1881,7 +1881,7 @@ class FamilyMissionViewSet(viewsets.ModelViewSet):
                 # 已经完成任务，未领取奖励
                 return Response(data='ACHIEVE')
             else:
-                # 未完成任务
+                # 未完成任务,或者 超时
                 return Response(data='START')
         if achievement.first().status == m.FamilyMissionAchievement.STATUS_ACHIEVE:
             # 已经完成任务，未领取奖励
@@ -1889,6 +1889,19 @@ class FamilyMissionViewSet(viewsets.ModelViewSet):
         if achievement.first().status == m.FamilyMissionAchievement.STATUS_FINISH:
             # 已经领取奖励
             return Response(data='FINISH')
+        return Response(data=True)
+
+    @detail_route(methods=['POST'])
+    def achieve_mission(self, request, pk):
+        # 完成任务领取奖励
+        family_mission = m.FamilyMission.objects.get(pk=pk)
+        family_mission_achieve = m.FamilyMissionAchievement.objects.filter(
+            author=self.request.user,
+            mission=family_mission,
+            status=m.FamilyMissionAchievement.STATUS_ACHIEVE
+        )
+        assert family_mission_achieve.exists(), '錯誤：您不能領取獎勵，請稍後再試'
+        family_mission_achieve.first().mission_achievement()
         return Response(data=True)
 
 

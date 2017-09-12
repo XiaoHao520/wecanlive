@@ -768,6 +768,8 @@ class LiveSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     push_url = serializers.ReadOnlyField(source='get_push_url')
     play_url = serializers.ReadOnlyField(source='get_play_url')
 
+    end_scene_img_url = serializers.ReadOnlyField(source='end_scene_img.image.url')
+
     class Meta:
         model = m.Live
         exclude = ['comments', 'informs']
