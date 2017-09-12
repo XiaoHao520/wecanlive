@@ -708,6 +708,8 @@ class FamilyMissionSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
     is_end = serializers.ReadOnlyField()
 
+    is_begin = serializers.ReadOnlyField()
+
     class Meta:
         model = m.FamilyMission
         fields = '__all__'

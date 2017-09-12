@@ -609,50 +609,50 @@ class UserViewSet(viewsets.ModelViewSet):
             msg = vcode
         return response_success(msg)
 
-    @list_route(methods=['GET'])
-    def get_chat_list(self, request):
-        """ 获取聊天列表
-        所有和自己发过消息的人的列表
-        附加最近发布过的消息，按照从新到旧的顺序排列
-        :return:
-        """
-
-        me = request.user
-        sql = '''
-        select u.*, max(m.date_created) last_date
-        from auth_user u, core_base_message m
-        where u.id = m.author_id and m.receiver_id = %s
-          or u.id = m.receiver_id and m.author_id = %s
-        group by u.id
-        order by max(m.date_created) desc
-        '''
-
-        users = m.User.objects.raw(sql, [me.id, me.id])
-
-        data = []
-        for user in users:
-            message = m.Message.objects.filter(
-                m.models.Q(author=user, receiver=me) |
-                m.models.Q(author=me, receiver=user)
-            ).order_by('-date_created').first()
-            avatar = user.member.avatar
-            unread_count = m.Message.objects.filter(
-                author=user,
-                receiver=me,
-                is_read=False,
-            ).count()
-            data.append(dict(
-                id=user.id,
-                first_name=user.first_name,
-                last_name=user.last_name,
-                message_date=message.date_created.strftime('%Y-%m-%d %H:%M:%S'),
-                message_content='[图片]' if message.type == m.Message.TYPE_IMAGE else
-                '[商品]' if message.type == m.Message.TYPE_OBJECT else message.content,
-                avatar=avatar and avatar.image.url,
-                nickname=user.member.nickname,
-                unread_count=unread_count,
-            ))
-        return Response(data=data)
+    # @list_route(methods=['GET'])
+    # def get_chat_list(self, request):
+    #     """ 获取聊天列表
+    #     所有和自己发过消息的人的列表
+    #     附加最近发布过的消息，按照从新到旧的顺序排列
+    #     :return:
+    #     """
+    #
+    #     me = request.user
+    #     sql = '''
+    #     select u.*, max(m.date_created) last_date
+    #     from auth_user u, core_base_message m
+    #     where u.id = m.author_id and m.receiver_id = %s
+    #       or u.id = m.receiver_id and m.author_id = %s
+    #     group by u.id
+    #     order by max(m.date_created) desc
+    #     '''
+    #
+    #     users = m.User.objects.raw(sql, [me.id, me.id])
+    #
+    #     data = []
+    #     for user in users:
+    #         message = m.Message.objects.filter(
+    #             m.models.Q(author=user, receiver=me) |
+    #             m.models.Q(author=me, receiver=user)
+    #         ).order_by('-date_created').first()
+    #         avatar = user.member.avatar
+    #         unread_count = m.Message.objects.filter(
+    #             author=user,
+    #             receiver=me,
+    #             is_read=False,
+    #         ).count()
+    #         data.append(dict(
+    #             id=user.id,
+    #             first_name=user.first_name,
+    #             last_name=user.last_name,
+    #             message_date=message.date_created.strftime('%Y-%m-%d %H:%M:%S'),
+    #             message_content='[图片]' if message.type == m.Message.TYPE_IMAGE else
+    #             '[商品]' if message.type == m.Message.TYPE_OBJECT else message.content,
+    #             avatar=avatar and avatar.image.url,
+    #             nickname=user.member.nickname,
+    #             unread_count=unread_count,
+    #         ))
+    #     return Response(data=data)
 
         # users = m.User.filter(
         #     m.models.Q(messages_owned__receiver=me) |
@@ -1213,6 +1213,9 @@ class MemberViewSet(viewsets.ModelViewSet):
                 is_read=activity_message.first().is_read,
                 type='activity',
             ))
+
+        # 家族消息
+
 
         return Response(data=sorted(data, key=lambda item: item['date_created'], reverse=True))
 
@@ -1838,6 +1841,34 @@ class FamilyMissionViewSet(viewsets.ModelViewSet):
             family = m.Family.objects.get(id=family_id)
             qs = qs.filter(family=family)
         return qs
+
+    @detail_route(methods=['GET'])
+    def family_mission_achievement(self, request, pk):
+        family_mission = m.FamilyMission.objects.get(pk=pk)
+        achievement = m.FamilyMissionAchievement.objects.filter(
+            author=self.request.user,
+            mission=family_mission,
+        )
+        if not achievement.exists():
+            # 還沒領取任務
+            return Response(data='UNRECEIVED')
+
+        if achievement.first().status == m.FamilyMissionAchievement.STATUS_START:
+            # 已經領取任務，檢測是否滿足條件
+            check_mission_achievement = achievement.first().check_mission_achievement()
+            if check_mission_achievement:
+                # 已经完成任务，未领取奖励
+                return Response(data='ACHIEVE')
+            else:
+                # 未完成任务
+                return Response(data='START')
+        if achievement.first().status == m.FamilyMissionAchievement.STATUS_ACHIEVE:
+            # 已经完成任务，未领取奖励
+            return Response(data='ACHIEVE')
+        if achievement.first().status == m.FamilyMissionAchievement.STATUS_FINISH:
+            # 已经领取奖励
+            return Response(data='FINISH')
+        return Response(data=True)
 
 
 class FamilyMissionAchievementViewSet(viewsets.ModelViewSet):
