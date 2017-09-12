@@ -916,6 +916,11 @@ class ExperienceTransaction(EntityModel, UserOwnedModel):
 
     @staticmethod
     def make(author, experience, transaction_type):
+        # vip 经验值提升
+        if author.member.vip_level > 0 and Option.get('vip_rules'):
+            vip_rules = json.loads(Option.get('vip_rules'))
+            if vip_rules[author.member.vip_level - 1].get('experience_double ') > 1:
+                experience = int(experience * vip_rules[author.member.vip_level - 1].get('experience_double'))
         experience_transaction = ExperienceTransaction.objects.create(
             author=author,
             experience=experience,
@@ -2209,6 +2214,14 @@ class Live(UserOwnedModel,
 
     date_end = models.DateTimeField(
         verbose_name='结束时间',
+        null=True,
+        blank=True,
+    )
+
+    end_scene_img = models.OneToOneField(
+        verbose_name='直播结束截图',
+        to=ImageModel,
+        related_name='%(class)s',
         null=True,
         blank=True,
     )
