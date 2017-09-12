@@ -1791,6 +1791,23 @@ class FamilyMember(UserOwnedModel):
     def __str__(self):
         return '{} - {} - {}'.format(self.family.name, self.get_role_display(), self.author.member.mobile)
 
+    def save(self, *args, **kwargs):
+        """
+        自动将人加入到群组中
+        :param args:
+        :param kwargs:
+        :return:
+        """
+        super().save(*args, **kwargs)
+        if self.date_approved or self.status == FamilyMember.STATUS_APPROVED:
+            from tencent.webim import WebIM
+            webim = WebIM(settings.TENCENT_WEBIM_APPID)
+            webim.add_group_member(
+                group_id='family_{}'.format(self.family.id),
+                member_list=[dict(Member_Account=self.author.username)],
+                silence=True,
+            )
+
     def approve(self):
         # 审批通过
         self.status = FamilyMember.STATUS_APPROVED,
@@ -2153,7 +2170,7 @@ class FamilyMissionAchievement(UserOwnedModel):
             date_login = mission.date_begin
             continue_login_days = 0
             while date_login <= datetime.now().date():
-                if LoginRecord.objects.filter(author=self.author,date_login__date=date_login).exists():
+                if LoginRecord.objects.filter(author=self.author, date_login__date=date_login).exists():
                     # 连续登录天数
                     continue_login_days += 1
                 else:
@@ -2176,14 +2193,14 @@ class FamilyMissionAchievement(UserOwnedModel):
             condition_complete_count = Comment.objects.filter(
                 lives__date_created__gt=mission.date_begin,
                 lives__date_created__lt=mission.date_end,
-                lives__author = mission.family.author,
+                lives__author=mission.family.author,
             ).count()
         elif mission_item == FamilyMission.ITEM_COUNT_LIVE:
             # 连续开播的天数
             date_live = mission.date_begin
             continue_live_days = 0
             while date_live <= datetime.now().date():
-                if Live.objects.filter(author=self.author,date_created__date=continue_live_days).exists():
+                if Live.objects.filter(author=self.author, date_created__date=continue_live_days).exists():
                     # 连续登录天数
                     continue_live_days += 1
                 else:
