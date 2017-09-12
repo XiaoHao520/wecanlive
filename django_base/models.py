@@ -684,7 +684,7 @@ class Comment(HierarchicalModel,
         super().delete(*args, **kwargs)
 
     def get_activeevent_img(self):
-        if self.activeevents.first():
+        if self.activeevents.exists() and self.activeevents.first().images.exists():
             return self.activeevents.first().images.first().image.url
         else:
             return False

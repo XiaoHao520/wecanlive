@@ -178,9 +178,38 @@ class Member(AbstractMember,
         default=0,
     )
 
-    is_demote = models.BooleanField(
-        verbose_name='是否被降级',
-        default=False,
+    credit_diamond_extend = models.DecimalField(
+        verbose_name='贈送鑽石餘額',
+        decimal_places=2,
+        max_digits=18,
+        default=0,
+        help_text='每贈送累計150鑽石獎勵經驗，用以保存多出的部分用作下次累加',
+    )
+
+    debit_diamond_extend = models.DecimalField(
+        verbose_name='收禮鑽石餘額',
+        decimal_places=2,
+        max_digits=18,
+        default=0,
+        help_text='每獲贈累計150鑽石獎勵經驗，用以保存多出的部分用作下次累加',
+    )
+
+    watch_live_extend = models.IntegerField(
+        verbose_name='观看直播时长余额',
+        default=0,
+        help_text='每观看直播累计30分钟奖励经验，用以保存多出的部分用作下次累加',
+    )
+
+    live_extend = models.IntegerField(
+        verbose_name='直播擅长余额',
+        default=0,
+        help_text='每直播累计30分钟奖励经验，用以保存多出的部分下次累加',
+    )
+
+    is_first_prize = models.BooleanField(
+        verbose_name='是否首次送礼',
+        default=True,
+        help_text='当送礼时为真，则为首次送礼，享受新人经验奖励',
     )
 
     class Meta:
@@ -504,7 +533,7 @@ class Member(AbstractMember,
         獲得用戶等級
         :return:
         """
-        level_rules = json.loads(Option.get('level_rules'))
+        level_rules = json.loads(Option.get('level_rules') or '[]')
         if not level_rules:
             return 1
 
@@ -797,7 +826,8 @@ class Member(AbstractMember,
         if awards['type'] == 'experience':
             # 经验
             # self.experience += awards['value']
-            exp_transaction = ExperienceTransaction.make(self.user, awards['value'], ExperienceTransaction.TYPE_ACTIVITY)
+            exp_transaction = ExperienceTransaction.make(self.user, awards['value'],
+                                                         ExperienceTransaction.TYPE_ACTIVITY)
             exp_transaction.update_level()
             # self.save()
         if awards['type'] == 'star':
@@ -886,6 +916,11 @@ class ExperienceTransaction(EntityModel, UserOwnedModel):
 
     @staticmethod
     def make(author, experience, transaction_type):
+        # vip 经验值提升
+        if author.member.vip_level > 0 and Option.get('vip_rules'):
+            vip_rules = json.loads(Option.get('vip_rules'))
+            if vip_rules[author.member.vip_level - 1].get('experience_double ') > 1:
+                experience = int(experience * vip_rules[author.member.vip_level - 1].get('experience_double'))
         experience_transaction = ExperienceTransaction.objects.create(
             author=author,
             experience=experience,
@@ -1191,6 +1226,39 @@ class CreditDiamondTransaction(AbstractTransactionModel):
         verbose_name_plural = '钻石流水'
         db_table = 'core_credit_diamond_transaction'
 
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        rule_send = Option.get('experience_points_prize_send')
+        rule_receive = Option.get('experience_points_prize_receive')
+        if not rule_send or not rule_receive:
+            return
+        if self.type == self.TYPE_LIVE_GIFT and self.prize_orders:
+            # 处理送礼、收礼　所产生的经验
+            sender = self.prize_orders.author
+            receiver = self.user_credit
+            sender_debit_diamond_extend = sender.member.debit_diamond_extend
+            receiver_credit_diamond_extend = receiver.member.credit_diamond_extend
+            if self.amount + sender_debit_diamond_extend < 150:
+                sender.member.debit_diamond_extend += self.amount
+            else:
+                sender.member.debit_diamond_extend = (self.amount + sender_debit_diamond_extend) % 150
+                sender_experience = ExperienceTransaction.make(sender,
+                                                               rule_send * int(
+                                                                   (self.amount + sender_debit_diamond_extend) / 150),
+                                                               ExperienceTransaction.TYPE_SEND)
+                sender_experience.update_level()
+            sender.member.save()
+            if self.amount + receiver_credit_diamond_extend < 150:
+                receiver.member.credit_diamond_extend += self.amount
+            else:
+                receiver.member.credit_diamond_extend = (self.amount + receiver_credit_diamond_extend) % 150
+                receiver_experience = ExperienceTransaction.make(receiver,
+                                                                 rule_receive * int((
+                                                                                        self.amount + receiver_credit_diamond_extend) / 150),
+                                                                 ExperienceTransaction.TYPE_RECEIVE)
+                receiver_experience.update_level()
+            receiver.member.save()
+
 
 class CreditCoinTransaction(AbstractTransactionModel):
     TYPE_ADMIN = 'ADMIN'
@@ -1464,7 +1532,8 @@ class DailyCheckInLog(UserOwnedModel):
                 remark='每日签到获得',
                 type=CreditCoinTransaction.TYPE_DAILY,
             )
-        sign_exp_transaction = ExperienceTransaction.make(user, int(Option.get('experience_points_login') or 5), ExperienceTransaction.TYPE_SIGN)
+        sign_exp_transaction = ExperienceTransaction.make(user, int(Option.get('experience_points_login') or 5),
+                                                          ExperienceTransaction.TYPE_SIGN)
         sign_exp_transaction.update_level()
         daily_check = DailyCheckInLog.objects.create(
             author=user,
@@ -2018,6 +2087,9 @@ class FamilyMission(UserOwnedModel,
     def is_end(self):
         return datetime.now().date() > self.date_end
 
+    def is_begin(self):
+        return datetime.now().date() > self.date_begin
+
 
 class FamilyMissionAchievement(UserOwnedModel):
     mission = models.ForeignKey(
@@ -2089,6 +2161,117 @@ class FamilyMissionAchievement(UserOwnedModel):
 
         super().save(*args, **kwargs)
 
+    def check_mission_achievement(self):
+        """
+        检测家族任务是否已经完成
+        已经完成返回 True
+        """
+        mission = self.mission
+        mission_item = mission.mission_item
+        # 当前完成额度
+        condition_complete_count = 0
+        if mission_item == FamilyMission.ITEM_WATCH_MASTER_PRIZE:
+            # 送家族长礼物额度
+            condition_complete_count = PrizeOrder.objects.filter(
+                date_created__gt=mission.date_begin,
+                date_created__lt=mission.date_end,
+                author=self.author,
+                receiver_prize_transaction__user_debit=mission.family.author,
+            ).all().aggregate(amount=models.Sum('diamond_transaction__amount')).get('amount') or 0
+        elif mission_item == FamilyMission.ITEM_WATCH_MASTER_DURATION:
+            # 观看家族长直播时长
+            condition_complete_count = LiveWatchLog.objects.filter(
+                live__date_created__gt=mission.date_begin,
+                live__date_created__lt=mission.date_end,
+                live__author=mission.family.author,
+                author=self.author,
+            ).all().aggregate(total_duration=models.Sum('duration')).get('total_duration') or 0
+        elif mission_item == FamilyMission.ITEM_COUNT_WATCH_LOG:
+            # 累计观看数
+            condition_complete_count = LiveWatchLog.objects.filter(
+                date_enter__gt=mission.date_begin,
+                date_enter__lt=mission.date_end,
+                author=self.author,
+            ).count()
+        elif mission_item == FamilyMission.ITEM_COUNT_FOLLOWED:
+            # 陌生人追踪你的个数(粉丝)
+            condition_complete_count = UserMark.objects.filter(
+                object_id=self.author.id,
+                subject='follow',
+                content_type=ContentType.objects.get(model='member'),
+                date_created__gt=mission.date_begin,
+                date_created__lt=mission.date_end,
+            ).count()
+        elif mission_item == FamilyMission.ITEM_COUNT_FRIEND:
+            # 拥有的好友数
+            friends = User.objects.filter(
+                contacts_owned__user=self.author,
+                contacts_related__author=self.author,
+            ).all()
+            for friend in friends:
+                contact = Contact.objects.filter(
+                    models.Q(author=friend, user=self.author, timestamp__gt=mission.date_begin) |
+                    models.Q(author=self.author, user=friend, timestamp__gt=mission.date_begin)
+                ).order_by('-timestamp').exists()
+                if contact:
+                    condition_complete_count += 1
+        elif mission_item == FamilyMission.ITEM_COUNT_LOGIN:
+            # 连续登录天数
+            date_login = mission.date_begin
+            continue_login_days = 0
+            while date_login <= datetime.now().date():
+                if LoginRecord.objects.filter(author=self.author,date_login__date=date_login).exists():
+                    # 连续登录天数
+                    continue_login_days += 1
+                else:
+                    continue_login_days = 0
+                date_login += timedelta(days=1)
+                if continue_login_days == mission.mission_item_value:
+                    condition_complete_count = continue_login_days
+                    break
+        elif mission_item == FamilyMission.ITEM_COUNT_INVITE:
+            # 邀请好友注册数
+            condition_complete_count = Member.objects.filter(
+                date_created__gt=mission.date_begin,
+                referrer=self.author,
+            ).count()
+        elif mission_item == FamilyMission.ITEM_COUNT_SHARE_MASTER_LIVE:
+            # 分享家族长直播的分享数
+            condition_complete_count = 0
+        elif mission_item == FamilyMission.ITEM_COUNT_WATCH_MASTER_LIVE:
+            # 在家族长直播间的访谈数
+            condition_complete_count = Comment.objects.filter(
+                lives__date_created__gt=mission.date_begin,
+                lives__date_created__lt=mission.date_end,
+                lives__author = mission.family.author,
+            ).count()
+        elif mission_item == FamilyMission.ITEM_COUNT_LIVE:
+            # 连续开播的天数
+            date_live = mission.date_begin
+            continue_live_days = 0
+            while date_live <= datetime.now().date():
+                if Live.objects.filter(author=self.author,date_created__date=continue_live_days).exists():
+                    # 连续登录天数
+                    continue_live_days += 1
+                else:
+                    continue_live_days = 0
+                date_live += timedelta(days=1)
+                if continue_live_days == mission.mission_item_value:
+                    condition_complete_count = continue_live_days
+                    break
+        elif mission_item == FamilyMission.ITEM_COUNT_RECEIVE_DIAMOND:
+            # 收到钻石额度
+            condition_complete_count = PrizeOrder.objects.filter(
+                diamond_transaction__user_debit=self.author,
+                date_created__gt=mission.date_begin,
+            ).all().aggregate(amount=models.Sum("diamond_transaction__amount")).get('amount') or 0
+
+        if condition_complete_count >= self.mission.mission_item_value:
+            self.status = FamilyMissionAchievement.STATUS_ACHIEVE
+            self.save()
+            return True
+        return False
+
 
 class LiveCategory(EntityModel):
     class Meta:
@@ -2145,6 +2328,14 @@ class Live(UserOwnedModel,
 
     date_end = models.DateTimeField(
         verbose_name='结束时间',
+        null=True,
+        blank=True,
+    )
+
+    end_scene_img = models.OneToOneField(
+        verbose_name='直播结束截图',
+        to=ImageModel,
+        related_name='%(class)s',
         null=True,
         blank=True,
     )
@@ -2346,6 +2537,25 @@ class Live(UserOwnedModel,
             amount=models.Sum('receiver_star_index_transaction__amount')
         ).get('amount') or 0
 
+    def live_experience(self):
+        """
+        计算累计直播30分钟涨经验值
+        :return:
+        """
+        rule = Option.get('experience_points_live')
+        if not rule:
+            return
+        live_extend = self.author.member.live_extend
+        if live_extend + self.duration < 30:
+            self.author.member.live_extend = live_extend + self.duration
+            self.author.member.save()
+            return
+        live_experience = ExperienceTransaction.make(self.author, int((self.duration + live_extend) / 30) * rule,
+                                                     ExperienceTransaction.TYPE_WATCH)
+        live_experience.update_level()
+        self.author.member.live_extend = (self.duration + live_extend) % 30
+        self.author.member.save()
+
 
 class LiveBarrage(UserOwnedModel,
                   AbstractMessageModel):
@@ -2503,6 +2713,8 @@ class LiveWatchLog(UserOwnedModel,
                          (self.date_leave - self.date_enter).days * 1440 or 1
 
         self.save()
+        # 计算经验值
+        self.watch_live_experience()
 
         # 累計觀看時間
         wathch_mission_preferences = self.author.preferences.filter(key='watch_mission_time').first()
@@ -2534,6 +2746,26 @@ class LiveWatchLog(UserOwnedModel,
         for prize_order in prize_orders:
             total_price += prize_order.prize.price
         return total_price
+
+    def watch_live_experience(self):
+        """
+        计算累计观看30分钟涨经验值
+        :return:
+        """
+        rule = Option.get('experience_points_watch')
+        if not rule:
+            return
+        watch_live_extend = self.author.member.watch_live_extend
+        if watch_live_extend + self.duration < 30:
+            self.author.member.watch_live_extend = watch_live_extend + self.duration
+            self.author.member.save()
+            return
+        watch_live_experience = ExperienceTransaction.make(self.author,
+                                                           int((self.duration + watch_live_extend) / 30) * rule,
+                                                           ExperienceTransaction.TYPE_WATCH)
+        watch_live_experience.update_level()
+        self.author.member.watch_live_extend = (self.duration + watch_live_extend) % 30
+        self.author.member.save()
 
 
 class ActiveEvent(UserOwnedModel,
@@ -3166,6 +3398,24 @@ class PrizeOrder(UserOwnedModel):
         live.author.member.add_diamond_badge()
 
         return order
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        # 如果首次送礼，则享受新人福利
+        if not self.author.member.is_first_prize or not Option.get('level_rules'):
+            return
+        level_rules = json.loads(Option.get('level_rules'))
+        self.author.member.is_first_prize = False
+        self.author.member.save()
+        if self.author.member.large_level == 1 and self.author.member.small_level < 10:
+            total_exp = level_rules.get('level_1')[0].get('value') * 10
+            first_prize_exp_transaction = ExperienceTransaction.make(self.author,
+                                                                     total_exp - self.author.member.total_experience,
+                                                                     ExperienceTransaction.TYPE_OTHER)
+            self.author.member.small_level = 10
+            self.author.member.total_experience = total_exp
+            self.author.member.current_level_experience = 0
+            self.author.member.save()
 
 
 class RankRecord(UserOwnedModel):

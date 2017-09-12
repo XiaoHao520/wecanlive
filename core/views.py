@@ -610,50 +610,50 @@ class UserViewSet(viewsets.ModelViewSet):
             msg = vcode
         return response_success(msg)
 
-    @list_route(methods=['GET'])
-    def get_chat_list(self, request):
-        """ 获取聊天列表
-        所有和自己发过消息的人的列表
-        附加最近发布过的消息，按照从新到旧的顺序排列
-        :return:
-        """
-
-        me = request.user
-        sql = '''
-        select u.*, max(m.date_created) last_date
-        from auth_user u, core_base_message m
-        where u.id = m.author_id and m.receiver_id = %s
-          or u.id = m.receiver_id and m.author_id = %s
-        group by u.id
-        order by max(m.date_created) desc
-        '''
-
-        users = m.User.objects.raw(sql, [me.id, me.id])
-
-        data = []
-        for user in users:
-            message = m.Message.objects.filter(
-                m.models.Q(author=user, receiver=me) |
-                m.models.Q(author=me, receiver=user)
-            ).order_by('-date_created').first()
-            avatar = user.member.avatar
-            unread_count = m.Message.objects.filter(
-                author=user,
-                receiver=me,
-                is_read=False,
-            ).count()
-            data.append(dict(
-                id=user.id,
-                first_name=user.first_name,
-                last_name=user.last_name,
-                message_date=message.date_created.strftime('%Y-%m-%d %H:%M:%S'),
-                message_content='[图片]' if message.type == m.Message.TYPE_IMAGE else
-                '[商品]' if message.type == m.Message.TYPE_OBJECT else message.content,
-                avatar=avatar and avatar.image.url,
-                nickname=user.member.nickname,
-                unread_count=unread_count,
-            ))
-        return Response(data=data)
+    # @list_route(methods=['GET'])
+    # def get_chat_list(self, request):
+    #     """ 获取聊天列表
+    #     所有和自己发过消息的人的列表
+    #     附加最近发布过的消息，按照从新到旧的顺序排列
+    #     :return:
+    #     """
+    #
+    #     me = request.user
+    #     sql = '''
+    #     select u.*, max(m.date_created) last_date
+    #     from auth_user u, core_base_message m
+    #     where u.id = m.author_id and m.receiver_id = %s
+    #       or u.id = m.receiver_id and m.author_id = %s
+    #     group by u.id
+    #     order by max(m.date_created) desc
+    #     '''
+    #
+    #     users = m.User.objects.raw(sql, [me.id, me.id])
+    #
+    #     data = []
+    #     for user in users:
+    #         message = m.Message.objects.filter(
+    #             m.models.Q(author=user, receiver=me) |
+    #             m.models.Q(author=me, receiver=user)
+    #         ).order_by('-date_created').first()
+    #         avatar = user.member.avatar
+    #         unread_count = m.Message.objects.filter(
+    #             author=user,
+    #             receiver=me,
+    #             is_read=False,
+    #         ).count()
+    #         data.append(dict(
+    #             id=user.id,
+    #             first_name=user.first_name,
+    #             last_name=user.last_name,
+    #             message_date=message.date_created.strftime('%Y-%m-%d %H:%M:%S'),
+    #             message_content='[图片]' if message.type == m.Message.TYPE_IMAGE else
+    #             '[商品]' if message.type == m.Message.TYPE_OBJECT else message.content,
+    #             avatar=avatar and avatar.image.url,
+    #             nickname=user.member.nickname,
+    #             unread_count=unread_count,
+    #         ))
+    #     return Response(data=data)
 
         # users = m.User.filter(
         #     m.models.Q(messages_owned__receiver=me) |
@@ -1214,6 +1214,9 @@ class MemberViewSet(viewsets.ModelViewSet):
                 is_read=activity_message.first().is_read,
                 type='activity',
             ))
+
+        # 家族消息
+
 
         return Response(data=sorted(data, key=lambda item: item['date_created'], reverse=True))
 
@@ -1840,6 +1843,34 @@ class FamilyMissionViewSet(viewsets.ModelViewSet):
             qs = qs.filter(family=family)
         return qs
 
+    @detail_route(methods=['GET'])
+    def family_mission_achievement(self, request, pk):
+        family_mission = m.FamilyMission.objects.get(pk=pk)
+        achievement = m.FamilyMissionAchievement.objects.filter(
+            author=self.request.user,
+            mission=family_mission,
+        )
+        if not achievement.exists():
+            # 還沒領取任務
+            return Response(data='UNRECEIVED')
+
+        if achievement.first().status == m.FamilyMissionAchievement.STATUS_START:
+            # 已經領取任務，檢測是否滿足條件
+            check_mission_achievement = achievement.first().check_mission_achievement()
+            if check_mission_achievement:
+                # 已经完成任务，未领取奖励
+                return Response(data='ACHIEVE')
+            else:
+                # 未完成任务
+                return Response(data='START')
+        if achievement.first().status == m.FamilyMissionAchievement.STATUS_ACHIEVE:
+            # 已经完成任务，未领取奖励
+            return Response(data='ACHIEVE')
+        if achievement.first().status == m.FamilyMissionAchievement.STATUS_FINISH:
+            # 已经领取奖励
+            return Response(data='FINISH')
+        return Response(data=True)
+
 
 class FamilyMissionAchievementViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
@@ -1973,6 +2004,8 @@ class LiveViewSet(viewsets.ModelViewSet):
         live = m.Live.objects.get(pk=pk)
         live.date_end = datetime.now()
         live.save()
+        # 计算经验值
+        live.live_experience()
         return Response(data=True)
 
     @detail_route(methods=['POST'])
@@ -2364,11 +2397,11 @@ class PrizeTransactionViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return interceptor_get_queryset_kw_field(self)
 
-    # @list_route(methods=['POST'])
-    # def open_star_box(self, request):
-    #     # 观众开星光宝盒
-    #     m.PrizeTransaction.viewer_open_starbox(request.user.id)
-    #     return Response(True)
+        # @list_route(methods=['POST'])
+        # def open_star_box(self, request):
+        #     # 观众开星光宝盒
+        #     m.PrizeTransaction.viewer_open_starbox(request.user.id)
+        #     return Response(True)
 
 
 class PrizeOrderViewSet(viewsets.ModelViewSet):
@@ -3145,11 +3178,27 @@ class RechargeRecordViewSet(viewsets.ModelViewSet):
             #     注意这里的remark会在下面的 get_recharge_coin_transactions 里面使用
         )
         # 金币充值奖励流水
+        recharge_award_amount = m.CreditCoinTransaction.get_award_coin_by_product_id(productid,
+                                                                                     m.RechargeRecord.objects.filter(
+                                                                                         author=author,
+                                                                                         payment_record__product_id=productid).count() <= 1)
+        level_award_amount = 0
+        vip_award_amount = 0
+        if m.Option.get('level_rules') and m.Option.get('vip_rules'):
+            level_rules = json.loads(m.Option.get('level_rules'))
+            vip_rules = json.loads(m.Option.get('vip_rules'))
+            # 等级储值返点
+            if author.member.large_level > 1:
+                level_award_amount = int(int(level_rules.get('level_more')[author.member.large_level - 2].get(
+                    'rebate')) * m.CreditCoinTransaction.get_coin_by_product_id(productid) / 100)
+            # vip等级储值返点
+            if author.member.vip_level > 0:
+                vip_award_amount = int(vip_rules[author.member.vip_level - 1].get(
+                    'rebate') * m.CreditCoinTransaction.get_coin_by_product_id(productid) / 100)
         award_coin_transaction = m.CreditCoinTransaction.objects.create(
             type=m.CreditCoinTransaction.TYPE_RECHARGE,
             user_debit=author,
-            amount=m.CreditCoinTransaction.get_award_coin_by_product_id(productid, m.RechargeRecord.objects.filter(
-                author=author, payment_record__product_id=productid).count() <= 1),
+            amount=recharge_award_amount + level_award_amount + vip_award_amount,
             remark='充值奖励{}'.format(orderid),
             #     注意这里的remark会在下面的 get_recharge_coin_transactions 里面使用
         )

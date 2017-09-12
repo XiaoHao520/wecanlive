@@ -43,3 +43,4 @@ WE CAN LIVE 直播平台
 | 家族任务奖励元件      |  family_award_element            | JSON     | 家族任务奖励元件                 |
 | 引导页图片            |  guide_page                     | JSON     | 引导页图片                       |
 | 邀请好友金币奖励       | invite_award                    | 整数     | 奖励金币个数
+| 熱門搜索標籤           | search_hot_key                  | 文本     | 熱門搜索標籤
