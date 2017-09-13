@@ -919,7 +919,7 @@ class ExperienceTransaction(EntityModel, UserOwnedModel):
         # vip 经验值提升
         if author.member.vip_level > 0 and Option.get('vip_rules'):
             vip_rules = json.loads(Option.get('vip_rules'))
-            if vip_rules[author.member.vip_level - 1].get('experience_double ') > 1:
+            if vip_rules[author.member.vip_level - 1].get('experience_double') > 1:
                 experience = int(experience * vip_rules[author.member.vip_level - 1].get('experience_double'))
         experience_transaction = ExperienceTransaction.objects.create(
             author=author,
