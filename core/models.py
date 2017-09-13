@@ -2776,12 +2776,13 @@ class LiveWatchLog(UserOwnedModel,
         :return:
         """
         self.date_leave = datetime.now()
-        self.duration += int((self.date_leave - self.date_enter).seconds / 60) + \
-                         (self.date_leave - self.date_enter).days * 1440 or 1
+        duration_this_time = int((self.date_leave - self.date_enter).seconds / 60) + \
+                             (self.date_leave - self.date_enter).days * 1440 or 1
+        self.duration += duration_this_time
 
         self.save()
         # 计算经验值
-        self.watch_live_experience()
+        self.watch_live_experience(duration_this_time)
 
         # 累計觀看時間
         wathch_mission_preferences = self.author.preferences.filter(key='watch_mission_time').first()
@@ -2814,7 +2815,7 @@ class LiveWatchLog(UserOwnedModel,
             total_price += prize_order.prize.price
         return total_price
 
-    def watch_live_experience(self):
+    def watch_live_experience(self, duration):
         """
         计算累计观看30分钟涨经验值
         :return:
@@ -2823,15 +2824,15 @@ class LiveWatchLog(UserOwnedModel,
         if not rule:
             return
         watch_live_extend = self.author.member.watch_live_extend
-        if watch_live_extend + self.duration < 30:
-            self.author.member.watch_live_extend = watch_live_extend + self.duration
+        if watch_live_extend + duration < 30:
+            self.author.member.watch_live_extend = watch_live_extend + duration
             self.author.member.save()
             return
         watch_live_experience = ExperienceTransaction.make(self.author,
-                                                           int((self.duration + watch_live_extend) / 30) * rule,
+                                                           int((duration + watch_live_extend) / 30) * rule,
                                                            ExperienceTransaction.TYPE_WATCH)
         watch_live_experience.update_level()
-        self.author.member.watch_live_extend = (self.duration + watch_live_extend) % 30
+        self.author.member.watch_live_extend = (duration + watch_live_extend) % 30
         self.author.member.save()
 
 
