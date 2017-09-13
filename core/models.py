@@ -536,8 +536,7 @@ class Member(AbstractMember,
         level_rules = json.loads(Option.get('level_rules') or '[]')
         if not level_rules:
             return 1
-
-        return 1
+        return self.small_level
 
     def get_vip_level(self):
         """ 获取用户 VIP 等级
@@ -856,6 +855,73 @@ class Member(AbstractMember,
             experience_transaction=exp_transaction,
         )
 
+    def update_level(self):
+        """
+        更新用户的等级
+        :return:
+        """
+        large_level = self.large_level
+        small_level = self.small_level
+        current_level_exp = self.current_level_experience
+        total_experience = ExperienceTransaction.objects.filter(author=self.user).aggregate(
+            amount=models.Sum('experience')).get('amount') or 0
+        if not Option.get('level_rules'):
+            return
+        rules = json.loads(Option.get('level_rules'))
+        level1 = rules.get('level_1')[0].get('value') * 20
+        level2 = rules.get('level_1')[1].get('value') * 20 + level1
+        level3 = rules.get('level_1')[2].get('value') * 20 + level2
+        level4 = rules.get('level_1')[3].get('value') * 20 + level3
+        level5 = rules.get('level_1')[4].get('value') * 19 + level4
+        level6 = rules.get('level_more')[0].get('value') * 99 + level5
+        level7 = rules.get('level_more')[1].get('value') * 99 + level6
+        level8 = rules.get('level_more')[2].get('value') * 99 + level7
+        level9 = rules.get('level_more')[3].get('value') * 99 + level8
+        total_exp_list = [0, level1, level2, level3, level4, level5, level6, level7, level8, level9]
+        for i in range(0, 9):
+            if total_exp_list[i] <= total_experience < total_exp_list[i + 1]:
+                if i == 0:
+                    large_level = 1
+                    small_level = 1 + int(total_experience / rules.get('level_1')[0].get('value'))
+                    current_level_exp = total_experience % rules.get('level_1')[0].get('value')
+                if i == 1:
+                    large_level = 1
+                    small_level = 21 + int((total_experience - level1) / rules.get('level_1')[1].get('value'))
+                    current_level_exp = (total_experience - level1) % rules.get('level_1')[1].get('value')
+                if i == 2:
+                    large_level = 1
+                    small_level = 41 + int((total_experience - level2) / rules.get('level_1')[2].get('value'))
+                    current_level_exp = (total_experience - level2) % rules.get('level_1')[2].get('value')
+                if i == 3:
+                    large_level = 1
+                    small_level = 61 + int((total_experience - level3) / rules.get('level_1')[3].get('value'))
+                    current_level_exp = (total_experience - level3) % rules.get('level_1')[3].get('value')
+                if i == 4:
+                    large_level = 1
+                    small_level = 81 + int((total_experience - level4) / rules.get('level_1')[4].get('value'))
+                    current_level_exp = (total_experience - level4) % rules.get('level_1')[4].get('value')
+                if i == 5:
+                    large_level = 2
+                    small_level = 1 + int((total_experience - level5) / rules.get('level_more')[0].get('value'))
+                    current_level_exp = (total_experience - level5) % rules.get('level_more')[0].get('value')
+                if i == 6:
+                    large_level = 3
+                    small_level = 1 + int((total_experience - level6) / rules.get('level_more')[1].get('value'))
+                    current_level_exp = (total_experience - level6) % rules.get('level_more')[1].get('value')
+                if i == 6:
+                    large_level = 4
+                    small_level = 1 + int((total_experience - level7) / rules.get('level_more')[2].get('value'))
+                    current_level_exp = (total_experience - level7) % rules.get('level_more')[2].get('value')
+                if i == 7:
+                    large_level = 5
+                    small_level = 1 + int((total_experience - level8) / rules.get('level_more')[3].get('value'))
+                    current_level_exp = (total_experience - level8) % rules.get('level_more')[3].get('value')
+        self.small_level = small_level
+        self.large_level = large_level
+        self.total_experience = total_experience
+        self.current_level_experience = current_level_exp
+        self.save()
+
 
 class LoginRecord(UserOwnedModel):
     """
@@ -914,10 +980,13 @@ class ExperienceTransaction(EntityModel, UserOwnedModel):
         verbose_name_plural = '经验流水'
         db_table = 'core_experience_transaction'
 
+    def __str__(self):
+        return '{}:  {}'.format(self.author, self.experience)
+
     @staticmethod
-    def make(author, experience, transaction_type):
+    def make(author, experience, transaction_type, is_vip_double=True):
         # vip 经验值提升
-        if author.member.vip_level > 0 and Option.get('vip_rules'):
+        if is_vip_double and author.member.vip_level > 0 and Option.get('vip_rules'):
             vip_rules = json.loads(Option.get('vip_rules'))
             if vip_rules[author.member.vip_level - 1].get('experience_double') > 1:
                 experience = int(experience * vip_rules[author.member.vip_level - 1].get('experience_double'))
@@ -937,64 +1006,62 @@ class ExperienceTransaction(EntityModel, UserOwnedModel):
         large_level = member.large_level
         small_level = member.small_level
         current_level_exp = member.current_level_experience
-        total_exp = member.total_experience
-        total_exp += self.experience
+        total_experience = ExperienceTransaction.objects.filter(author=self.author).aggregate(
+            amount=models.Sum('experience')).get('amount') or 0
         if not Option.get('level_rules'):
             return
         rules = json.loads(Option.get('level_rules'))
-        if large_level == 1 and small_level <= 20:
-            demand = rules.get('level_1')[0].get('value')
-            if current_level_exp + self.experience >= demand:
-                current_level_exp = current_level_exp + self.experience - demand
-                small_level += 1
-            else:
-                current_level_exp += self.experience
-        elif large_level == 2 and 20 < small_level <= 40:
-            demand = rules.get('level_1')[1].get('value')
-            if current_level_exp + self.experience >= demand:
-                current_level_exp = current_level_exp + self.experience - demand
-                small_level += 1
-            else:
-                current_level_exp += self.experience
-        elif large_level == 1 and 40 < small_level <= 60:
-            demand = rules.get('level_1')[2].get('value')
-            if current_level_exp + self.experience >= demand:
-                current_level_exp = current_level_exp + self.experience - demand
-                small_level += 1
-            else:
-                current_level_exp += self.experience
-        elif large_level == 1 and 60 < small_level <= 80:
-            demand = rules.get('level_1')[3].get('value')
-            if current_level_exp + self.experience >= demand:
-                current_level_exp = current_level_exp + self.experience - demand
-                small_level += 1
-            else:
-                current_level_exp += self.experience
-        elif large_level == 1 and 80 < small_level <= 99:
-            demand = rules.get('level_1')[4].get('value')
-            if current_level_exp + self.experience >= demand and small_level == 99:
-                current_level_exp = current_level_exp + self.experience - demand
-                small_level = 1
-                large_level = 2
-            elif current_level_exp + self.experience >= demand and small_level < 99:
-                current_level_exp = current_level_exp + self.experience - demand
-                small_level += 1
-            else:
-                current_level_exp += self.experience
-        elif large_level > 1:
-            demand = rules.get('level_more')[large_level - 2].get('value')
-            if current_level_exp + self.experience >= demand and small_level == 99:
-                current_level_exp = current_level_exp + self.experience - demand
-                small_level = 1
-                large_level += 1
-            elif current_level_exp + self.experience >= demand and small_level < 99:
-                current_level_exp = current_level_exp + self.experience - demand
-                small_level += 1
-            else:
-                current_level_exp += self.experience
+        level1 = rules.get('level_1')[0].get('value') * 20
+        level2 = rules.get('level_1')[1].get('value') * 20 + level1
+        level3 = rules.get('level_1')[2].get('value') * 20 + level2
+        level4 = rules.get('level_1')[3].get('value') * 20 + level3
+        level5 = rules.get('level_1')[4].get('value') * 19 + level4
+        level6 = rules.get('level_more')[0].get('value') * 99 + level5
+        level7 = rules.get('level_more')[1].get('value') * 99 + level6
+        level8 = rules.get('level_more')[2].get('value') * 99 + level7
+        level9 = rules.get('level_more')[3].get('value') * 99 + level8
+        total_exp_list = [0, level1, level2, level3, level4, level5, level6, level7, level8, level9]
+        for i in range(0, 9):
+            if total_exp_list[i] <= total_experience < total_exp_list[i + 1]:
+                if i == 0:
+                    large_level = 1
+                    small_level = 1 + int(total_experience / rules.get('level_1')[0].get('value'))
+                    current_level_exp = total_experience % rules.get('level_1')[0].get('value')
+                if i == 1:
+                    large_level = 1
+                    small_level = 21 + int((total_experience - level1) / rules.get('level_1')[1].get('value'))
+                    current_level_exp = (total_experience - level1) % rules.get('level_1')[1].get('value')
+                if i == 2:
+                    large_level = 1
+                    small_level = 41 + int((total_experience - level2) / rules.get('level_1')[2].get('value'))
+                    current_level_exp = (total_experience - level2) % rules.get('level_1')[2].get('value')
+                if i == 3:
+                    large_level = 1
+                    small_level = 61 + int((total_experience - level3) / rules.get('level_1')[3].get('value'))
+                    current_level_exp = (total_experience - level3) % rules.get('level_1')[3].get('value')
+                if i == 4:
+                    large_level = 1
+                    small_level = 81 + int((total_experience - level4) / rules.get('level_1')[4].get('value'))
+                    current_level_exp = (total_experience - level4) % rules.get('level_1')[4].get('value')
+                if i == 5:
+                    large_level = 2
+                    small_level = 1 + int((total_experience - level5) / rules.get('level_more')[0].get('value'))
+                    current_level_exp = (total_experience - level5) % rules.get('level_more')[0].get('value')
+                if i == 6:
+                    large_level = 3
+                    small_level = 1 + int((total_experience - level6) / rules.get('level_more')[1].get('value'))
+                    current_level_exp = (total_experience - level6) % rules.get('level_more')[1].get('value')
+                if i == 6:
+                    large_level = 4
+                    small_level = 1 + int((total_experience - level7) / rules.get('level_more')[2].get('value'))
+                    current_level_exp = (total_experience - level7) % rules.get('level_more')[2].get('value')
+                if i == 7:
+                    large_level = 5
+                    small_level = 1 + int((total_experience - level8) / rules.get('level_more')[3].get('value'))
+                    current_level_exp = (total_experience - level8) % rules.get('level_more')[3].get('value')
         member.small_level = small_level
         member.large_level = large_level
-        member.total_experience = total_exp
+        member.total_experience = total_experience
         member.current_level_experience = current_level_exp
         member.save()
 
@@ -1228,8 +1295,8 @@ class CreditDiamondTransaction(AbstractTransactionModel):
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
-        rule_send = Option.get('experience_points_prize_send')
-        rule_receive = Option.get('experience_points_prize_receive')
+        rule_send = int(Option.get('experience_points_prize_send'))
+        rule_receive = int(Option.get('experience_points_prize_receive'))
         if not rule_send or not rule_receive:
             return
         if self.type == self.TYPE_LIVE_GIFT and self.prize_orders:
@@ -2220,7 +2287,7 @@ class FamilyMissionAchievement(UserOwnedModel):
             date_login = mission.date_begin
             continue_login_days = 0
             while date_login <= datetime.now().date():
-                if LoginRecord.objects.filter(author=self.author,date_login__date=date_login).exists():
+                if LoginRecord.objects.filter(author=self.author, date_login__date=date_login).exists():
                     # 连续登录天数
                     continue_login_days += 1
                 else:
@@ -2243,14 +2310,14 @@ class FamilyMissionAchievement(UserOwnedModel):
             condition_complete_count = Comment.objects.filter(
                 lives__date_created__gt=mission.date_begin,
                 lives__date_created__lt=mission.date_end,
-                lives__author = mission.family.author,
+                lives__author=mission.family.author,
             ).count()
         elif mission_item == FamilyMission.ITEM_COUNT_LIVE:
             # 连续开播的天数
             date_live = mission.date_begin
             continue_live_days = 0
             while date_live <= datetime.now().date():
-                if Live.objects.filter(author=self.author,date_created__date=continue_live_days).exists():
+                if Live.objects.filter(author=self.author, date_created__date=continue_live_days).exists():
                     # 连续登录天数
                     continue_live_days += 1
                 else:
@@ -2542,7 +2609,7 @@ class Live(UserOwnedModel,
         计算累计直播30分钟涨经验值
         :return:
         """
-        rule = Option.get('experience_points_live')
+        rule = int(Option.get('experience_points_live'))
         if not rule:
             return
         live_extend = self.author.member.live_extend
@@ -2752,7 +2819,7 @@ class LiveWatchLog(UserOwnedModel,
         计算累计观看30分钟涨经验值
         :return:
         """
-        rule = Option.get('experience_points_watch')
+        rule = int(Option.get('experience_points_watch'))
         if not rule:
             return
         watch_live_extend = self.author.member.watch_live_extend
