@@ -1476,13 +1476,20 @@ class DailyCheckInLog(UserOwnedModel):
         blank=True,
     )
 
-    coin_transaction = models.OneToOneField(
-        verbose_name='奖励金币记录',
-        to='CreditCoinTransaction',
-        related_name='daily_check_in_log',
+    prize_experience_transaction = models.OneToOneField(
+        verbose_name='奖励经验记录',
+        to='ExperienceTransaction',
         null=True,
         blank=True,
     )
+
+    # coin_transaction = models.OneToOneField(
+    #     verbose_name='奖励金币记录',
+    #     to='CreditCoinTransaction',
+    #     related_name='daily_check_in_log',
+    #     null=True,
+    #     blank=True,
+    # )
 
     is_continue = models.BooleanField(
         verbose_name='连签奖励',
@@ -1520,6 +1527,7 @@ class DailyCheckInLog(UserOwnedModel):
         continue_daily_check = None
         coin_transaction = None
         star_transaction = None
+        experience_transaction = None
         sign_exp_transaction = None
 
         if today_daily_award['type'] == 'star':
@@ -1536,13 +1544,19 @@ class DailyCheckInLog(UserOwnedModel):
                 remark='每日签到获得',
                 type=CreditCoinTransaction.TYPE_DAILY,
             )
+        elif today_daily_award['type'] == 'experience':
+            experience_transaction = ExperienceTransaction.make(user, today_daily_award['value'],
+                                                                ExperienceTransaction.TYPE_SIGN)
+        # todo: i币
+
         sign_exp_transaction = ExperienceTransaction.make(user, int(Option.get('experience_points_login') or 5),
                                                           ExperienceTransaction.TYPE_SIGN)
         sign_exp_transaction.update_level()
         daily_check = DailyCheckInLog.objects.create(
             author=user,
             prize_star_transaction=star_transaction,
-            coin_transaction=coin_transaction,
+            prize_coin_transaction=coin_transaction,
+            prize_experience_transaction=experience_transaction,
         )
 
         # 连签要求天数
@@ -1573,6 +1587,7 @@ class DailyCheckInLog(UserOwnedModel):
         if continue_success:
             continue_coin_transaction = None
             continue_star_transaction = None
+            continue_experience_transaction = None
             if continue_award['type'] == 'star':
                 continue_star_transaction = CreditStarTransaction.objects.create(
                     user_debit=user,
@@ -1587,10 +1602,16 @@ class DailyCheckInLog(UserOwnedModel):
                     remark='连续签到获得',
                     type=CreditCoinTransaction.TYPE_DAILY,
                 )
+            elif continue_award['type'] == 'experience':
+                continue_experience_transaction = ExperienceTransaction.make(user, continue_award['value'],
+                                                                             ExperienceTransaction.TYPE_SIGN)
+                continue_experience_transaction.update_level()
+            # todo i币
             continue_daily_check = DailyCheckInLog.objects.create(
                 author=user,
                 prize_star_transaction=continue_star_transaction,
-                coin_transaction=continue_coin_transaction,
+                prize_coin_transaction=continue_coin_transaction,
+                prize_experience_transaction=continue_experience_transaction,
                 is_continue=True,
             )
 
@@ -2343,8 +2364,8 @@ class FamilyMissionAchievement(UserOwnedModel):
         elif mission.award_item == FamilyMission.AWARD_BADGE:
             # 勳章
             if not BadgeRecord.objects.filter(
-                author=self.author,
-                badge=mission.badge
+                    author=self.author,
+                    badge=mission.badge
             ).exists():
                 badge_record = BadgeRecord.objects.create(
                     author=self.author,
@@ -2360,7 +2381,7 @@ class FamilyMissionAchievement(UserOwnedModel):
                 amount=mission.award_item_value,
                 type=CreditStarTransaction.TYPE_EARNING
             )
-            self.prize_star_transaction=start_transaction
+            self.prize_star_transaction = start_transaction
         self.status = FamilyMissionAchievement.STATUS_FINISH
         self.save()
 

@@ -626,6 +626,8 @@ class DailyCheckInLogSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
     star_amount = serializers.ReadOnlyField(source='prize_star_transaction.amount')
 
+    experience_amount=serializers.ReadOnlyField(source='prize_experience_transaction.experience')
+
     class Meta:
         model = m.DailyCheckInLog
         fields = '__all__'
