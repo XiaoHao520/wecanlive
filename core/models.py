@@ -608,9 +608,9 @@ class Member(AbstractMember,
         self.vip_level = level
         if date_update_vip:
             self.date_update_vip = date_update_vip
-            self.make_update_vip_plan(date_update_vip + timedelta(days=30 * level), self.id)
+            self.make_update_vip_plan(date_update_vip + timedelta(days=30 * level), self.user_id)
         elif date_update_vip == 0:
-            self.make_update_vip_plan(None, self.id)
+            self.make_update_vip_plan(None, self.user_id)
         if amount_extend:
             self.amount_extend += amount_extend
         else:
