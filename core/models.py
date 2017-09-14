@@ -2393,6 +2393,12 @@ class Live(UserOwnedModel,
         blank=True,
     )
 
+    date_replay = models.DateTimeField(
+        verbose_name='最近一次重播开始时间',
+        null=True,
+        blank=True,
+    )
+
     date_end = models.DateTimeField(
         verbose_name='结束时间',
         null=True,
@@ -2613,14 +2619,19 @@ class Live(UserOwnedModel,
         if not rule:
             return
         live_extend = self.author.member.live_extend
-        if live_extend + self.duration < 30:
-            self.author.member.live_extend = live_extend + self.duration
+        duration = 0
+        if self.date_replay:
+            duration = int((self.date_end - self.date_replay).seconds / 60) + (self.date_end - self.date_replay).days * 1440 or 1
+        else:
+            duration = self.get_duration()
+        if live_extend + duration < 30:
+            self.author.member.live_extend = live_extend + duration
             self.author.member.save()
             return
-        live_experience = ExperienceTransaction.make(self.author, int((self.duration + live_extend) / 30) * rule,
-                                                     ExperienceTransaction.TYPE_WATCH)
+        live_experience = ExperienceTransaction.make(self.author, int((duration + live_extend) / 30) * rule,
+                                                     ExperienceTransaction.TYPE_LIVE)
         live_experience.update_level()
-        self.author.member.live_extend = (self.duration + live_extend) % 30
+        self.author.member.live_extend = (duration + live_extend) % 30
         self.author.member.save()
 
 
@@ -4860,8 +4871,8 @@ class Inform(UserOwnedModel,
     def accused_person(self):
         accused_object = self.get_accused_object()
         return dict(
-            accused_id=accused_object.author.id,
-            accused_mobile=accused_object.author.member.mobile,
+            accused_id=accused_object.author.id if accused_object else None,
+            accused_mobile=accused_object.author.member.mobile if accused_object else None,
         )
 
     def accused_object_info(self):
