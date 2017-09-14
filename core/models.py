@@ -1295,8 +1295,8 @@ class CreditDiamondTransaction(AbstractTransactionModel):
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
-        rule_send = int(Option.get('experience_points_prize_send'))
-        rule_receive = int(Option.get('experience_points_prize_receive'))
+        rule_send = int(Option.get('experience_points_prize_send') or 0)
+        rule_receive = int(Option.get('experience_points_prize_receive') or 0)
         if not rule_send or not rule_receive:
             return
         if self.type == self.TYPE_LIVE_GIFT and self.prize_orders:
@@ -2615,7 +2615,7 @@ class Live(UserOwnedModel,
         计算累计直播30分钟涨经验值
         :return:
         """
-        rule = int(Option.get('experience_points_live'))
+        rule = int(Option.get('experience_points_live') or 0)
         if not rule:
             return
         live_extend = self.author.member.live_extend
@@ -2831,7 +2831,7 @@ class LiveWatchLog(UserOwnedModel,
         计算累计观看30分钟涨经验值
         :return:
         """
-        rule = int(Option.get('experience_points_watch'))
+        rule = int(Option.get('experience_points_watch') or 0)
         if not rule:
             return
         watch_live_extend = self.author.member.watch_live_extend
