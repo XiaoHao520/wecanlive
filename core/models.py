@@ -3470,7 +3470,7 @@ class PrizeOrder(UserOwnedModel):
         if self.diamond_transaction:
             # 处理送礼、收礼　所产生的经验
             sender = self.author
-            receiver = self.diamond_transaction.user_credit
+            receiver = self.diamond_transaction.user_debit
             sender_debit_diamond_extend = sender.member.debit_diamond_extend
             receiver_credit_diamond_extend = receiver.member.credit_diamond_extend
             if self.diamond_transaction.amount + sender_debit_diamond_extend < 150:
