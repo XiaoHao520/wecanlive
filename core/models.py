@@ -1293,39 +1293,6 @@ class CreditDiamondTransaction(AbstractTransactionModel):
         verbose_name_plural = '钻石流水'
         db_table = 'core_credit_diamond_transaction'
 
-    def save(self, *args, **kwargs):
-        super().save(*args, **kwargs)
-        rule_send = int(Option.get('experience_points_prize_send'))
-        rule_receive = int(Option.get('experience_points_prize_receive'))
-        if not rule_send or not rule_receive:
-            return
-        if self.type == self.TYPE_LIVE_GIFT and self.prize_orders:
-            # 处理送礼、收礼　所产生的经验
-            sender = self.prize_orders.author
-            receiver = self.user_credit
-            sender_debit_diamond_extend = sender.member.debit_diamond_extend
-            receiver_credit_diamond_extend = receiver.member.credit_diamond_extend
-            if self.amount + sender_debit_diamond_extend < 150:
-                sender.member.debit_diamond_extend += self.amount
-            else:
-                sender.member.debit_diamond_extend = (self.amount + sender_debit_diamond_extend) % 150
-                sender_experience = ExperienceTransaction.make(sender,
-                                                               rule_send * int(
-                                                                   (self.amount + sender_debit_diamond_extend) / 150),
-                                                               ExperienceTransaction.TYPE_SEND)
-                sender_experience.update_level()
-            sender.member.save()
-            if self.amount + receiver_credit_diamond_extend < 150:
-                receiver.member.credit_diamond_extend += self.amount
-            else:
-                receiver.member.credit_diamond_extend = (self.amount + receiver_credit_diamond_extend) % 150
-                receiver_experience = ExperienceTransaction.make(receiver,
-                                                                 rule_receive * int((
-                                                                                        self.amount + receiver_credit_diamond_extend) / 150),
-                                                                 ExperienceTransaction.TYPE_RECEIVE)
-                receiver_experience.update_level()
-            receiver.member.save()
-
 
 class CreditCoinTransaction(AbstractTransactionModel):
     TYPE_ADMIN = 'ADMIN'
@@ -2615,7 +2582,7 @@ class Live(UserOwnedModel,
         计算累计直播30分钟涨经验值
         :return:
         """
-        rule = int(Option.get('experience_points_live'))
+        rule = int(Option.get('experience_points_live') or 0)
         if not rule:
             return
         live_extend = self.author.member.live_extend
@@ -2831,7 +2798,7 @@ class LiveWatchLog(UserOwnedModel,
         计算累计观看30分钟涨经验值
         :return:
         """
-        rule = int(Option.get('experience_points_watch'))
+        rule = int(Option.get('experience_points_watch') or 0)
         if not rule:
             return
         watch_live_extend = self.author.member.watch_live_extend
@@ -3495,6 +3462,37 @@ class PrizeOrder(UserOwnedModel):
             self.author.member.total_experience = total_exp
             self.author.member.current_level_experience = 0
             self.author.member.save()
+
+        rule_send = int(Option.get('experience_points_prize_send') or 0)
+        rule_receive = int(Option.get('experience_points_prize_receive') or 0)
+        if not rule_send or not rule_receive:
+            return
+        if self.diamond_transaction:
+            # 处理送礼、收礼　所产生的经验
+            sender = self.author
+            receiver = self.diamond_transaction.user_credit
+            sender_debit_diamond_extend = sender.member.debit_diamond_extend
+            receiver_credit_diamond_extend = receiver.member.credit_diamond_extend
+            if self.diamond_transaction.amount + sender_debit_diamond_extend < 150:
+                sender.member.debit_diamond_extend += self.diamond_transaction.amount
+            else:
+                sender.member.debit_diamond_extend = (self.diamond_transaction.amount + sender_debit_diamond_extend) % 150
+                sender_experience = ExperienceTransaction.make(sender,
+                                                               rule_send * int(
+                                                                   (self.diamond_transaction.amount + sender_debit_diamond_extend) / 150),
+                                                               ExperienceTransaction.TYPE_SEND)
+                sender_experience.update_level()
+            sender.member.save()
+            if self.diamond_transaction.amount + receiver_credit_diamond_extend < 150:
+                receiver.member.credit_diamond_extend += self.diamond_transaction.amount
+            else:
+                receiver.member.credit_diamond_extend = (self.diamond_transaction.amount + receiver_credit_diamond_extend) % 150
+                receiver_experience = ExperienceTransaction.make(receiver,
+                                                                 rule_receive * int((
+                                                                                        self.diamond_transaction.amount + receiver_credit_diamond_extend) / 150),
+                                                                 ExperienceTransaction.TYPE_RECEIVE)
+                receiver_experience.update_level()
+            receiver.member.save()
 
 
 class RankRecord(UserOwnedModel):
