@@ -958,6 +958,7 @@ class ExperienceTransaction(EntityModel, UserOwnedModel):
     TYPE_LIVE = 'LIVE'
     TYPE_ACTIVITY = 'ACTIVITY'
     TYPE_OTHER = 'OTHER'
+    TYPE_MISSION = 'MISSION'
     TYPE_CHOICES = (
         (TYPE_SIGN, '登录'),
         (TYPE_SHARE, '分享'),
@@ -967,6 +968,7 @@ class ExperienceTransaction(EntityModel, UserOwnedModel):
         (TYPE_LIVE, '直播'),
         (TYPE_LIVE, '活动'),
         (TYPE_OTHER, '其他'),
+        (TYPE_MISSION, '任務'),
     )
 
     type = models.CharField(
@@ -1304,6 +1306,7 @@ class CreditCoinTransaction(AbstractTransactionModel):
     TYPE_FAMILY_MODIFY = 'FAMILY_MODIFY'
     TYPE_DAILY = 'DAILY'
     TYPE_ACTIVITY = 'ACTIVITY'
+    TYPE_MISSION = 'MISSION'
     TYPE_CHOICES = (
         (TYPE_ADMIN, '管理員發放'),
         (TYPE_LIVE_GIFT, '直播赠送'),
@@ -1314,6 +1317,7 @@ class CreditCoinTransaction(AbstractTransactionModel):
         (TYPE_FAMILY_MODIFY, '家族長修改頭銜'),
         (TYPE_DAILY, '每日签到获得'),
         (TYPE_ACTIVITY, '活动'),
+        (TYPE_MISSION, '任務'),
     )
 
     type = models.CharField(
@@ -1506,13 +1510,20 @@ class DailyCheckInLog(UserOwnedModel):
         blank=True,
     )
 
-    coin_transaction = models.OneToOneField(
-        verbose_name='奖励金币记录',
-        to='CreditCoinTransaction',
-        related_name='daily_check_in_log',
+    prize_experience_transaction = models.OneToOneField(
+        verbose_name='奖励经验记录',
+        to='ExperienceTransaction',
         null=True,
         blank=True,
     )
+
+    # coin_transaction = models.OneToOneField(
+    #     verbose_name='奖励金币记录',
+    #     to='CreditCoinTransaction',
+    #     related_name='daily_check_in_log',
+    #     null=True,
+    #     blank=True,
+    # )
 
     is_continue = models.BooleanField(
         verbose_name='连签奖励',
@@ -1550,6 +1561,7 @@ class DailyCheckInLog(UserOwnedModel):
         continue_daily_check = None
         coin_transaction = None
         star_transaction = None
+        experience_transaction = None
         sign_exp_transaction = None
 
         if today_daily_award['type'] == 'star':
@@ -1566,13 +1578,19 @@ class DailyCheckInLog(UserOwnedModel):
                 remark='每日签到获得',
                 type=CreditCoinTransaction.TYPE_DAILY,
             )
+        elif today_daily_award['type'] == 'experience':
+            experience_transaction = ExperienceTransaction.make(user, today_daily_award['value'],
+                                                                ExperienceTransaction.TYPE_SIGN)
+        # todo: i币
+
         sign_exp_transaction = ExperienceTransaction.make(user, int(Option.get('experience_points_login') or 5),
                                                           ExperienceTransaction.TYPE_SIGN)
         sign_exp_transaction.update_level()
         daily_check = DailyCheckInLog.objects.create(
             author=user,
             prize_star_transaction=star_transaction,
-            coin_transaction=coin_transaction,
+            prize_coin_transaction=coin_transaction,
+            prize_experience_transaction=experience_transaction,
         )
 
         # 连签要求天数
@@ -1603,6 +1621,7 @@ class DailyCheckInLog(UserOwnedModel):
         if continue_success:
             continue_coin_transaction = None
             continue_star_transaction = None
+            continue_experience_transaction = None
             if continue_award['type'] == 'star':
                 continue_star_transaction = CreditStarTransaction.objects.create(
                     user_debit=user,
@@ -1617,10 +1636,16 @@ class DailyCheckInLog(UserOwnedModel):
                     remark='连续签到获得',
                     type=CreditCoinTransaction.TYPE_DAILY,
                 )
+            elif continue_award['type'] == 'experience':
+                continue_experience_transaction = ExperienceTransaction.make(user, continue_award['value'],
+                                                                             ExperienceTransaction.TYPE_SIGN)
+                continue_experience_transaction.update_level()
+            # todo i币
             continue_daily_check = DailyCheckInLog.objects.create(
                 author=user,
                 prize_star_transaction=continue_star_transaction,
-                coin_transaction=continue_coin_transaction,
+                prize_coin_transaction=continue_coin_transaction,
+                prize_experience_transaction=continue_experience_transaction,
                 is_continue=True,
             )
 
@@ -1892,6 +1917,23 @@ class FamilyMember(UserOwnedModel):
     def __str__(self):
         return '{} - {} - {}'.format(self.family.name, self.get_role_display(), self.author.member.mobile)
 
+    def save(self, *args, **kwargs):
+        """
+        自动将人加入到群组中
+        :param args:
+        :param kwargs:
+        :return:
+        """
+        super().save(*args, **kwargs)
+        if self.date_approved or self.status == FamilyMember.STATUS_APPROVED:
+            from tencent.webim import WebIM
+            webim = WebIM(settings.TENCENT_WEBIM_APPID)
+            webim.add_group_member(
+                group_id='family_{}'.format(self.family.id),
+                member_list=[dict(Member_Account=self.author.username)],
+                silence=True,
+            )
+
     def approve(self):
         # 审批通过
         self.status = FamilyMember.STATUS_APPROVED,
@@ -2122,7 +2164,7 @@ class FamilyMission(UserOwnedModel,
         return datetime.now().date() > self.date_end
 
     def is_begin(self):
-        return datetime.now().date() > self.date_begin
+        return datetime.now().date() >= self.date_begin
 
 
 class FamilyMissionAchievement(UserOwnedModel):
@@ -2162,6 +2204,7 @@ class FamilyMissionAchievement(UserOwnedModel):
     prize_star_transaction = models.OneToOneField(
         verbose_name='奖励星星流水记录',
         to='CreditStarTransaction',
+        related_name='family_mission_achievement',
         null=True,
         blank=True,
     )
@@ -2177,6 +2220,15 @@ class FamilyMissionAchievement(UserOwnedModel):
     badge_record = models.OneToOneField(
         verbose_name='奖励勋章记录',
         to='BadgeRecord',
+        related_name='family_mission_achievement',
+        null=True,
+        blank=True,
+    )
+
+    experience_transaction = models.OneToOneField(
+        verbose_name='奖励經驗记录',
+        to='ExperienceTransaction',
+        related_name='family_mission_achievement',
         null=True,
         blank=True,
     )
@@ -2202,6 +2254,9 @@ class FamilyMissionAchievement(UserOwnedModel):
         """
         mission = self.mission
         mission_item = mission.mission_item
+        if datetime.now().date() > mission.date_end:
+            # 活动结束
+            return False
         # 当前完成额度
         condition_complete_count = 0
         if mission_item == FamilyMission.ITEM_WATCH_MASTER_PRIZE:
@@ -2223,8 +2278,8 @@ class FamilyMissionAchievement(UserOwnedModel):
         elif mission_item == FamilyMission.ITEM_COUNT_WATCH_LOG:
             # 累计观看数
             condition_complete_count = LiveWatchLog.objects.filter(
-                date_enter__gt=mission.date_begin,
-                date_enter__lt=mission.date_end,
+                live__date_created__gt=mission.date_begin,
+                live__date_created__lt=mission.date_end,
                 author=self.author,
             ).count()
         elif mission_item == FamilyMission.ITEM_COUNT_FOLLOWED:
@@ -2278,14 +2333,14 @@ class FamilyMissionAchievement(UserOwnedModel):
                 lives__date_created__gt=mission.date_begin,
                 lives__date_created__lt=mission.date_end,
                 lives__author=mission.family.author,
+                author=self.author,
             ).count()
         elif mission_item == FamilyMission.ITEM_COUNT_LIVE:
             # 连续开播的天数
             date_live = mission.date_begin
             continue_live_days = 0
             while date_live <= datetime.now().date():
-                if Live.objects.filter(author=self.author, date_created__date=continue_live_days).exists():
-                    # 连续登录天数
+                if Live.objects.filter(author=self.author, date_created__date=date_live).exists():
                     continue_live_days += 1
                 else:
                     continue_live_days = 0
@@ -2298,13 +2353,71 @@ class FamilyMissionAchievement(UserOwnedModel):
             condition_complete_count = PrizeOrder.objects.filter(
                 diamond_transaction__user_debit=self.author,
                 date_created__gt=mission.date_begin,
+                date_created__lt=mission.date_end,
             ).all().aggregate(amount=models.Sum("diamond_transaction__amount")).get('amount') or 0
-
         if condition_complete_count >= self.mission.mission_item_value:
             self.status = FamilyMissionAchievement.STATUS_ACHIEVE
             self.save()
             return True
         return False
+
+    def mission_achievement(self):
+        # 領取獎勵
+        # todo ibi 贡献
+        mission = self.mission
+        if mission.award_item == FamilyMission.AWARD_EXPERIENCE_POINTS:
+            # 經驗值
+            experience_transaction = ExperienceTransaction.make(self.author,
+                                                                mission.award_item_value,
+                                                                ExperienceTransaction.TYPE_MISSION)
+            experience_transaction.update_level()
+            self.experience_transaction = experience_transaction
+        # elif mission.award_item == FamilyMission.AWARD_ICOIN:
+        #     # i幣
+        elif mission.award_item == FamilyMission.AWARD_COIN:
+            # 金幣
+            coin_transaction = CreditCoinTransaction.objects.create(
+                user_debit=self.author,
+                amount=mission.award_item_value,
+                type=CreditCoinTransaction.TYPE_MISSION,
+                remark='完成家族任務獎勵',
+            )
+            self.coin_transaction = coin_transaction
+        elif mission.award_item == FamilyMission.AWARD_PRIZE:
+            # 禮物
+            prize_transaction = PrizeTransaction.objects.create(
+                user_debit=self.author,
+                amount=mission.award_item_value,
+                prize=mission.prize,
+                type=PrizeTransaction.TYPE_ACTIVITY_GAIN,
+                source_tag=PrizeTransaction.SOURCE_TAG_ACTIVITY,
+            )
+            self.prize_transaction = prize_transaction
+        # elif mission.award_item == FamilyMission.AWARD_CONTRIBUTION:
+        #     # 貢獻值
+        elif mission.award_item == FamilyMission.AWARD_BADGE:
+            # 勳章
+            if not BadgeRecord.objects.filter(
+                    author=self.author,
+                    badge=mission.badge
+            ).exists():
+                badge_record = BadgeRecord.objects.create(
+                    author=self.author,
+                    badge=mission.badge,
+                )
+                self.badge_record = badge_record
+        # elif mission.award_item == FamilyMission.AWARD_MARQUEE_CONTENT:
+        #     # 跑馬燈內容
+        elif mission.award_item == FamilyMission.AWARD_STAR:
+            # 元氣
+            start_transaction = CreditStarTransaction.objects.create(
+                user_debit=self.author,
+                amount=mission.award_item_value,
+                type=CreditStarTransaction.TYPE_EARNING
+            )
+            self.prize_star_transaction = start_transaction
+        self.status = FamilyMissionAchievement.STATUS_FINISH
+        self.save()
 
 
 class LiveCategory(EntityModel):
@@ -2423,14 +2536,17 @@ class Live(UserOwnedModel,
 
     def save(self, *args, **kwargs):
         from django_base.middleware import get_request
-        user = get_request().user
-        if user.is_staff and self.id and not self.is_del:
-            super().save(*args, **kwargs)
-            AdminLog.make(user, AdminLog.TYPE_UPDATE, self, '修改直播')
-        elif user.is_staff and not self.is_del:
-            super().save(*args, **kwargs)
-            AdminLog.make(user, AdminLog.TYPE_CREATE, self, '新增直播')
-        else:
+        try:
+            user = get_request().user
+            if user.is_staff and self.id and not self.is_del:
+                super().save(*args, **kwargs)
+                AdminLog.make(user, AdminLog.TYPE_UPDATE, self, '修改直播')
+            elif user.is_staff and not self.is_del:
+                super().save(*args, **kwargs)
+                AdminLog.make(user, AdminLog.TYPE_CREATE, self, '新增直播')
+            else:
+                super().save(*args, **kwargs)
+        except Exception as e:
             super().save(*args, **kwargs)
         # WebIM 建群
         from tencent.webim import WebIM
@@ -2600,6 +2716,32 @@ class Live(UserOwnedModel,
         live_experience.update_level()
         self.author.member.live_extend = (duration + live_extend) % 30
         self.author.member.save()
+
+    def update_hot_rating(self):
+        """
+        更新直播间的热门排行分数
+        每15分钟更新一次
+        """
+        # if self.date_end:
+        #     return
+        # todo: 直播分享数
+        watchlog_count = self.watch_logs.filter(
+            models.Q(date_leave=None) |
+            models.Q(date_leave__lt=models.F('date_enter'))
+        ).count()
+        barrage_count = self.barrages.count()
+        comment_count = Comment.objects.filter(livewatchlogs__live=self, ).count()
+        vip4_member_count = self.watch_logs.filter(author__member__vip_level=4).count()
+        vip5_member_count = self.watch_logs.filter(author__member__vip_level=5).count()
+        vip6_member_count = self.watch_logs.filter(author__member__vip_level=6).count()
+        vip7_member_count = self.watch_logs.filter(author__member__vip_level=7).count()
+        vip8_member_count = self.watch_logs.filter(author__member__vip_level=8).count()
+        vip9_member_count = self.watch_logs.filter(author__member__vip_level=9).count()
+        self.hot_rating = watchlog_count * 1 + barrage_count * 0.2 + comment_count * 0.2 \
+                          + vip4_member_count * 10 + vip5_member_count * 15 + vip6_member_count * 20 \
+                          + vip7_member_count * 25 + vip8_member_count * 30 + vip9_member_count * 35 \
+                          + float(self.get_live_diamond())
+        self.save()
 
 
 class LiveBarrage(UserOwnedModel,
@@ -4192,7 +4334,9 @@ class Activity(EntityModel):
         elif json.loads(self.rules)['condition_code'] == '000003':
             # 累計觀看數
             condition_complete_count = LiveWatchLog.objects.filter(
-                date_enter__gt=self.date_begin,
+                # date_enter__gt=self.date_begin,
+                live__date_created__gt=self.date_begin,
+                live__date_created__lt=self.date_end,
                 author=user,
             ).count()
         elif json.loads(self.rules)['condition_code'] == '000004':

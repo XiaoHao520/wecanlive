@@ -271,6 +271,8 @@ class UserDetailedSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     avatar_url = serializers.ReadOnlyField(source="member.avatar.image.url")
     signature = serializers.ReadOnlyField(source="member.signature")
 
+    mobile = serializers.ReadOnlyField(source='member.mobile')
+
     diamond_balance = serializers.ReadOnlyField(source='member.get_diamond_balance')
     coin_balance = serializers.ReadOnlyField(source='member.get_coin_balance')
     star_balance = serializers.ReadOnlyField(source='member.get_star_balance')
@@ -622,9 +624,11 @@ class BadgeRecordSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
 
 class DailyCheckInLogSerializer(QueryFieldsMixin, serializers.ModelSerializer):
-    coin_amount = serializers.ReadOnlyField(source='coin_transaction.amount')
+    coin_amount = serializers.ReadOnlyField(source='prize_coin_transaction.amount')
 
     star_amount = serializers.ReadOnlyField(source='prize_star_transaction.amount')
+
+    experience_amount = serializers.ReadOnlyField(source='prize_experience_transaction.experience')
 
     class Meta:
         model = m.DailyCheckInLog
@@ -767,6 +771,8 @@ class LiveSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
     push_url = serializers.ReadOnlyField(source='get_push_url')
     play_url = serializers.ReadOnlyField(source='get_play_url')
+
+    end_scene_img_url = serializers.ReadOnlyField(source='end_scene_img.image.url')
 
     class Meta:
         model = m.Live

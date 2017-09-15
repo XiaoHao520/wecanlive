@@ -180,7 +180,13 @@ class MessageViewSet(viewsets.ModelViewSet):
         target = self.request.query_params.get('target')
 
         if family:
-            qs = qs.filter(families__id=family).order_by('date_created')
+            family_member = m.FamilyMember.objects.filter(
+                author=self.request.user,
+                family__id=family,
+            ).first()
+            qs = m.Message.objects.filter(families__id=family,
+                                          date_created__gt=family_member.date_approved,
+                                          ).order_by('date_created')
         if chat:
             qs = qs.filter(
                 m.models.Q(sender__id=chat, receiver=self.request.user) |
@@ -649,50 +655,50 @@ class UserViewSet(viewsets.ModelViewSet):
             msg = vcode
         return response_success(msg)
 
-    # @list_route(methods=['get'])
-    # def get_chat_list(self, request):
-    #     """ 获取聊天列表
-    #     所有和自己发过消息的人的列表
-    #     附加最近发布过的消息，按照从新到旧的顺序排列
-    #     :return:
-    #     """
-    #
-    #     me = request.user
-    #     sql = '''
-    #     select u.*, max(m.date_created) last_date
-    #     from auth_user u, core_base_message m
-    #     where u.id = m.author_id and m.receiver_id = %s
-    #       or u.id = m.receiver_id and m.author_id = %s
-    #     group by u.id
-    #     order by max(m.date_created) desc
-    #     '''
-    #
-    #     users = m.user.objects.raw(sql, [me.id, me.id])
-    #
-    #     data = []
-    #     for user in users:
-    #         message = m.message.objects.filter(
-    #             m.models.q(author=user, receiver=me) |
-    #             m.models.q(author=me, receiver=user)
-    #         ).order_by('-date_created').first()
-    #         avatar = user.member.avatar
-    #         unread_count = m.message.objects.filter(
-    #             author=user,
-    #             receiver=me,
-    #             is_read=false,
-    #         ).count()
-    #         data.append(dict(
-    #             id=user.id,
-    #             first_name=user.first_name,
-    #             last_name=user.last_name,
-    #             message_date=message.date_created.strftime('%y-%m-%d %h:%m:%s'),
-    #             message_content='[图片]' if message.type == m.message.type_image else
-    #             '[商品]' if message.type == m.message.type_object else message.content,
-    #             avatar=avatar and avatar.image.url,
-    #             nickname=user.member.nickname,
-    #             unread_count=unread_count,
-    #         ))
-    #     return response(data=data)
+        # @list_route(methods=['GET'])
+        # def get_chat_list(self, request):
+        #     """ 获取聊天列表
+        #     所有和自己发过消息的人的列表
+        #     附加最近发布过的消息，按照从新到旧的顺序排列
+        #     :return:
+        #     """
+        #
+        #     me = request.user
+        #     sql = '''
+        #     select u.*, max(m.date_created) last_date
+        #     from auth_user u, core_base_message m
+        #     where u.id = m.author_id and m.receiver_id = %s
+        #       or u.id = m.receiver_id and m.author_id = %s
+        #     group by u.id
+        #     order by max(m.date_created) desc
+        #     '''
+        #
+        #     users = m.User.objects.raw(sql, [me.id, me.id])
+        #
+        #     data = []
+        #     for user in users:
+        #         message = m.Message.objects.filter(
+        #             m.models.Q(author=user, receiver=me) |
+        #             m.models.Q(author=me, receiver=user)
+        #         ).order_by('-date_created').first()
+        #         avatar = user.member.avatar
+        #         unread_count = m.Message.objects.filter(
+        #             author=user,
+        #             receiver=me,
+        #             is_read=False,
+        #         ).count()
+        #         data.append(dict(
+        #             id=user.id,
+        #             first_name=user.first_name,
+        #             last_name=user.last_name,
+        #             message_date=message.date_created.strftime('%Y-%m-%d %H:%M:%S'),
+        #             message_content='[图片]' if message.type == m.Message.TYPE_IMAGE else
+        #             '[商品]' if message.type == m.Message.TYPE_OBJECT else message.content,
+        #             avatar=avatar and avatar.image.url,
+        #             nickname=user.member.nickname,
+        #             unread_count=unread_count,
+        #         ))
+        #     return Response(data=data)
 
         # users = m.user.filter(
         #     m.models.q(messages_owned__receiver=me) |
@@ -1203,7 +1209,7 @@ class MemberViewSet(viewsets.ModelViewSet):
                 id=user.id,
                 nickname=user.member.nickname,
                 date_created=message.date_created,
-                message_countent=message.content,
+                message_countent='[禮物表情]' if message.type == m.Message.TYPE_IMAGE else message.content,
                 avatar=s.ImageSerializer(user.member.avatar).data['image'],
                 type='chat'
             ))
@@ -1270,7 +1276,22 @@ class MemberViewSet(viewsets.ModelViewSet):
             ))
 
         # 家族消息
-
+        family_members = m.FamilyMember.objects.filter(
+            author=self.request.user,
+        ).all()
+        for family_member in family_members:
+            if family_member.family.messages.exists():
+                last_message = family_member.family.messages.filter(
+                    date_created__gt=family_member.date_approved,
+                ).order_by('-date_created').first()
+                data.append(dict(
+                    id=family_member.family.id,
+                    nickname=family_member.family.name,
+                    date_created=last_message.date_created,
+                    message_countent=last_message.content,
+                    avatar=s.ImageSerializer(family_member.family.logo).data['image'],
+                    type='family'
+                ))
 
         return Response(data=sorted(data, key=lambda item: item['date_created'], reverse=True))
 
@@ -1287,8 +1308,15 @@ class MemberViewSet(viewsets.ModelViewSet):
     @list_route(methods=['POST'])
     def set_member_blacklist(self, request):
         member = m.User.objects.get(id=request.data.get('member')).member
+        assert not member.user == self.request.user, '不能添加自己封鎖清單'
+        user_mark = m.UserMark.objects.filter(
+            author=self.request.user,
+            subject='blacklist',
+            object_id=member.user.id,
+        ).exists()
         is_black = False
         if request.data.get('is_black') and request.data.get('is_black') == '1':
+            assert not user_mark, '該用戶已經在你的封鎖清單中'
             is_black = True
         member.set_blacklist_by(self.request.user, is_black)
         return Response(data=True)
@@ -1319,69 +1347,27 @@ class MemberViewSet(viewsets.ModelViewSet):
                 content=system_message.first().content,
                 is_read=system_message.first().is_read,
             )
-            # 最新活動信息
-            # activity_message = m.Message.objects.filter(
-            #     sender=None,
-            #     receiver=self.request.user,
-            #     broadcast__target=m.Broadcast.TARGET_ACTIVITY,
-            # ).order_by('-date_created')
-            # last_active_message = None
-            # if activity_message.exists():
-            #     last_active_message = dict(
-            #         date_created=activity_message.first().date_created,
-            #         content=activity_message.first().content,
-            #         is_read=activity_message.first().is_read,
-
-            # )
-        # # 最新动态通知
-        # last_activeevent_message = None
-        # like_usermark_date = None
-        # active_comment_date = None
-        # activeevents = self.request.user.activeevents_owned.all()
-        # like_usermark = m.UserMark.objects.filter(
-        #     object_id__in=[activeevent.id for activeevent in activeevents],
-        #     subject='like',
-        #     content_type=m.ContentType.objects.get(model='activeevent'),
-        # ).order_by('-date_created').first()
-        # active_comment = m.Comment.objects.filter(
-        #     activeevents__id__in=[activeevent.id for activeevent in activeevents],
-        # ).order_by('-date_created').first()
-        # if like_usermark:
-        #     like_usermark_date = like_usermark.date_created
-        # if active_comment:
-        #     active_comment_date = active_comment.date_created
-        #
-        # if active_comment_date and active_comment_date > like_usermark_date:
-        #     last_activeevent_message = dict(
-        #         date_created=active_comment.date_created,
-        #         content=active_comment.content,
-        #         is_read=True,
-        #     )
-        # else:
-        #     last_activeevent_message = dict(
-        #         date_created=like_usermark.date_created,
-        #         content='{}給你點了一個贊'.format(like_usermark.author.member.nickname),
-        #         is_read=True,
-        #     )
-
-        # # 最新跟踪信息
-        # follow_user_mark = m.UserMark.objects.filter(
-        #     object_id=self.request.user.id,
-        #     subject='follow',
-        #     content_type=m.ContentType.objects.get(model='member')
-        # ).order_by('-date_created')
-        # last_follow_message = None
-        # if follow_user_mark.exists():
-        #     last_follow_message = dict(
-        #         date_created=follow_user_mark.first().date_created,
-        #         content='{}.追蹤了你'.format(follow_user_mark.first().author.member.nickname),
-        #         is_read=True,
-        #     )
         return Response(data=last_system_message)
 
     @list_route(methods=['GET'])
     def get_prize_emoji(self, request):
-        return Response(data=True)
+        # 送过礼物的礼物分类
+        prize_categorys = m.PrizeCategory.objects.filter(
+            prizes__orders__sender_prize_transaction__user_credit=self.request.user,
+            prizes__date_sticker_begin__lte=datetime.now().date(),
+            prizes__date_sticker_end__gte=datetime.now().date(),
+        ).distinct()
+        data = dict()
+        for category in prize_categorys:
+            prizes = m.Prize.objects.filter(
+                orders__sender_prize_transaction__user_credit=self.request.user,
+                date_sticker_begin__lte=datetime.now().date(),
+                date_sticker_end__gte=datetime.now().date(),
+                category=category,
+            ).distinct()
+            data[category.name] = [s.ImageSerializer(prize.stickers.first()).data for prize in prizes]
+
+        return Response(data=data)
 
     @list_route(methods=['GET'])
     def check_view_member(self, request):
@@ -1583,7 +1569,8 @@ class MemberViewSet(viewsets.ModelViewSet):
         if not code_type:
             return
         if code_type == 'member':
-            member = m.Member.objects.get(user=id)
+            print(id)
+            member = m.Member.objects.get(user=int(id))
             if member.qrcode:
                 return Response(data=member.qrcode.url())
         if code_type == 'family':
@@ -1915,7 +1902,7 @@ class FamilyMissionViewSet(viewsets.ModelViewSet):
                 # 已经完成任务，未领取奖励
                 return Response(data='ACHIEVE')
             else:
-                # 未完成任务
+                # 未完成任务,或者 超时
                 return Response(data='START')
         if achievement.first().status == m.FamilyMissionAchievement.STATUS_ACHIEVE:
             # 已经完成任务，未领取奖励
@@ -1923,6 +1910,19 @@ class FamilyMissionViewSet(viewsets.ModelViewSet):
         if achievement.first().status == m.FamilyMissionAchievement.STATUS_FINISH:
             # 已经领取奖励
             return Response(data='FINISH')
+        return Response(data=True)
+
+    @detail_route(methods=['POST'])
+    def achieve_mission(self, request, pk):
+        # 完成任务领取奖励
+        family_mission = m.FamilyMission.objects.get(pk=pk)
+        family_mission_achieve = m.FamilyMissionAchievement.objects.filter(
+            author=self.request.user,
+            mission=family_mission,
+            status=m.FamilyMissionAchievement.STATUS_ACHIEVE
+        )
+        assert family_mission_achieve.exists(), '錯誤：您不能領取獎勵，請稍後再試'
+        family_mission_achieve.first().mission_achievement()
         return Response(data=True)
 
 
@@ -1955,7 +1955,8 @@ class LiveViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.Live.objects.all()
     serializer_class = s.LiveSerializer
-    ordering = ['-pk']
+
+    # ordering = ['-pk']
 
     def get_queryset(self):
         qs = interceptor_get_queryset_kw_field(self)
@@ -1966,6 +1967,9 @@ class LiveViewSet(viewsets.ModelViewSet):
         down_liveing = self.request.query_params.get('down_liveing')
 
         id_not_in = self.request.query_params.get('id_not_in')
+
+        hot_live = self.request.query_params.get('hot_live')
+        hot_replay = self.request.query_params.get('hot_replay')
 
         if member_id:
             member = m.Member.objects.filter(
@@ -2007,6 +2011,10 @@ class LiveViewSet(viewsets.ModelViewSet):
             id_list = [int(x) for x in id_not_in.split(',') if x]
             qs = qs.exclude(pk__in=id_list)
 
+        if hot_live:
+            qs = m.Live.objects.filter(date_end=None).order_by('-hot_rating')
+        if hot_replay:
+            qs = m.Live.objects.exclude(date_end=None).order_by('-hot_rating')
         return qs
 
     @detail_route(methods=['POST'])
@@ -2211,6 +2219,17 @@ class LiveViewSet(viewsets.ModelViewSet):
         live.save()
         return Response(data=True)
 
+    @detail_route(methods=['GET'])
+    def get_real_quota(self, request, pk):
+        """
+        获得直播间实时人数
+        """
+        live = m.Live.objects.get(pk=pk)
+        count = m.LiveWatchLog.objects.filter(
+            m.models.Q(live=live, date_leave=None) |
+            m.models.Q(live=live, date_leave__lt=m.models.F('date_enter'))
+        ).count()
+        return Response(data=count)
 
 class LiveBarrageViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
