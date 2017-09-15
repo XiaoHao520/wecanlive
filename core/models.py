@@ -2496,14 +2496,17 @@ class Live(UserOwnedModel,
 
     def save(self, *args, **kwargs):
         from django_base.middleware import get_request
-        user = get_request().user
-        if user.is_staff and self.id and not self.is_del:
-            super().save(*args, **kwargs)
-            AdminLog.make(user, AdminLog.TYPE_UPDATE, self, '修改直播')
-        elif user.is_staff and not self.is_del:
-            super().save(*args, **kwargs)
-            AdminLog.make(user, AdminLog.TYPE_CREATE, self, '新增直播')
-        else:
+        try:
+            user = get_request().user
+            if user.is_staff and self.id and not self.is_del:
+                super().save(*args, **kwargs)
+                AdminLog.make(user, AdminLog.TYPE_UPDATE, self, '修改直播')
+            elif user.is_staff and not self.is_del:
+                super().save(*args, **kwargs)
+                AdminLog.make(user, AdminLog.TYPE_CREATE, self, '新增直播')
+            else:
+                super().save(*args, **kwargs)
+        except Exception as e:
             super().save(*args, **kwargs)
         # WebIM 建群
         from tencent.webim import WebIM
@@ -2668,6 +2671,32 @@ class Live(UserOwnedModel,
         live_experience.update_level()
         self.author.member.live_extend = (self.duration + live_extend) % 30
         self.author.member.save()
+
+    def update_hot_rating(self):
+        """
+        更新直播间的热门排行分数
+        每15分钟更新一次
+        """
+        # if self.date_end:
+        #     return
+        # todo: 直播分享数
+        watchlog_count = self.watch_logs.filter(
+            models.Q(date_leave=None) |
+            models.Q(date_leave__lt=models.F('date_enter'))
+        ).count()
+        barrage_count = self.barrages.count()
+        comment_count = Comment.objects.filter(livewatchlogs__live=self, ).count()
+        vip4_member_count = self.watch_logs.filter(author__member__vip_level=4).count()
+        vip5_member_count = self.watch_logs.filter(author__member__vip_level=5).count()
+        vip6_member_count = self.watch_logs.filter(author__member__vip_level=6).count()
+        vip7_member_count = self.watch_logs.filter(author__member__vip_level=7).count()
+        vip8_member_count = self.watch_logs.filter(author__member__vip_level=8).count()
+        vip9_member_count = self.watch_logs.filter(author__member__vip_level=9).count()
+        self.hot_rating = watchlog_count * 1 + barrage_count * 0.2 + comment_count * 0.2 \
+                          + vip4_member_count * 10 + vip5_member_count * 15 + vip6_member_count * 20 \
+                          + vip7_member_count * 25 + vip8_member_count * 30 + vip9_member_count * 35 \
+                          + float(self.get_live_diamond())
+        self.save()
 
 
 class LiveBarrage(UserOwnedModel,

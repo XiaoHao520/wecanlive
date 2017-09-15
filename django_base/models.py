@@ -1635,7 +1635,7 @@ class PlannedTask(models.Model):
     def settle_activity():
         from core.models import Activity
         for activity in Activity.objects.filter(
-            is_settle=False,
+                is_settle=False,
         ).all():
             activity.settle()
 
@@ -1663,6 +1663,12 @@ class PlannedTask(models.Model):
         # 如果降到没有vip等级，切超过一个月，则删除计划任务
         else:
             planned_task.delete()
+
+    @staticmethod
+    def update_live_hot_ranking():
+        from core.models import Live
+        for live in Live.objects.all():
+            live.update_hot_rating()
 
 
 class AdminLog(UserOwnedModel):
