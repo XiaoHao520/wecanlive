@@ -12,8 +12,8 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RemoveField(
-            model_name='activeevent',
-            name='like_count',
-        ),
+        # migrations.RemoveField(
+        #     model_name='activeevent',
+        #     name='like_count',
+        # ),
     ]

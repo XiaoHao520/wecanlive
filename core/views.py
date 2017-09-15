@@ -469,6 +469,18 @@ class UserViewSet(viewsets.ModelViewSet):
 
         login(request, user)
 
+        # 单点登录处理
+        if hasattr(user, 'member'):
+            member = user.member
+            session_key = request.session.session_key
+            # 这说明这个用户已经在其他地方登录过
+            if member.session_key and session_key != member.session_key:
+                from django.contrib.sessions.models import Session
+                # 删除 Session 使原来的登录失效
+                Session.objects.filter(session_key=member.session_key).delete()
+            member.session_key = session_key
+            member.save()
+
         return Response(
             data=s.UserDetailedSerializer(user).data
         )
@@ -507,6 +519,19 @@ class UserViewSet(viewsets.ModelViewSet):
         #                     '管理员用户【{}】登录了系统'.format(request.user.username))
 
         login(request, user)
+
+        # 单点登录处理
+        if hasattr(user, 'member'):
+            member = user.member
+            session_key = request.session.session_key
+            # 这说明这个用户已经在其他地方登录过
+            if member.session_key and session_key != member.session_key:
+                from django.contrib.sessions.models import Session
+                # 删除 Session 使原来的登录失效
+                Session.objects.filter(session_key=member.session_key).delete()
+            member.session_key = session_key
+            member.save()
+
         m.LoginRecord.make(user)
 
         return Response(
@@ -578,6 +603,20 @@ class UserViewSet(viewsets.ModelViewSet):
             username=user.username,
             password=password_new,
         ))
+
+        # 单点登录处理
+        if hasattr(user, 'member'):
+            member = user.member
+            session_key = request.session.session_key
+            # 这说明这个用户已经在其他地方登录过
+            if member.session_key and session_key != member.session_key:
+                from django.contrib.sessions.models import Session
+                # 删除 Session 使原来的登录失效
+                Session.objects.filter(session_key=member.session_key).delete()
+            member.session_key = session_key
+            member.save()
+
+        m.LoginRecord.make(user)
 
         return response_success('密码修改成功')
 
@@ -660,22 +699,22 @@ class UserViewSet(viewsets.ModelViewSet):
         #         ))
         #     return Response(data=data)
 
-        # users = m.User.filter(
-        #     m.models.Q(messages_owned__receiver=me) |
-        #     m.models.Q(messages_received__author=me)
+        # users = m.user.filter(
+        #     m.models.q(messages_owned__receiver=me) |
+        #     m.models.q(messages_received__author=me)
         # ).annotate(
         #     last_time_sent=max(
-        #         m.models.Max('messages_owned__date_created'),
+        #         m.models.max('messages_owned__date_created'),
         #     ),
         #     last_time_received=max(
-        #         m.models.Max('messages_received__date_created'),
+        #         m.models.max('messages_received__date_created'),
         #     ),
         #
         #     )
         # )
         #     .order_by('-last_time')
 
-        # users = m.User.objects.all().extra(select={
+        # users = m.user.objects.all().extra(select={
         #     'last_date': """
         #         select m.content
         #         from core_base_message m
@@ -686,21 +725,21 @@ class UserViewSet(viewsets.ModelViewSet):
         #         """
         # }, select_params=(me.id, me.id)) \
         #     .filter(
-        #         m.models.Q(messages_owned__receiver=me) |
-        #         m.models.Q(messages_received__author=me)) \
+        #         m.models.q(messages_owned__receiver=me) |
+        #         m.models.q(messages_received__author=me)) \
         #     .order_by('-last_date')
         #
-        # serializer = s.UserSerializer(data=users, many=True)
+        # serializer = s.userserializer(data=users, many=true)
         # serializer.is_valid()
         # data = serializer.data
         # for row, user in zip(data, users):
-        #     message = m.Message.objects.filter(
-        #         m.models.Q(author=user, receiver=me) |
-        #         m.models.Q(author=me, receiver=user)
+        #     message = m.message.objects.filter(
+        #         m.models.q(author=user, receiver=me) |
+        #         m.models.q(author=me, receiver=user)
         #     ).order_by('-date_created').first()
         #     row['message_date'] = message.date_created
         #     row['message_text'] = message.content
-        # return Response(data=data)
+        # return response(data=data)
 
     # 前端忘记密码页面
     @list_route(methods=['post'])
@@ -716,6 +755,21 @@ class UserViewSet(viewsets.ModelViewSet):
             user.set_password(request.data.get('password'))
             user.save()
             login(request, user)
+
+            # 单点登录处理
+            if hasattr(user, 'member'):
+                member = user.member
+                session_key = request.session.session_key
+                # 这说明这个用户已经在其他地方登录过
+                if member.session_key and session_key != member.session_key:
+                    from django.contrib.sessions.models import Session
+                    # 删除 Session 使原来的登录失效
+                    Session.objects.filter(session_key=member.session_key).delete()
+                member.session_key = session_key
+                member.save()
+
+            m.LoginRecord.make(user)
+
             return Response()
         else:
             return response_fail('请输入正确的手机号码', 40033)
@@ -1509,8 +1563,6 @@ class MemberViewSet(viewsets.ModelViewSet):
         from django.core.files.temp import NamedTemporaryFile
         code_type = self.request.query_params.get('type')
         id = self.request.query_params.get('object_id')
-        print(self.request.query_params.get('object_id'))
-        print('>>>>>>>')
         member = None
         family = None
         if not code_type:
@@ -2007,9 +2059,23 @@ class LiveViewSet(viewsets.ModelViewSet):
         )
         return Response(data=s.LiveSerializer(live).data)
 
+    @list_route(methods=['POST'])
+    def replay_live(self, request):
+        assert not request.user.is_anonymous, '請先登錄'
+        live_id = request.data.get('id')
+        live = m.Live.objects.filter(
+            author=self.request.user,
+            id=live_id,
+        ).first()
+        if not live:
+            return Response(data=False)
+        live.date_replay = datetime.now()
+        live.save()
+        return Response(data=True)
+
     @detail_route(methods=['POST'])
     def live_end(self, request, pk):
-        assert not request.user.is_anonymous, '请先登录'
+        assert not request.user.is_anonymous, '請先登錄'
         live = m.Live.objects.get(pk=pk)
         live.date_end = datetime.now()
         live.save()

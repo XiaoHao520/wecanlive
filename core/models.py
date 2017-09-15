@@ -536,8 +536,7 @@ class Member(AbstractMember,
         level_rules = json.loads(Option.get('level_rules') or '[]')
         if not level_rules:
             return 1
-
-        return 1
+        return self.small_level
 
     def get_vip_level(self):
         """ 获取用户 VIP 等级
@@ -609,9 +608,9 @@ class Member(AbstractMember,
         self.vip_level = level
         if date_update_vip:
             self.date_update_vip = date_update_vip
-            self.make_update_vip_plan(date_update_vip + timedelta(days=30 * level), self.id)
+            self.make_update_vip_plan(date_update_vip + timedelta(days=30 * level), self.user_id)
         elif date_update_vip == 0:
-            self.make_update_vip_plan(None, self.id)
+            self.make_update_vip_plan(None, self.user_id)
         if amount_extend:
             self.amount_extend += amount_extend
         else:
@@ -856,6 +855,73 @@ class Member(AbstractMember,
             experience_transaction=exp_transaction,
         )
 
+    def update_level(self):
+        """
+        更新用户的等级
+        :return:
+        """
+        large_level = self.large_level
+        small_level = self.small_level
+        current_level_exp = self.current_level_experience
+        total_experience = ExperienceTransaction.objects.filter(author=self.user).aggregate(
+            amount=models.Sum('experience')).get('amount') or 0
+        if not Option.get('level_rules'):
+            return
+        rules = json.loads(Option.get('level_rules'))
+        level1 = rules.get('level_1')[0].get('value') * 20
+        level2 = rules.get('level_1')[1].get('value') * 20 + level1
+        level3 = rules.get('level_1')[2].get('value') * 20 + level2
+        level4 = rules.get('level_1')[3].get('value') * 20 + level3
+        level5 = rules.get('level_1')[4].get('value') * 19 + level4
+        level6 = rules.get('level_more')[0].get('value') * 99 + level5
+        level7 = rules.get('level_more')[1].get('value') * 99 + level6
+        level8 = rules.get('level_more')[2].get('value') * 99 + level7
+        level9 = rules.get('level_more')[3].get('value') * 99 + level8
+        total_exp_list = [0, level1, level2, level3, level4, level5, level6, level7, level8, level9]
+        for i in range(0, 9):
+            if total_exp_list[i] <= total_experience < total_exp_list[i + 1]:
+                if i == 0:
+                    large_level = 1
+                    small_level = 1 + int(total_experience / rules.get('level_1')[0].get('value'))
+                    current_level_exp = total_experience % rules.get('level_1')[0].get('value')
+                if i == 1:
+                    large_level = 1
+                    small_level = 21 + int((total_experience - level1) / rules.get('level_1')[1].get('value'))
+                    current_level_exp = (total_experience - level1) % rules.get('level_1')[1].get('value')
+                if i == 2:
+                    large_level = 1
+                    small_level = 41 + int((total_experience - level2) / rules.get('level_1')[2].get('value'))
+                    current_level_exp = (total_experience - level2) % rules.get('level_1')[2].get('value')
+                if i == 3:
+                    large_level = 1
+                    small_level = 61 + int((total_experience - level3) / rules.get('level_1')[3].get('value'))
+                    current_level_exp = (total_experience - level3) % rules.get('level_1')[3].get('value')
+                if i == 4:
+                    large_level = 1
+                    small_level = 81 + int((total_experience - level4) / rules.get('level_1')[4].get('value'))
+                    current_level_exp = (total_experience - level4) % rules.get('level_1')[4].get('value')
+                if i == 5:
+                    large_level = 2
+                    small_level = 1 + int((total_experience - level5) / rules.get('level_more')[0].get('value'))
+                    current_level_exp = (total_experience - level5) % rules.get('level_more')[0].get('value')
+                if i == 6:
+                    large_level = 3
+                    small_level = 1 + int((total_experience - level6) / rules.get('level_more')[1].get('value'))
+                    current_level_exp = (total_experience - level6) % rules.get('level_more')[1].get('value')
+                if i == 6:
+                    large_level = 4
+                    small_level = 1 + int((total_experience - level7) / rules.get('level_more')[2].get('value'))
+                    current_level_exp = (total_experience - level7) % rules.get('level_more')[2].get('value')
+                if i == 7:
+                    large_level = 5
+                    small_level = 1 + int((total_experience - level8) / rules.get('level_more')[3].get('value'))
+                    current_level_exp = (total_experience - level8) % rules.get('level_more')[3].get('value')
+        self.small_level = small_level
+        self.large_level = large_level
+        self.total_experience = total_experience
+        self.current_level_experience = current_level_exp
+        self.save()
+
 
 class LoginRecord(UserOwnedModel):
     """
@@ -916,12 +982,15 @@ class ExperienceTransaction(EntityModel, UserOwnedModel):
         verbose_name_plural = '经验流水'
         db_table = 'core_experience_transaction'
 
+    def __str__(self):
+        return '{}:  {}'.format(self.author, self.experience)
+
     @staticmethod
-    def make(author, experience, transaction_type):
+    def make(author, experience, transaction_type, is_vip_double=True):
         # vip 经验值提升
-        if author.member.vip_level > 0 and Option.get('vip_rules'):
+        if is_vip_double and author.member.vip_level > 0 and Option.get('vip_rules'):
             vip_rules = json.loads(Option.get('vip_rules'))
-            if vip_rules[author.member.vip_level - 1].get('experience_double ') > 1:
+            if vip_rules[author.member.vip_level - 1].get('experience_double') > 1:
                 experience = int(experience * vip_rules[author.member.vip_level - 1].get('experience_double'))
         experience_transaction = ExperienceTransaction.objects.create(
             author=author,
@@ -939,64 +1008,62 @@ class ExperienceTransaction(EntityModel, UserOwnedModel):
         large_level = member.large_level
         small_level = member.small_level
         current_level_exp = member.current_level_experience
-        total_exp = member.total_experience
-        total_exp += self.experience
+        total_experience = ExperienceTransaction.objects.filter(author=self.author).aggregate(
+            amount=models.Sum('experience')).get('amount') or 0
         if not Option.get('level_rules'):
             return
         rules = json.loads(Option.get('level_rules'))
-        if large_level == 1 and small_level <= 20:
-            demand = rules.get('level_1')[0].get('value')
-            if current_level_exp + self.experience >= demand:
-                current_level_exp = current_level_exp + self.experience - demand
-                small_level += 1
-            else:
-                current_level_exp += self.experience
-        elif large_level == 2 and 20 < small_level <= 40:
-            demand = rules.get('level_1')[1].get('value')
-            if current_level_exp + self.experience >= demand:
-                current_level_exp = current_level_exp + self.experience - demand
-                small_level += 1
-            else:
-                current_level_exp += self.experience
-        elif large_level == 1 and 40 < small_level <= 60:
-            demand = rules.get('level_1')[2].get('value')
-            if current_level_exp + self.experience >= demand:
-                current_level_exp = current_level_exp + self.experience - demand
-                small_level += 1
-            else:
-                current_level_exp += self.experience
-        elif large_level == 1 and 60 < small_level <= 80:
-            demand = rules.get('level_1')[3].get('value')
-            if current_level_exp + self.experience >= demand:
-                current_level_exp = current_level_exp + self.experience - demand
-                small_level += 1
-            else:
-                current_level_exp += self.experience
-        elif large_level == 1 and 80 < small_level <= 99:
-            demand = rules.get('level_1')[4].get('value')
-            if current_level_exp + self.experience >= demand and small_level == 99:
-                current_level_exp = current_level_exp + self.experience - demand
-                small_level = 1
-                large_level = 2
-            elif current_level_exp + self.experience >= demand and small_level < 99:
-                current_level_exp = current_level_exp + self.experience - demand
-                small_level += 1
-            else:
-                current_level_exp += self.experience
-        elif large_level > 1:
-            demand = rules.get('level_more')[large_level - 2].get('value')
-            if current_level_exp + self.experience >= demand and small_level == 99:
-                current_level_exp = current_level_exp + self.experience - demand
-                small_level = 1
-                large_level += 1
-            elif current_level_exp + self.experience >= demand and small_level < 99:
-                current_level_exp = current_level_exp + self.experience - demand
-                small_level += 1
-            else:
-                current_level_exp += self.experience
+        level1 = rules.get('level_1')[0].get('value') * 20
+        level2 = rules.get('level_1')[1].get('value') * 20 + level1
+        level3 = rules.get('level_1')[2].get('value') * 20 + level2
+        level4 = rules.get('level_1')[3].get('value') * 20 + level3
+        level5 = rules.get('level_1')[4].get('value') * 19 + level4
+        level6 = rules.get('level_more')[0].get('value') * 99 + level5
+        level7 = rules.get('level_more')[1].get('value') * 99 + level6
+        level8 = rules.get('level_more')[2].get('value') * 99 + level7
+        level9 = rules.get('level_more')[3].get('value') * 99 + level8
+        total_exp_list = [0, level1, level2, level3, level4, level5, level6, level7, level8, level9]
+        for i in range(0, 9):
+            if total_exp_list[i] <= total_experience < total_exp_list[i + 1]:
+                if i == 0:
+                    large_level = 1
+                    small_level = 1 + int(total_experience / rules.get('level_1')[0].get('value'))
+                    current_level_exp = total_experience % rules.get('level_1')[0].get('value')
+                if i == 1:
+                    large_level = 1
+                    small_level = 21 + int((total_experience - level1) / rules.get('level_1')[1].get('value'))
+                    current_level_exp = (total_experience - level1) % rules.get('level_1')[1].get('value')
+                if i == 2:
+                    large_level = 1
+                    small_level = 41 + int((total_experience - level2) / rules.get('level_1')[2].get('value'))
+                    current_level_exp = (total_experience - level2) % rules.get('level_1')[2].get('value')
+                if i == 3:
+                    large_level = 1
+                    small_level = 61 + int((total_experience - level3) / rules.get('level_1')[3].get('value'))
+                    current_level_exp = (total_experience - level3) % rules.get('level_1')[3].get('value')
+                if i == 4:
+                    large_level = 1
+                    small_level = 81 + int((total_experience - level4) / rules.get('level_1')[4].get('value'))
+                    current_level_exp = (total_experience - level4) % rules.get('level_1')[4].get('value')
+                if i == 5:
+                    large_level = 2
+                    small_level = 1 + int((total_experience - level5) / rules.get('level_more')[0].get('value'))
+                    current_level_exp = (total_experience - level5) % rules.get('level_more')[0].get('value')
+                if i == 6:
+                    large_level = 3
+                    small_level = 1 + int((total_experience - level6) / rules.get('level_more')[1].get('value'))
+                    current_level_exp = (total_experience - level6) % rules.get('level_more')[1].get('value')
+                if i == 6:
+                    large_level = 4
+                    small_level = 1 + int((total_experience - level7) / rules.get('level_more')[2].get('value'))
+                    current_level_exp = (total_experience - level7) % rules.get('level_more')[2].get('value')
+                if i == 7:
+                    large_level = 5
+                    small_level = 1 + int((total_experience - level8) / rules.get('level_more')[3].get('value'))
+                    current_level_exp = (total_experience - level8) % rules.get('level_more')[3].get('value')
         member.small_level = small_level
         member.large_level = large_level
-        member.total_experience = total_exp
+        member.total_experience = total_experience
         member.current_level_experience = current_level_exp
         member.save()
 
@@ -1227,39 +1294,6 @@ class CreditDiamondTransaction(AbstractTransactionModel):
         verbose_name = '钻石流水'
         verbose_name_plural = '钻石流水'
         db_table = 'core_credit_diamond_transaction'
-
-    def save(self, *args, **kwargs):
-        super().save(*args, **kwargs)
-        rule_send = Option.get('experience_points_prize_send')
-        rule_receive = Option.get('experience_points_prize_receive')
-        if not rule_send or not rule_receive:
-            return
-        if self.type == self.TYPE_LIVE_GIFT and self.prize_orders:
-            # 处理送礼、收礼　所产生的经验
-            sender = self.prize_orders.author
-            receiver = self.user_credit
-            sender_debit_diamond_extend = sender.member.debit_diamond_extend
-            receiver_credit_diamond_extend = receiver.member.credit_diamond_extend
-            if self.amount + sender_debit_diamond_extend < 150:
-                sender.member.debit_diamond_extend += self.amount
-            else:
-                sender.member.debit_diamond_extend = (self.amount + sender_debit_diamond_extend) % 150
-                sender_experience = ExperienceTransaction.make(sender,
-                                                               rule_send * int(
-                                                                   (self.amount + sender_debit_diamond_extend) / 150),
-                                                               ExperienceTransaction.TYPE_SEND)
-                sender_experience.update_level()
-            sender.member.save()
-            if self.amount + receiver_credit_diamond_extend < 150:
-                receiver.member.credit_diamond_extend += self.amount
-            else:
-                receiver.member.credit_diamond_extend = (self.amount + receiver_credit_diamond_extend) % 150
-                receiver_experience = ExperienceTransaction.make(receiver,
-                                                                 rule_receive * int((
-                                                                                        self.amount + receiver_credit_diamond_extend) / 150),
-                                                                 ExperienceTransaction.TYPE_RECEIVE)
-                receiver_experience.update_level()
-            receiver.member.save()
 
 
 class CreditCoinTransaction(AbstractTransactionModel):
@@ -2439,6 +2473,12 @@ class Live(UserOwnedModel,
         blank=True,
     )
 
+    date_replay = models.DateTimeField(
+        verbose_name='最近一次重播开始时间',
+        null=True,
+        blank=True,
+    )
+
     date_end = models.DateTimeField(
         verbose_name='结束时间',
         null=True,
@@ -2658,18 +2698,23 @@ class Live(UserOwnedModel,
         计算累计直播30分钟涨经验值
         :return:
         """
-        rule = Option.get('experience_points_live')
+        rule = int(Option.get('experience_points_live') or 0)
         if not rule:
             return
         live_extend = self.author.member.live_extend
-        if live_extend + self.duration < 30:
-            self.author.member.live_extend = live_extend + self.duration
+        duration = 0
+        if self.date_replay:
+            duration = int((self.date_end - self.date_replay).seconds / 60) + (self.date_end - self.date_replay).days * 1440 or 1
+        else:
+            duration = self.get_duration()
+        if live_extend + duration < 30:
+            self.author.member.live_extend = live_extend + duration
             self.author.member.save()
             return
-        live_experience = ExperienceTransaction.make(self.author, int((self.duration + live_extend) / 30) * rule,
-                                                     ExperienceTransaction.TYPE_WATCH)
+        live_experience = ExperienceTransaction.make(self.author, int((duration + live_extend) / 30) * rule,
+                                                     ExperienceTransaction.TYPE_LIVE)
         live_experience.update_level()
-        self.author.member.live_extend = (self.duration + live_extend) % 30
+        self.author.member.live_extend = (duration + live_extend) % 30
         self.author.member.save()
 
     def update_hot_rating(self):
@@ -2851,12 +2896,13 @@ class LiveWatchLog(UserOwnedModel,
         :return:
         """
         self.date_leave = datetime.now()
-        self.duration += int((self.date_leave - self.date_enter).seconds / 60) + \
-                         (self.date_leave - self.date_enter).days * 1440 or 1
+        duration_this_time = int((self.date_leave - self.date_enter).seconds / 60) + \
+                             (self.date_leave - self.date_enter).days * 1440 or 1
+        self.duration += duration_this_time
 
         self.save()
         # 计算经验值
-        self.watch_live_experience()
+        self.watch_live_experience(duration_this_time)
 
         # 累計觀看時間
         wathch_mission_preferences = self.author.preferences.filter(key='watch_mission_time').first()
@@ -2889,24 +2935,24 @@ class LiveWatchLog(UserOwnedModel,
             total_price += prize_order.prize.price
         return total_price
 
-    def watch_live_experience(self):
+    def watch_live_experience(self, duration):
         """
         计算累计观看30分钟涨经验值
         :return:
         """
-        rule = Option.get('experience_points_watch')
+        rule = int(Option.get('experience_points_watch') or 0)
         if not rule:
             return
         watch_live_extend = self.author.member.watch_live_extend
-        if watch_live_extend + self.duration < 30:
-            self.author.member.watch_live_extend = watch_live_extend + self.duration
+        if watch_live_extend + duration < 30:
+            self.author.member.watch_live_extend = watch_live_extend + duration
             self.author.member.save()
             return
         watch_live_experience = ExperienceTransaction.make(self.author,
-                                                           int((self.duration + watch_live_extend) / 30) * rule,
+                                                           int((duration + watch_live_extend) / 30) * rule,
                                                            ExperienceTransaction.TYPE_WATCH)
         watch_live_experience.update_level()
-        self.author.member.watch_live_extend = (self.duration + watch_live_extend) % 30
+        self.author.member.watch_live_extend = (duration + watch_live_extend) % 30
         self.author.member.save()
 
 
@@ -3558,6 +3604,37 @@ class PrizeOrder(UserOwnedModel):
             self.author.member.total_experience = total_exp
             self.author.member.current_level_experience = 0
             self.author.member.save()
+
+        rule_send = int(Option.get('experience_points_prize_send') or 0)
+        rule_receive = int(Option.get('experience_points_prize_receive') or 0)
+        if not rule_send or not rule_receive:
+            return
+        if self.diamond_transaction:
+            # 处理送礼、收礼　所产生的经验
+            sender = self.author
+            receiver = self.diamond_transaction.user_debit
+            sender_debit_diamond_extend = sender.member.debit_diamond_extend
+            receiver_credit_diamond_extend = receiver.member.credit_diamond_extend
+            if self.diamond_transaction.amount + sender_debit_diamond_extend < 150:
+                sender.member.debit_diamond_extend += self.diamond_transaction.amount
+            else:
+                sender.member.debit_diamond_extend = (self.diamond_transaction.amount + sender_debit_diamond_extend) % 150
+                sender_experience = ExperienceTransaction.make(sender,
+                                                               rule_send * int(
+                                                                   (self.diamond_transaction.amount + sender_debit_diamond_extend) / 150),
+                                                               ExperienceTransaction.TYPE_SEND)
+                sender_experience.update_level()
+            sender.member.save()
+            if self.diamond_transaction.amount + receiver_credit_diamond_extend < 150:
+                receiver.member.credit_diamond_extend += self.diamond_transaction.amount
+            else:
+                receiver.member.credit_diamond_extend = (self.diamond_transaction.amount + receiver_credit_diamond_extend) % 150
+                receiver_experience = ExperienceTransaction.make(receiver,
+                                                                 rule_receive * int((
+                                                                                        self.diamond_transaction.amount + receiver_credit_diamond_extend) / 150),
+                                                                 ExperienceTransaction.TYPE_RECEIVE)
+                receiver_experience.update_level()
+            receiver.member.save()
 
 
 class RankRecord(UserOwnedModel):
@@ -4936,8 +5013,8 @@ class Inform(UserOwnedModel,
     def accused_person(self):
         accused_object = self.get_accused_object()
         return dict(
-            accused_id=accused_object.author.id,
-            accused_mobile=accused_object.author.member.mobile,
+            accused_id=accused_object.author.id if accused_object else None,
+            accused_mobile=accused_object.author.member.mobile if accused_object else None,
         )
 
     def accused_object_info(self):
