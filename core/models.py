@@ -217,6 +217,11 @@ class Member(AbstractMember,
         help_text='当送礼时为真，则为首次送礼，享受新人经验奖励',
     )
 
+    is_first_login = models.BooleanField(
+        verbose_name='是否首次登錄',
+        default=True,
+    )
+
     class Meta:
         verbose_name = '会员'
         verbose_name_plural = '会员'
@@ -1335,6 +1340,7 @@ class CreditCoinTransaction(AbstractTransactionModel):
     TYPE_DAILY = 'DAILY'
     TYPE_ACTIVITY = 'ACTIVITY'
     TYPE_MISSION = 'MISSION'
+    TYPE_ENTER_LIVE = 'ENTER_LIVE'
     TYPE_CHOICES = (
         (TYPE_ADMIN, '管理員發放'),
         (TYPE_LIVE_GIFT, '直播赠送'),
@@ -1346,6 +1352,7 @@ class CreditCoinTransaction(AbstractTransactionModel):
         (TYPE_DAILY, '每日签到获得'),
         (TYPE_ACTIVITY, '活动'),
         (TYPE_MISSION, '任務'),
+        (TYPE_ENTER_LIVE, '收费直播间'),
     )
 
     type = models.CharField(
@@ -2867,6 +2874,13 @@ class LiveWatchLog(UserOwnedModel,
         default=STATUS_NORMAL,
     )
 
+    coin_transaction = models.OneToOneField(
+        verbose_name='收费直播缴费记录',
+        to='CreditCoinTransaction',
+        null=True,
+        blank=True,
+    )
+
     class Meta:
         verbose_name = '直播观看记录'
         verbose_name_plural = '直播观看记录'
@@ -2910,10 +2924,20 @@ class LiveWatchLog(UserOwnedModel,
             live=live,
         ).first()
         if not live_watch_log:
+            coin_transaction = None
+            if live.paid:
+                # 收费直播
+                coin_transaction = CreditCoinTransaction.objects.create(
+                    user_debit=live.author,
+                    user_credit=user,
+                    type=CreditCoinTransaction.TYPE_ENTER_LIVE,
+                    amount=live.paid,
+                )
             LiveWatchLog.objects.create(
                 author=user,
                 live=live,
                 date_enter=datetime.now(),
+                coin_transaction=coin_transaction,
             )
         else:
             live_watch_log.date_enter = datetime.now()
