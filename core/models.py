@@ -212,6 +212,11 @@ class Member(AbstractMember,
         help_text='当送礼时为真，则为首次送礼，享受新人经验奖励',
     )
 
+    is_first_login = models.BooleanField(
+        verbose_name='是否首次登錄',
+        default=True,
+    )
+
     class Meta:
         verbose_name = '会员'
         verbose_name_plural = '会员'
@@ -2706,7 +2711,8 @@ class Live(UserOwnedModel,
         live_extend = self.author.member.live_extend
         duration = 0
         if self.date_replay:
-            duration = int((self.date_end - self.date_replay).seconds / 60) + (self.date_end - self.date_replay).days * 1440 or 1
+            duration = int((self.date_end - self.date_replay).seconds / 60) + (
+                                                                              self.date_end - self.date_replay).days * 1440 or 1
         else:
             duration = self.get_duration()
         if live_extend + duration < 30:
@@ -3637,17 +3643,20 @@ class PrizeOrder(UserOwnedModel):
             if self.diamond_transaction.amount + sender_debit_diamond_extend < 150:
                 sender.member.debit_diamond_extend += self.diamond_transaction.amount
             else:
-                sender.member.debit_diamond_extend = (self.diamond_transaction.amount + sender_debit_diamond_extend) % 150
+                sender.member.debit_diamond_extend = (
+                                                     self.diamond_transaction.amount + sender_debit_diamond_extend) % 150
                 sender_experience = ExperienceTransaction.make(sender,
                                                                rule_send * int(
-                                                                   (self.diamond_transaction.amount + sender_debit_diamond_extend) / 150),
+                                                                   (
+                                                                   self.diamond_transaction.amount + sender_debit_diamond_extend) / 150),
                                                                ExperienceTransaction.TYPE_SEND)
                 sender_experience.update_level()
             sender.member.save()
             if self.diamond_transaction.amount + receiver_credit_diamond_extend < 150:
                 receiver.member.credit_diamond_extend += self.diamond_transaction.amount
             else:
-                receiver.member.credit_diamond_extend = (self.diamond_transaction.amount + receiver_credit_diamond_extend) % 150
+                receiver.member.credit_diamond_extend = (
+                                                        self.diamond_transaction.amount + receiver_credit_diamond_extend) % 150
                 receiver_experience = ExperienceTransaction.make(receiver,
                                                                  rule_receive * int((
                                                                                         self.diamond_transaction.amount + receiver_credit_diamond_extend) / 150),

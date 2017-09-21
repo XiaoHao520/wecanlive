@@ -652,6 +652,7 @@ class UserViewSet(viewsets.ModelViewSet):
         # 调试方便直接显示验证码
         if settings.SMS_DEBUG:
             msg = vcode
+        print(msg)
         return response_success(msg)
 
         # @list_route(methods=['GET'])
@@ -1208,7 +1209,7 @@ class MemberViewSet(viewsets.ModelViewSet):
                 id=user.id,
                 nickname=user.member.nickname,
                 date_created=message.date_created,
-                message_countent='[禮物表情]' if message.type == m.Message.TYPE_IMAGE else message.content,
+                message_content='[禮物表情]' if message.type == m.Message.TYPE_IMAGE else message.content,
                 avatar=s.ImageSerializer(user.member.avatar).data['image'],
                 type='chat'
             ))
@@ -1287,7 +1288,7 @@ class MemberViewSet(viewsets.ModelViewSet):
                     id=family_member.family.id,
                     nickname=family_member.family.name,
                     date_created=last_message.date_created,
-                    message_countent=last_message.content,
+                    message_content='[禮物表情]' if last_message.type == m.Message.TYPE_IMAGE else last_message.content,
                     avatar=s.ImageSerializer(family_member.family.logo).data['image'],
                     type='family'
                 ))
@@ -1992,19 +1993,19 @@ class LiveViewSet(viewsets.ModelViewSet):
             qs = qs.filter(
                 m.models.Q(author__member__in=users_following) |
                 m.models.Q(author__member__in=users_friend)
-            )
+            ).order_by('-pk')
 
         if up_liveing:
             qs = qs.filter(
                 id__gt=up_liveing,
                 date_end=None,
-            ).order_by('pk')
+            ).exclude(author=self.request.user).order_by('pk')
 
         if down_liveing:
             qs = qs.filter(
                 id__lt=down_liveing,
                 date_end=None,
-            ).order_by('-pk')
+            ).exclude(author=self.request.user).order_by('-pk')
 
         if id_not_in:
             id_list = [int(x) for x in id_not_in.split(',') if x]
@@ -2229,6 +2230,7 @@ class LiveViewSet(viewsets.ModelViewSet):
             m.models.Q(live=live, date_leave__lt=m.models.F('date_enter'))
         ).count()
         return Response(data=count)
+
 
 class LiveBarrageViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
