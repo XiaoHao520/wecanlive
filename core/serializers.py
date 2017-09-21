@@ -283,6 +283,8 @@ class UserDetailedSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     member_experience = serializers.ReadOnlyField(source='member.total_experience')
     member_vip_level = serializers.ReadOnlyField(source='member.vip_level')
 
+    is_first_login = serializers.ReadOnlyField(source='member.is_first_login')
+
     # 跟踪数量
     count_follow = serializers.ReadOnlyField(
         source='member.get_follow_count',
