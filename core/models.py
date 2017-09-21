@@ -235,14 +235,14 @@ class Member(AbstractMember,
         super().delete(*args, **kwargs)
 
     def save(self, *args, **kwargs):
-        # from django_base.middleware import get_request
-        # user = get_request().user
-        # if user.is_staff and self.user and not self.is_del:
-        #     super().save(*args, **kwargs)
-        #     AdminLog.make(user, AdminLog.TYPE_UPDATE, self, '修改會員')
-        # elif user.is_staff and not self.is_del:
-        #     super().save(*args, **kwargs)
-        #     AdminLog.make(user, AdminLog.TYPE_CREATE, self, '新增會員')
+        from django_base.middleware import get_request
+        user = get_request().user
+        if user.is_staff and self.user and not self.is_del:
+            super().save(*args, **kwargs)
+            AdminLog.make(user, AdminLog.TYPE_UPDATE, self, '修改會員')
+        elif user.is_staff and not self.is_del:
+            super().save(*args, **kwargs)
+            AdminLog.make(user, AdminLog.TYPE_CREATE, self, '新增會員')
         if self.user:
             self.load_tencent_sig()
 
