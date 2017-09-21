@@ -87,6 +87,11 @@ class Member(AbstractMember,
     """ 会员
     注意：用户的追踪状态通过 UserMark 的 subject=follow 类型实现
     """
+    relative_id = models.IntegerField(
+        verbose_name='相对id',
+        blank=True,
+        null=True,
+    )
 
     referrer = models.OneToOneField(
         verbose_name='推荐人',
@@ -252,6 +257,29 @@ class Member(AbstractMember,
                 remark='完成元气任务的完善资料任务奖励',
                 type=CreditStarTransaction.TYPE_EARNING,
             )
+
+        # 追加相对id
+        if not self.relative_id:
+            count_relative_id = Member.objects.filter(relative_id__gt=0).count()
+            flag = True
+            if count_relative_id < 50000:
+                while flag:
+                    relative_id = random.randint(10000, 99999)
+                    if not Member.objects.filter(relative_id=relative_id).exists():
+                        self.relative_id = relative_id
+                        flag = False
+            elif 50000 <= count_relative_id < 500000:
+                while flag:
+                    relative_id = random.randint(100000, 999999)
+                    if not Member.objects.filter(relative_id=relative_id).exists():
+                        self.relative_id = relative_id
+                        flag = False
+            elif 500000 <= count_relative_id < 5000000:
+                while flag:
+                    relative_id = random.randint(1000000, 9999999)
+                    if not Member.objects.filter(relative_id=relative_id).exists():
+                        self.relative_id = relative_id
+                        flag = False
         super().save(*args, **kwargs)
 
     def load_tencent_sig(self, force=False):
@@ -2704,7 +2732,8 @@ class Live(UserOwnedModel,
         live_extend = self.author.member.live_extend
         duration = 0
         if self.date_replay:
-            duration = int((self.date_end - self.date_replay).seconds / 60) + (self.date_end - self.date_replay).days * 1440 or 1
+            duration = int((self.date_end - self.date_replay).seconds / 60) + (
+                                                                                  self.date_end - self.date_replay).days * 1440 or 1
         else:
             duration = self.get_duration()
         if live_extend + duration < 30:
@@ -3618,17 +3647,20 @@ class PrizeOrder(UserOwnedModel):
             if self.diamond_transaction.amount + sender_debit_diamond_extend < 150:
                 sender.member.debit_diamond_extend += self.diamond_transaction.amount
             else:
-                sender.member.debit_diamond_extend = (self.diamond_transaction.amount + sender_debit_diamond_extend) % 150
+                sender.member.debit_diamond_extend = (
+                                                         self.diamond_transaction.amount + sender_debit_diamond_extend) % 150
                 sender_experience = ExperienceTransaction.make(sender,
                                                                rule_send * int(
-                                                                   (self.diamond_transaction.amount + sender_debit_diamond_extend) / 150),
+                                                                   (
+                                                                       self.diamond_transaction.amount + sender_debit_diamond_extend) / 150),
                                                                ExperienceTransaction.TYPE_SEND)
                 sender_experience.update_level()
             sender.member.save()
             if self.diamond_transaction.amount + receiver_credit_diamond_extend < 150:
                 receiver.member.credit_diamond_extend += self.diamond_transaction.amount
             else:
-                receiver.member.credit_diamond_extend = (self.diamond_transaction.amount + receiver_credit_diamond_extend) % 150
+                receiver.member.credit_diamond_extend = (
+                                                            self.diamond_transaction.amount + receiver_credit_diamond_extend) % 150
                 receiver_experience = ExperienceTransaction.make(receiver,
                                                                  rule_receive * int((
                                                                                         self.diamond_transaction.amount + receiver_credit_diamond_extend) / 150),
