@@ -272,6 +272,7 @@ class UserDetailedSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     signature = serializers.ReadOnlyField(source="member.signature")
 
     mobile = serializers.ReadOnlyField(source='member.mobile')
+    relative_id = serializers.ReadOnlyField(source='member.relative_id')
 
     diamond_balance = serializers.ReadOnlyField(source='member.get_diamond_balance')
     coin_balance = serializers.ReadOnlyField(source='member.get_coin_balance')
