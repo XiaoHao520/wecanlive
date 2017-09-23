@@ -3244,6 +3244,11 @@ class Prize(EntityModel):
         help_text='此禮物在元氣寶盒中出現時的贈送數量，０爲不會在元氣寶盒中出現'
     )
 
+    vip_limit= models.IntegerField(
+        verbose_name='VIP等级',
+        default=0,
+    )
+
     class Meta:
         verbose_name = '礼物'
         verbose_name_plural = '礼物'
