@@ -644,6 +644,7 @@ class Member(AbstractMember,
         :return:
         """
         self.vip_level = level
+        self.vip_upgrade_award(level)
         if date_update_vip:
             self.date_update_vip = date_update_vip
             self.make_update_vip_plan(date_update_vip + timedelta(days=30 * level), self.user_id)
@@ -654,6 +655,41 @@ class Member(AbstractMember,
         else:
             self.amount_extend = 0
         self.save()
+
+    def vip_upgrade_award(self, level):
+        """
+        vip 升级时回馈礼物
+        """
+        vip_rebate = Option.get(key='vip_rebate')
+        if not vip_rebate:
+            return
+        vip_award = json.loads(vip_rebate)[level - 1]
+        if vip_award['diamond']:
+            # 钻石
+            CreditDiamondTransaction.objects.create(
+                user_debit=self.user,
+                amount=vip_award['diamond'],
+                type=CreditDiamondTransaction.TYPE_VIP,
+                remark='升級VIP獎勵',
+            )
+        if vip_award['coin']:
+            # 金币
+            CreditCoinTransaction.objects.create(
+                user_debit=self.user,
+                amount=vip_award['coin'],
+                type=CreditCoinTransaction.TYPE_VIP,
+                remark='升級VIP獎勵',
+            )
+        if vip_award['prize']:
+            # 礼物
+            for prize in vip_award['prize']:
+                PrizeTransaction.objects.create(
+                    user_debit=self.user,
+                    amount=prize['amount'],
+                    prize=Prize.objects.get(pk=prize['id']),
+                    type=PrizeTransaction.TYPE_VIP_GAIN,
+                    source_tag=PrizeTransaction.SOURCE_TAG_VIP,
+                )
 
     @staticmethod
     def make_update_vip_plan(date_planned, member_id):
@@ -821,7 +857,7 @@ class Member(AbstractMember,
             return member
         check_history = self.check_member_history.split(',')
         if len(check_history) >= 10 and not str(member.user.id) in check_history \
-                and self.get_vip_level() < 5 and self.get_level() < 5:
+                and self.get_vip_level() < 1 and self.large_level < 2:
             # 查看已经超过10个并且没有会员等级
             return False
         if str(member.user.id) in check_history:
@@ -1321,6 +1357,7 @@ class CreditDiamondTransaction(AbstractTransactionModel):
     TYPE_ACTIVITY_EXPENSE = 'ACTIVITY_EXPENSE'
     TYPE_BOX = 'BOX'
     TYPE_ACTIVITY = 'ACTIVITY'
+    TYPE_VIP = 'VIP'
     TYPE_CHOICES = (
         (TYPE_ADMIN, '管理員發放'),
         (TYPE_LIVE_GIFT, '直播赠送'),
@@ -1328,7 +1365,7 @@ class CreditDiamondTransaction(AbstractTransactionModel):
         (TYPE_WITHDRAW, '提現'),
         (TYPE_ACTIVITY_EXPENSE, '活動消費'),
         (TYPE_BOX, '开启元气宝盒'),
-        (TYPE_ACTIVITY, '活动'),
+        (TYPE_VIP, 'VIP赠送'),
     )
 
     type = models.CharField(
@@ -1355,6 +1392,7 @@ class CreditCoinTransaction(AbstractTransactionModel):
     TYPE_ACTIVITY = 'ACTIVITY'
     TYPE_MISSION = 'MISSION'
     TYPE_ENTER_LIVE = 'ENTER_LIVE'
+    TYPE_VIP = 'VIP'
     TYPE_CHOICES = (
         (TYPE_ADMIN, '管理員發放'),
         (TYPE_LIVE_GIFT, '直播赠送'),
@@ -1367,6 +1405,7 @@ class CreditCoinTransaction(AbstractTransactionModel):
         (TYPE_ACTIVITY, '活动'),
         (TYPE_MISSION, '任務'),
         (TYPE_ENTER_LIVE, '收费直播间'),
+        (TYPE_VIP, 'vip赠送'),
     )
 
     type = models.CharField(
@@ -2617,8 +2656,12 @@ class Live(UserOwnedModel,
         return self.comments.count()
 
     def get_view_count(self):
+        # return LiveWatchLog.objects.filter(
+        #     live=self.id
+        # ).count()
         return LiveWatchLog.objects.filter(
-            live=self.id
+            models.Q(live=self.id, date_leave=None) |
+            models.Q(live=self.id, date_leave__lt=models.F('date_enter'))
         ).count()
 
     def get_prize_count(self):
@@ -3213,6 +3256,11 @@ class Prize(EntityModel):
         verbose_name='元氣寶盒抽中數量',
         default=0,
         help_text='此禮物在元氣寶盒中出現時的贈送數量，０爲不會在元氣寶盒中出現'
+    )
+
+    vip_limit= models.IntegerField(
+        verbose_name='VIP等级',
+        default=0,
     )
 
     class Meta:
