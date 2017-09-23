@@ -467,6 +467,11 @@ class Member(AbstractMember,
             amount=models.Sum('amount')).get('amount') or 0
         return debit - credit
 
+    def total_recharge(self):
+        amount = self.user.rechargerecords_owned.aggregate(
+            amount=models.Sum('amount')).get('amount') or 0
+        return int(amount)
+
     def diamond_count(self):
         """获得钻石总数
         :return:
@@ -664,6 +669,15 @@ class Member(AbstractMember,
         else:
             planned_task.date_planned = date_planned
         planned_task.save()
+
+    def get_vip_end_time(self):
+        planned_task = PlannedTask.objects.filter(
+            method='change_vip_level',
+            args__exact=json.dumps([self.user_id]),
+        ).first()
+        if not planned_task:
+            return None
+        return planned_task.date_planned
 
     def get_today_watch_mission_count(self):
         """当前用户当天完成观看任务次数
