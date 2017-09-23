@@ -283,6 +283,9 @@ class UserDetailedSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     member_level = serializers.ReadOnlyField(source='member.get_level')
     member_experience = serializers.ReadOnlyField(source='member.total_experience')
     member_vip_level = serializers.ReadOnlyField(source='member.vip_level')
+    vip_begin_time = serializers.ReadOnlyField(source='member.date_update_vip')
+    vip_end_time = serializers.ReadOnlyField(source='member.get_vip_end_time')
+    total_recharge = serializers.ReadOnlyField(source='member.total_recharge')
 
     is_first_login = serializers.ReadOnlyField(source='member.is_first_login')
 

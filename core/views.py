@@ -2112,6 +2112,9 @@ class LiveViewSet(viewsets.ModelViewSet):
     def buy_prize(self, request, pk):
         live = m.Live.objects.get(pk=pk)
         prize = m.Prize.objects.get(pk=request.data.get('prize'))
+
+        assert self.request.user.member.vip_level >= prize.vip_limit, '購買該禮物需要vip等級達到{}'.format(prize.vip_limit)
+
         count = int(request.data.get('count'))
         prize_order = m.PrizeOrder.buy_prize(live, prize, count, request.user)
         return Response(data=s.PrizeOrderSerializer(prize_order).data)
