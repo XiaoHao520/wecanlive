@@ -1597,6 +1597,35 @@ class MemberViewSet(viewsets.ModelViewSet):
             family.save()
             return Response(data=image.url())
 
+    @list_route(methods=['GET'])
+    def vip_upgrade_demand(self, request):
+        user = self.request.user
+        member = user.member
+        current_level = member.vip_level
+        recharge_this_month = member.get_recharge_this_month()
+        demand = []
+        if not m.Option.get('vip_rules'):
+            return Response(data=False)
+        vip_rules = json.loads(m.Option.get('vip_rules'))
+        while current_level > 0:
+            demand.append(0)
+            current_level -= 1
+        for level in range(member.vip_level, 9):
+            demand.append(vip_rules[level].get('recharge') - recharge_this_month)
+        return Response(data=demand)
+
+    @list_route(methods=['GET'])
+    def get_vip_demand(self, request):
+        user = self.request.user
+        member = user.member
+        demand = 0
+        if not m.Option.get('vip_rules'):
+            return Response(data=False)
+        vip_rules = json.loads(m.Option.get('vip_rules'))
+        if member.vip_level > 0:
+            demand = vip_rules[member.vip_level - 1].get('recharge_next_month') - member.amount_extend
+        return Response(data=demand)
+
 
 class RobotViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
