@@ -285,6 +285,7 @@ class UserDetailedSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     member_vip_level = serializers.ReadOnlyField(source='member.vip_level')
     vip_begin_time = serializers.ReadOnlyField(source='member.date_update_vip')
     vip_end_time = serializers.ReadOnlyField(source='member.get_vip_end_time')
+    is_vip_demand = serializers.ReadOnlyField(source='member.is_vip_demand')
     total_recharge = serializers.ReadOnlyField(source='member.total_recharge')
 
     is_first_login = serializers.ReadOnlyField(source='member.is_first_login')
@@ -301,6 +302,10 @@ class UserDetailedSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     # 是否签到
     is_checkin_daily = serializers.ReadOnlyField(
         source='member.is_checkin_daily',
+    )
+
+    relative_id = serializers.ReadOnlyField(
+        source='member.relative_id',
     )
 
     # institution_validation_status = serializers.ReadOnlyField()

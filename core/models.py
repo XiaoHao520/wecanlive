@@ -183,6 +183,11 @@ class Member(AbstractMember,
         default=0,
     )
 
+    is_vip_demand = models.BooleanField(
+        verbose_name='是否已续等',
+        default=False,
+    )
+
     credit_diamond_extend = models.DecimalField(
         verbose_name='贈送鑽石餘額',
         decimal_places=2,
@@ -582,6 +587,19 @@ class Member(AbstractMember,
         """
         return self.vip_level
 
+    def get_recharge_this_month(self, date_created=datetime.now()):
+        """
+        獲取最近一個月儲值量
+        :param date_created:
+        :return:
+        """
+        recharge_this_month = RechargeRecord.objects.filter(
+            author=self.user,
+            date_created__lte=date_created,
+            date_created__gt=date_created - timedelta(days=30),
+        ).aggregate(amount=models.Sum('amount')).get('amount') or 0
+        return recharge_this_month
+
     def update_vip_level(self, recharge_record):
         """
         每次储值后，计算新的vip等级
@@ -592,11 +610,7 @@ class Member(AbstractMember,
         vip_rules = json.loads(Option.get('vip_rules'))
         current_vip_level = self.vip_level
         # 最近一个月的储值量
-        amount_this_month = RechargeRecord.objects.filter(
-            author=recharge_record.author,
-            date_created__lte=recharge_record.date_created,
-            date_created__gt=recharge_record.date_created - timedelta(days=30),
-        ).aggregate(amount=models.Sum('amount')).get('amount') or 0
+        amount_this_month = self.get_recharge_this_month(recharge_record.date_created)
         # 当前vip为0，而且最近一个月储值低于vip1的储值要求，直接返回
         if current_vip_level == 0 and amount_this_month < vip_rules[0].get('recharge'):
             return
@@ -643,6 +657,10 @@ class Member(AbstractMember,
         :param date_update_vip:
         :return:
         """
+        if self.vip_level == level:
+            self.is_vip_demand = True
+        else:
+            self.is_vip_demand = False
         self.vip_level = level
         self.vip_upgrade_award(level)
         if date_update_vip:
