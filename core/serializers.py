@@ -304,6 +304,10 @@ class UserDetailedSerializer(QueryFieldsMixin, serializers.ModelSerializer):
         source='member.is_checkin_daily',
     )
 
+    relative_id = serializers.ReadOnlyField(
+        source='member.relative_id',
+    )
+
     # institution_validation_status = serializers.ReadOnlyField()
 
     # institution_validations = InstitutionValidationSerializer(
