@@ -689,6 +689,11 @@ class Comment(HierarchicalModel,
         else:
             return False
 
+    def get_activeevent(self):
+        if self.activeevents.exists():
+            return self.activeevents.first().id
+        else:
+            return False
 
 class CommentableModel(models.Model):
     comments = models.ManyToManyField(
@@ -769,6 +774,13 @@ class Message(AbstractMessageModel,
     is_read = models.BooleanField(
         verbose_name='是否已读',
         default=False,
+    )
+
+    users_read = models.ManyToManyField(
+        verbose_name='已阅读用户',
+        related_name='user_read',
+        to=User,
+        blank=True,
     )
 
     class Meta:

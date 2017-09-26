@@ -202,6 +202,7 @@ class MessageViewSet(viewsets.ModelViewSet):
                 m.models.Q(broadcast__target=m.Broadcast.TARGET_SYSTEM_FAMILYS) |
                 m.models.Q(broadcast__target=m.Broadcast.TARGET_SYSTEM_NOT_FAMILYS)
             ).order_by('date_created')
+
         return qs
 
     @list_route(methods=['POST'])
@@ -262,6 +263,33 @@ class MessageViewSet(viewsets.ModelViewSet):
             message.is_read = True
             message.save()
 
+        return Response(data=True)
+
+    @list_route(methods=['POST'])
+    def read_family_message(self, request):
+        """家族聊天更新当前用户已阅读信息
+        """
+        family = m.Family.objects.get(pk=request.data.get('family'))
+        family_member = m.FamilyMember.objects.filter(
+            family=family,
+            author=self.request.user,
+        ).first()
+        if family_member:
+            messages = family.messages.filter(
+                date_created__gt=family_member.date_approved,
+            ).exclude(
+                users_read=self.request.user
+            ).exclude(
+                sender=self.request.user
+            ).all()
+            for message in messages:
+                message.users_read.add(self.request.user)
+        return Response(data=True)
+
+    @detail_route(methods=['POST'])
+    def read_family_single_message(self, request, pk):
+        message = m.Message.objects.get(pk=pk)
+        message.users_read.add(self.request.user)
         return Response(data=True)
 
 
@@ -1211,7 +1239,8 @@ class MemberViewSet(viewsets.ModelViewSet):
                 date_created=message.date_created,
                 message_content='[禮物表情]' if message.type == m.Message.TYPE_IMAGE else message.content,
                 avatar=s.ImageSerializer(user.member.avatar).data['image'],
-                type='chat'
+                type='chat',
+                unread_count=unread_count,
             ))
 
         # 最新跟蹤信息
@@ -1284,13 +1313,17 @@ class MemberViewSet(viewsets.ModelViewSet):
                 last_message = family_member.family.messages.filter(
                     date_created__gt=family_member.date_approved,
                 ).order_by('-date_created').first()
+                unread_count = family_member.family.messages.filter(
+                    date_created__gt=family_member.date_approved,
+                ).exclude(users_read=me).exclude(sender=me).count()
                 data.append(dict(
                     id=family_member.family.id,
                     nickname=family_member.family.name,
                     date_created=last_message.date_created,
                     message_content='[禮物表情]' if last_message.type == m.Message.TYPE_IMAGE else last_message.content,
                     avatar=s.ImageSerializer(family_member.family.logo).data['image'],
-                    type='family'
+                    type='family',
+                    unread_count=unread_count,
                 ))
 
         return Response(data=sorted(data, key=lambda item: item['date_created'], reverse=True))
@@ -1596,6 +1629,28 @@ class MemberViewSet(viewsets.ModelViewSet):
             family.qrcode = image
             family.save()
             return Response(data=image.url())
+
+    @list_route(methods=['GET'])
+    def get_unread_message(self, request):
+        """
+        检测用户是否有未读信息 返回Bool
+        """
+        chat = m.Message.objects.filter(
+            receiver=self.request.user,
+            is_read=False,
+        ).exists()
+        if chat:
+            return Response(data=True)
+        family_members = m.FamilyMember.objects.filter(
+            author=self.request.user,
+        ).all()
+        for family_member in family_members:
+            if family_member.family.messages.filter(
+                    date_created__gt=family_member.date_approved,
+            ).exclude(users_read=self.request.user).exclude(sender=self.request.user).exists():
+                return Response(data=True)
+
+        return Response(data=False)
 
     @list_route(methods=['GET'])
     def vip_upgrade_demand(self, request):
@@ -2079,6 +2134,7 @@ class LiveViewSet(viewsets.ModelViewSet):
         paid = request.data.get('paid')
         quota = request.data.get('quota')
         category = m.LiveCategory.objects.get(id=request.data.get('category'))
+        cover = request.data.get('cover')
         live = m.Live.objects.create(
             name=name,
             password=password,
@@ -2086,6 +2142,7 @@ class LiveViewSet(viewsets.ModelViewSet):
             quota=quota,
             category=category,
             author=request.user,
+            cover=m.ImageModel.objects.get(pk=cover['id']) if cover else None,
         )
         return Response(data=s.LiveSerializer(live).data)
 
