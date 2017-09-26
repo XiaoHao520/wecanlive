@@ -785,6 +785,8 @@ class LiveSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
     end_scene_img_url = serializers.ReadOnlyField(source='end_scene_img.image.url')
 
+    cover_url = serializers.ReadOnlyField(source='cover.image.url')
+
     class Meta:
         model = m.Live
         exclude = ['comments', 'informs']
@@ -1280,6 +1282,10 @@ class CommentSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
     activeevent_img = serializers.ReadOnlyField(
         source='get_activeevent_img'
+    )
+
+    activeevent = serializers.ReadOnlyField(
+        source='get_activeevent'
     )
 
     class Meta:
