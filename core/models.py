@@ -2603,6 +2603,14 @@ class Live(UserOwnedModel,
         default=False,
     )
 
+    cover = models.OneToOneField(
+        verbose_name='封面图',
+        to=ImageModel,
+        related_name='lives',
+        null=True,
+        blank=True,
+    )
+
     class Meta:
         verbose_name = '直播'
         verbose_name_plural = '直播'
