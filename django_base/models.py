@@ -1686,7 +1686,7 @@ class PlannedTask(models.Model):
     @staticmethod
     def update_live_end():
         from core.models import Live
-        limit_date_response = datetime.now() - timedelta(minutes=5)
+        limit_date_response = datetime.now() - timedelta(minutes=6)
         lives = Live.objects.filter(
             models.Q(date_end=None, date_response=None, date_created__lt=limit_date_response) |
             models.Q(date_end=None, date_response__lt=limit_date_response)

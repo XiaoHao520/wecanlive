@@ -2301,6 +2301,10 @@ class LiveViewSet(viewsets.ModelViewSet):
         live = m.Live.objects.get(pk=pk)
         live.date_response = datetime.now()
         live.save()
+        log = live.watch_logs.filter(author=self.request.user).first()
+        if log:
+            log.date_response = datetime.now()
+            log.save()
         count = m.LiveWatchLog.objects.filter(
             m.models.Q(live=live, date_leave=None) |
             m.models.Q(live=live, date_leave__lt=m.models.F('date_enter'))
@@ -2372,7 +2376,7 @@ class LiveWatchLogViewSet(viewsets.ModelViewSet):
     def viewer_log_response(self, request):
         """观众观看直播响应
         """
-        live = m.Live.objects.get(pk=request.data.get('family'))
+        live = m.Live.objects.get(pk=request.data.get('live'))
         watch_log = live.watch_logs.filter(
             author=self.request.user,
         ).first()
