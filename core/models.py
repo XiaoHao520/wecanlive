@@ -723,7 +723,7 @@ class Member(AbstractMember,
         # 是否在直播
         live = self.user.lives_owned.filter().order_by('-date_created')
         if live.exists():
-            if live.first().date_end:
+            if live.first().date_end or live.first().is_private:
                 return False
             else:
                 return live.first().id
@@ -2611,6 +2611,13 @@ class Live(UserOwnedModel,
         blank=True,
     )
 
+    date_response = models.DateTimeField(
+        verbose_name='响应时间',
+        help_text='前段每一分钟更新一次这个字段，如果5分钟检测没有更新自动关直播',
+        null=True,
+        blank=True,
+    )
+
     class Meta:
         verbose_name = '直播'
         verbose_name_plural = '直播'
@@ -2928,6 +2935,13 @@ class LiveWatchLog(UserOwnedModel,
     coin_transaction = models.OneToOneField(
         verbose_name='收费直播缴费记录',
         to='CreditCoinTransaction',
+        null=True,
+        blank=True,
+    )
+
+    date_response = models.DateTimeField(
+        verbose_name='响应时间',
+        help_text='前段每一分钟更新一次这个字段，如果5分钟检测没有更新离开直播间',
         null=True,
         blank=True,
     )
