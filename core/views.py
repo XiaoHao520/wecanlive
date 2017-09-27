@@ -2065,7 +2065,7 @@ class LiveViewSet(viewsets.ModelViewSet):
         if live_status and live_status == 'ACTION':
             qs = qs.filter(
                 date_end=None,
-            )
+            ).exclude(is_private=True)
         elif live_status and live_status == 'OVER':
             qs = qs.exclude(
                 date_end=None,
@@ -2096,9 +2096,9 @@ class LiveViewSet(viewsets.ModelViewSet):
             qs = qs.exclude(pk__in=id_list)
 
         if hot_live:
-            qs = m.Live.objects.filter(date_end=None).order_by('-hot_rating')
+            qs = m.Live.objects.filter(date_end=None).exclude(is_private=True).order_by('-hot_rating')
         if hot_replay:
-            qs = m.Live.objects.exclude(date_end=None).order_by('-hot_rating')
+            qs = m.Live.objects.exclude(date_end=None).exclude(is_private=True).order_by('-hot_rating')
         return qs
 
     @detail_route(methods=['POST'])
@@ -2135,6 +2135,7 @@ class LiveViewSet(viewsets.ModelViewSet):
         quota = request.data.get('quota')
         category = m.LiveCategory.objects.get(id=request.data.get('category'))
         cover = request.data.get('cover')
+        is_private = request.data.get('is_private')
         live = m.Live.objects.create(
             name=name,
             password=password,
@@ -2143,6 +2144,7 @@ class LiveViewSet(viewsets.ModelViewSet):
             category=category,
             author=request.user,
             cover=m.ImageModel.objects.get(pk=cover['id']) if cover else None,
+            is_private=is_private
         )
         return Response(data=s.LiveSerializer(live).data)
 
@@ -2320,6 +2322,20 @@ class LiveViewSet(viewsets.ModelViewSet):
         ).count()
         return Response(data=count)
 
+    @detail_route(methods=['POST'])
+    def owner_live_response(self, request, pk):
+        """
+        主播直播响应
+        """
+        live = m.Live.objects.get(pk=pk)
+        live.date_response = datetime.now()
+        live.save()
+        count = m.LiveWatchLog.objects.filter(
+            m.models.Q(live=live, date_leave=None) |
+            m.models.Q(live=live, date_leave__lt=m.models.F('date_enter'))
+        ).count()
+        return Response(data=count)
+
 
 class LiveBarrageViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
@@ -2380,6 +2396,24 @@ class LiveWatchLogViewSet(viewsets.ModelViewSet):
             amounts.append(amount_item)
         data = dict(labels=labels, amounts=amounts)
         return Response(data=data)
+
+    @list_route(methods=['POST'])
+    def viewer_log_response(self, request):
+        """观众观看直播响应
+        """
+        live = m.Live.objects.get(pk=request.data.get('family'))
+        watch_log = live.watch_logs.filter(
+            author=self.request.user,
+        ).first()
+        if not watch_log:
+            return Response(data=False)
+        watch_log.date_response = datetime.now()
+        watch_log.save()
+        count = m.LiveWatchLog.objects.filter(
+            m.models.Q(live=watch_log.live, date_leave=None) |
+            m.models.Q(live=watch_log.live, date_leave__lt=m.models.F('date_enter'))
+        ).count()
+        return Response(data=count)
 
 
 class ActiveEventViewSet(viewsets.ModelViewSet):
