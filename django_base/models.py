@@ -1662,6 +1662,7 @@ class PlannedTask(models.Model):
             member.date_update_vip = datetime.now()
         else:
             member.date_update_vip = None
+        member.is_vip_demand = False
         member.save()
         planned_task = PlannedTask.objects.filter(
             method='change_vip_level',
@@ -1672,7 +1673,7 @@ class PlannedTask(models.Model):
             planned_task.date_planned = planned_task.date_planned + timedelta(days=30)
             planned_task.status = PlannedTask.STATUS_PLANNED
             planned_task.save()
-        # 如果降到没有vip等级，切超过一个月，则删除计划任务
+        # 如果降到没有vip等级，且超过一个月，则删除计划任务
         else:
             planned_task.delete()
 
