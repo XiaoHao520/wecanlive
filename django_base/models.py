@@ -695,6 +695,7 @@ class Comment(HierarchicalModel,
         else:
             return False
 
+
 class CommentableModel(models.Model):
     comments = models.ManyToManyField(
         verbose_name='评论',
@@ -1662,6 +1663,7 @@ class PlannedTask(models.Model):
             member.date_update_vip = datetime.now()
         else:
             member.date_update_vip = None
+        member.is_vip_demand = False
         member.save()
         planned_task = PlannedTask.objects.filter(
             method='change_vip_level',
@@ -1672,7 +1674,7 @@ class PlannedTask(models.Model):
             planned_task.date_planned = planned_task.date_planned + timedelta(days=30)
             planned_task.status = PlannedTask.STATUS_PLANNED
             planned_task.save()
-        # 如果降到没有vip等级，切超过一个月，则删除计划任务
+        # 如果降到没有vip等级，且超过一个月，则删除计划任务
         else:
             planned_task.delete()
 
@@ -1681,6 +1683,32 @@ class PlannedTask(models.Model):
         from core.models import Live
         for live in Live.objects.all():
             live.update_hot_rating()
+
+    @staticmethod
+    def update_live_end():
+        from core.models import Live
+        limit_date_response = datetime.now() - timedelta(minutes=5)
+        lives = Live.objects.filter(
+            models.Q(date_end=None, date_response=None, date_created__lt=limit_date_response) |
+            models.Q(date_end=None, date_response__lt=limit_date_response)
+        ).all()
+        for live in lives:
+            live.date_end = datetime.now()
+            live.save()
+
+    @staticmethod
+    def update_live_log_leave():
+        from core.models import LiveWatchLog
+        limit_date_response = datetime.now() - timedelta(minutes=6)
+        logs = LiveWatchLog.objects.filter(
+            models.Q(date_leave=None, date_response=None, date_enter__lt=limit_date_response) |
+            models.Q(date_leave=None, date_response__lt=limit_date_response) |
+            models.Q(date_leave__lt=models.F('date_enter'), date_response=None, date_enter__lt=limit_date_response) |
+            models.Q(date_leave__lt=models.F('date_enter'), date_response__lt=limit_date_response)
+        ).all()
+        for log in logs:
+            log.date_leave = datetime.now()
+            log.save()
 
 
 class AdminLog(UserOwnedModel):

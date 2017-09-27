@@ -52,3 +52,19 @@ class AutomaticShelvesCronJob(CronJobBase):
         if not update_live_hot_ranking:
             date_planned = now + timedelta(minutes=15)
             m.PlannedTask.make('update_live_hot_ranking', date_planned)
+
+        update_live_end = m.PlannedTask.objects.filter(
+            method='update_live_end',
+            date_planned__gt=now,
+        ).first()
+        if not update_live_end:
+            date_planned = now + timedelta(minutes=1)
+            m.PlannedTask.make('update_live_end', date_planned)
+
+        update_log_leave = m.PlannedTask.objects.filter(
+            method='update_live_log_leave',
+            date_planned__gt=now,
+        ).first()
+        if not update_log_leave:
+            date_planned = now + timedelta(minutes=1)
+            m.PlannedTask.make('update_live_log_leave', date_planned)
