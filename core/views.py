@@ -3762,6 +3762,23 @@ class LiveRecordViewSet(viewsets.ModelViewSet):
         if my_hash.upper() != sign.upper():
             # 验签失败，直接返回
             return Response(data=dict(code=0))
+        m.LiveRecordLog.objects.create(
+            appid=appid,
+            t=t,
+            sign=sign,
+            event_type=m.LiveRecordLog.EVENT_TYPE_100 if int(event_type) == 100 else int(event_type),
+            stream_id=stream_id,
+            channel_id=channel_id,
+            video_id=video_id,
+            file_size=file_size,
+            start_time=start_time,
+            end_time=end_time,
+            file_id=file_id,
+            record_file_id=record_file_id,
+            duration=duration,
+            stream_param=stream_param,
+        )
+        return Response(data=dict(code=0))
 
     def get_queryset(self):
         return interceptor_get_queryset_kw_field(self)
