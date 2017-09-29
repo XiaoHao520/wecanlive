@@ -2137,6 +2137,7 @@ class LiveViewSet(viewsets.ModelViewSet):
         category = m.LiveCategory.objects.get(id=request.data.get('category'))
         cover = request.data.get('cover')
         is_private = request.data.get('is_private')
+        is_record = request.data.get('is_record')
         live = m.Live.objects.create(
             name=name,
             password=password,
@@ -2145,7 +2146,8 @@ class LiveViewSet(viewsets.ModelViewSet):
             category=category,
             author=request.user,
             cover=m.ImageModel.objects.get(pk=cover['id']) if cover else None,
-            is_private=is_private
+            is_private=is_private,
+            is_record=is_record
         )
         return Response(data=s.LiveSerializer(live).data)
 

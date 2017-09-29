@@ -2605,6 +2605,12 @@ class Live(UserOwnedModel,
         help_text='如果设置隐藏，将不能在外部列表查询到此直播',
     )
 
+    is_record = models.BooleanField(
+        verbose_name='是否錄制',
+        default=False,
+        help_text='如果设置錄制，推流同時增加錄制功能',
+    )
+
     paid = models.IntegerField(
         verbose_name='收費',
         default=0,
@@ -2781,11 +2787,19 @@ class Live(UserOwnedModel,
         # 自動有效期 1 天
         tx_time = hex(int(time()) + 24 * 3600)[2:].upper()
         tx_secret = md5((key + live_code + tx_time).encode()).hexdigest()
-        return 'rtmp://{biz_id}.livepush.myqcloud.com/live/' \
-               '{live_code}?bizid={biz_id}' \
-               '&txSecret={tx_secret}&txTime={tx_time}' \
-            .format(biz_id=biz_id, live_code=live_code,
-                    tx_secret=tx_secret, tx_time=tx_time)
+        if self.is_record:
+            return 'rtmp://{biz_id}.livepush.myqcloud.com/live/' \
+                   '{live_code}?bizid={biz_id}' \
+                   '&txSecret={tx_secret}&txTime={tx_time}' \
+                   '&record={record_type}' \
+                .format(biz_id=biz_id, live_code=live_code,
+                        tx_secret=tx_secret, tx_time=tx_time, record_type='mp4|hls')
+        else:
+            return 'rtmp://{biz_id}.livepush.myqcloud.com/live/' \
+                   '{live_code}?bizid={biz_id}' \
+                   '&txSecret={tx_secret}&txTime={tx_time}' \
+                .format(biz_id=biz_id, live_code=live_code,
+                        tx_secret=tx_secret, tx_time=tx_time)
 
     def get_play_url(self):
         """ 獲取播放地址（FLV)
@@ -3402,7 +3416,7 @@ class Prize(EntityModel):
         help_text='此禮物在元氣寶盒中出現時的贈送數量，０爲不會在元氣寶盒中出現'
     )
 
-    vip_limit= models.IntegerField(
+    vip_limit = models.IntegerField(
         verbose_name='VIP等级',
         default=0,
     )
