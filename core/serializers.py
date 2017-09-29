@@ -141,6 +141,7 @@ class UserSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     # contact_to_me = serializers.BooleanField(read_only=True)
 
     member_level = serializers.ReadOnlyField(source='member.get_level')
+    member_large_level = serializers.ReadOnlyField(source='member.large_level')
 
     member_vip_level = serializers.ReadOnlyField(source='member.get_vip_level')
 
@@ -806,6 +807,10 @@ class LiveBarrageSerializer(QueryFieldsMixin, serializers.ModelSerializer):
         source='author.member.get_level'
     )
 
+    author_large_level = serializers.ReadOnlyField(
+        source='author.member.large_level'
+    )
+
     author_vip_level = serializers.ReadOnlyField(
         source='author.member.get_vip_level'
     )
@@ -928,6 +933,10 @@ class ActiveEventSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
     author_level = serializers.ReadOnlyField(
         source='author.member.get_level'
+    )
+
+    author_large_level = serializers.ReadOnlyField(
+        source='author.member.large_level'
     )
 
     author_vip_level = serializers.ReadOnlyField(
@@ -1332,6 +1341,8 @@ class RankRecordSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 
     author_level = serializers.ReadOnlyField(source='author.member.get_level')
 
+    author_large_level = serializers.ReadOnlyField(source='author.member.large_level')
+
     author_vip_level = serializers.ReadOnlyField(source='author.member.get_vip_level')
 
     author_avatar = serializers.ReadOnlyField(source='author.member.avatar.image.url')
@@ -1360,4 +1371,10 @@ class AdminLogSerializer(QueryFieldsMixin, serializers.ModelSerializer):
 class LoginRecordSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.LoginRecord
+        fields = '__all__'
+
+
+class LiveRecordLogSerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    class Meta:
+        model = m.LiveRecordLog
         fields = '__all__'
