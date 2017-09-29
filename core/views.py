@@ -1251,10 +1251,11 @@ class MemberViewSet(viewsets.ModelViewSet):
             content_type=m.ContentType.objects.get(model='member'),
         ).order_by('-date_created')
         if follow_user_mark.exists():
+            is_read = True if follow_user_mark.first().is_read else False
             data.append(dict(
                 type='follow',
                 message_content='{} 追蹤了你'.format(follow_user_mark.first().author.member.nickname),
-                is_read=True,
+                is_read=is_read,
                 date_created=follow_user_mark.first().date_created,
             ))
         # 最新動態消息
@@ -1276,19 +1277,21 @@ class MemberViewSet(viewsets.ModelViewSet):
         else:
             last_activeevent_message = 'mark' if like_activeevent_mark else 'comment' if activeevent_comment else None
         if last_activeevent_message and last_activeevent_message == 'mark':
+            is_read = True if like_activeevent_mark.is_read else False
             data.append(dict(
                 date_created=like_activeevent_mark.date_created,
                 message_content='{} 給你點了一個讃'.format(like_activeevent_mark.author.member.nickname),
                 type='activeevent',
-                is_read=True,
+                is_read=is_read,
             ))
 
         if last_activeevent_message and last_activeevent_message == 'comment':
+            is_read = True if activeevent_comment.is_read else False
             data.append(dict(
                 date_created=activeevent_comment.date_created,
                 message_content=activeevent_comment.content,
                 type='activeevent',
-                is_read=True,
+                is_read=is_read,
             ))
 
         # 活動消息
@@ -1297,11 +1300,17 @@ class MemberViewSet(viewsets.ModelViewSet):
             receiver=self.request.user,
             broadcast__target=m.Broadcast.TARGET_ACTIVITY,
         ).order_by('-date_created')
+
         if activity_message.exists():
+            is_read = m.Message.objects.filter(
+                sender=None,
+                receiver=self.request.user,
+                broadcast__target=m.Broadcast.TARGET_ACTIVITY,
+            ).exclude(users_read=self.request.user).count()
             data.append(dict(
                 date_created=activity_message.first().date_created,
                 message_content=activity_message.first().content,
-                is_read=activity_message.first().is_read,
+                is_read=is_read,
                 type='activity',
             ))
 
@@ -1376,10 +1385,18 @@ class MemberViewSet(viewsets.ModelViewSet):
         ).order_by('-date_created')
         last_system_message = None
         if system_message.exists():
+            is_read = m.Message.objects.filter(
+                m.models.Q(broadcast__target=m.Broadcast.TARGET_SYSTEM,
+                           sender=None, receiver=self.request.user, ) |
+                m.models.Q(broadcast__target=m.Broadcast.TARGET_SYSTEM_NOT_FAMILYS,
+                           sender=None, receiver=self.request.user, ) |
+                m.models.Q(broadcast__target=m.Broadcast.TARGET_SYSTEM_FAMILYS,
+                           sender=None, receiver=self.request.user, )
+            ).exclude(users_read=self.request.user).count()
             last_system_message = dict(
                 date_created=system_message.first().date_created,
                 content=system_message.first().content,
-                is_read=system_message.first().is_read,
+                is_read=is_read,
             )
         return Response(data=last_system_message)
 
@@ -1650,8 +1667,104 @@ class MemberViewSet(viewsets.ModelViewSet):
                     date_created__gt=family_member.date_approved,
             ).exclude(users_read=self.request.user).exclude(sender=self.request.user).exists():
                 return Response(data=True)
+        activity_message = m.Message.objects.filter(
+                sender=None,
+                receiver=self.request.user,
+                broadcast__target=m.Broadcast.TARGET_ACTIVITY,
+            ).exclude(users_read=self.request.user).exists()
+        if activity_message:
+            return Response(data=True)
+
+        system_message = m.Message.objects.filter(
+                m.models.Q(broadcast__target=m.Broadcast.TARGET_SYSTEM,
+                           sender=None, receiver=self.request.user, ) |
+                m.models.Q(broadcast__target=m.Broadcast.TARGET_SYSTEM_NOT_FAMILYS,
+                           sender=None, receiver=self.request.user, ) |
+                m.models.Q(broadcast__target=m.Broadcast.TARGET_SYSTEM_FAMILYS,
+                           sender=None, receiver=self.request.user, )
+            ).exclude(users_read=self.request.user).exists()
+        if system_message:
+            return Response(data=True)
+
+        activeevents = self.request.user.activeevents_owned.all()
+        activeevents_comments = m.Comment.objects.filter(
+                activeevents__id__in=[activeevent.id for activeevent in activeevents],
+            ).exclude(is_read=True).exists()
+        activeevents_marks = m.UserMark.objects.filter(
+                object_id__in=[activeevent.id for activeevent in activeevents],
+                subject='like',
+                content_type=m.ContentType.objects.get(model='activeevent'),
+            ).exclude(is_read=True).exists()
+        if activeevents_comments or activeevents_marks:
+            return Response(data=True)
+
+        follow_marks = m.UserMark.objects.filter(
+                object_id=self.request.user.id,
+                subject='follow',
+                content_type=m.ContentType.objects.get(model='member'),
+            ).exclude(is_read=True).exists()
+        if follow_marks:
+            return Response(data=True)
 
         return Response(data=False)
+
+    @list_route(methods=['POST'])
+    def read_system_message(self, requset):
+        """阅读系统信息
+        """
+        type = requset.data.get('type')
+        messages = None
+        if type == 'system':
+            messages = m.Message.objects.filter(
+                m.models.Q(broadcast__target=m.Broadcast.TARGET_SYSTEM,
+                           sender=None, receiver=self.request.user, ) |
+                m.models.Q(broadcast__target=m.Broadcast.TARGET_SYSTEM_NOT_FAMILYS,
+                           sender=None, receiver=self.request.user, ) |
+                m.models.Q(broadcast__target=m.Broadcast.TARGET_SYSTEM_FAMILYS,
+                           sender=None, receiver=self.request.user, )
+            ).exclude(users_read=self.request.user).order_by('-date_created').all()
+        if type == 'activity':
+            messages = m.Message.objects.filter(
+                sender=None,
+                receiver=self.request.user,
+                broadcast__target=m.Broadcast.TARGET_ACTIVITY,
+            ).exclude(users_read=self.request.user).all()
+
+        for message in messages:
+            message.users_read.add(self.request.user)
+
+        return Response(data=True)
+
+    @list_route(methods=['POST'])
+    def read_follow_message(self, request):
+        type = request.data.get('type')
+        marks = None
+        comments = None
+        if type == 'follow':
+            marks = m.UserMark.objects.filter(
+                object_id=self.request.user.id,
+                subject='follow',
+                content_type=m.ContentType.objects.get(model='member'),
+            ).exclude(is_read=True).all()
+        if type == 'activity':
+            activeevents = self.request.user.activeevents_owned.all()
+            marks = m.UserMark.objects.filter(
+                object_id__in=[activeevent.id for activeevent in activeevents],
+                subject='like',
+                content_type=m.ContentType.objects.get(model='activeevent'),
+            ).exclude(is_read=True).all()
+            comments = m.Comment.objects.filter(
+                activeevents__id__in=[activeevent.id for activeevent in activeevents],
+            ).exclude(is_read=True).all()
+
+        for mark in marks:
+            mark.is_read = True
+            mark.save()
+        if comments:
+            for comment in comments:
+                comment.is_read = True
+                comment.save()
+        return Response(data=True)
 
     @list_route(methods=['GET'])
     def vip_upgrade_demand(self, request):
@@ -2333,6 +2446,10 @@ class LiveViewSet(viewsets.ModelViewSet):
         live = m.Live.objects.get(pk=pk)
         live.date_response = datetime.now()
         live.save()
+        log = live.watch_logs.filter(author=self.request.user).first()
+        if log:
+            log.date_response = datetime.now()
+            log.save()
         count = m.LiveWatchLog.objects.filter(
             m.models.Q(live=live, date_leave=None) |
             m.models.Q(live=live, date_leave__lt=m.models.F('date_enter'))
@@ -2404,7 +2521,7 @@ class LiveWatchLogViewSet(viewsets.ModelViewSet):
     def viewer_log_response(self, request):
         """观众观看直播响应
         """
-        live = m.Live.objects.get(pk=request.data.get('family'))
+        live = m.Live.objects.get(pk=request.data.get('live'))
         watch_log = live.watch_logs.filter(
             author=self.request.user,
         ).first()

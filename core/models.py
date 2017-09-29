@@ -1644,6 +1644,11 @@ class DailyCheckInLog(UserOwnedModel):
         blank=True,
     )
 
+    continue_check_in = models.IntegerField(
+        verbose_name='连续签到天数',
+        default=1,
+    )
+
     class Meta:
         verbose_name = '每日签到'
         verbose_name_plural = '每日签到'
@@ -1656,19 +1661,32 @@ class DailyCheckInLog(UserOwnedModel):
         :return:
         """
 
-        daily_option = json.loads(Option.get('daily_sign_award'))
-        # 每日签到奖励
-        award_list = daily_option['daily_seven_days']
-        # 连签配置
-        continue_award = daily_option['daily_for_days']
-        # 今天簽到獎勵
-        today_daily_award = award_list[datetime.now().weekday()]
         daily_check = None
         continue_daily_check = None
         coin_transaction = None
         star_transaction = None
         experience_transaction = None
         sign_exp_transaction = None
+
+        daily_option = json.loads(Option.get('daily_sign_award'))
+        # 每日签到奖励
+        award_list = daily_option['daily_seven_days']
+        # 连签配置
+        continue_award = daily_option['daily_for_days']
+
+        # 连续签到天数
+        continue_checkin_count = 1
+        # 昨天签到
+        yesterday_checkin = DailyCheckInLog.objects.filter(
+            author=user,
+            date_created__date=datetime.now().date() - timedelta(days=1),
+        ).first()
+        if yesterday_checkin:
+            # 昨天有签到
+            continue_checkin_count = yesterday_checkin.continue_check_in + 1
+        # 今天簽到獎勵
+        today_award = 6 if continue_checkin_count % 7 == 0 else continue_checkin_count % 7 - 1
+        today_daily_award = award_list[today_award]
 
         if today_daily_award['type'] == 'star':
             star_transaction = CreditStarTransaction.objects.create(
@@ -1688,7 +1706,6 @@ class DailyCheckInLog(UserOwnedModel):
             experience_transaction = ExperienceTransaction.make(user, today_daily_award['value'],
                                                                 ExperienceTransaction.TYPE_SIGN)
         # todo: i币
-
         sign_exp_transaction = ExperienceTransaction.make(user, int(Option.get('experience_points_login') or 5),
                                                           ExperienceTransaction.TYPE_SIGN)
         sign_exp_transaction.update_level()
@@ -1697,32 +1714,12 @@ class DailyCheckInLog(UserOwnedModel):
             prize_star_transaction=star_transaction,
             prize_coin_transaction=coin_transaction,
             prize_experience_transaction=experience_transaction,
+            continue_check_in=continue_checkin_count,
         )
 
         # 连签要求天数
-        continue_check = DailyCheckInLog.objects.filter(
-            author=user,
-            is_continue=True,
-        ).order_by('-date_created')
-        last_continue_check_date = None
-        if continue_check.exists():
-            last_continue_check_date = continue_check.first().date_created
-        else:
-            last_continue_check_date = DailyCheckInLog.objects.filter(
-                author=user,
-            ).order_by('date_created').first().date_created
-
         continue_days = continue_award['days']
-        continue_success = True
-        while continue_days > 0:
-            continue_days -= 1
-            daily = DailyCheckInLog.objects.filter(
-                author=user,
-                date_created__date=(datetime.now() - timedelta(days=continue_days)).date(),
-                date_created__date__gt=last_continue_check_date.date(),
-            ).exists()
-            if not daily:
-                continue_success = False
+        continue_success = True if continue_checkin_count % continue_days == 0 else False
         # 连签奖励
         if continue_success:
             continue_coin_transaction = None
@@ -1753,6 +1750,7 @@ class DailyCheckInLog(UserOwnedModel):
                 prize_coin_transaction=continue_coin_transaction,
                 prize_experience_transaction=continue_experience_transaction,
                 is_continue=True,
+                continue_check_in=continue_days,
             )
 
         return dict(
@@ -2868,19 +2866,46 @@ class Live(UserOwnedModel,
         watchlog_count = self.watch_logs.filter(
             models.Q(date_leave=None) |
             models.Q(date_leave__lt=models.F('date_enter'))
-        ).count()
-        barrage_count = self.barrages.count()
-        comment_count = Comment.objects.filter(livewatchlogs__live=self, ).count()
-        vip4_member_count = self.watch_logs.filter(author__member__vip_level=4).count()
-        vip5_member_count = self.watch_logs.filter(author__member__vip_level=5).count()
-        vip6_member_count = self.watch_logs.filter(author__member__vip_level=6).count()
-        vip7_member_count = self.watch_logs.filter(author__member__vip_level=7).count()
-        vip8_member_count = self.watch_logs.filter(author__member__vip_level=8).count()
-        vip9_member_count = self.watch_logs.filter(author__member__vip_level=9).count()
-        self.hot_rating = watchlog_count * 1 + barrage_count * 0.2 + comment_count * 0.2 \
-                          + vip4_member_count * 10 + vip5_member_count * 15 + vip6_member_count * 20 \
-                          + vip7_member_count * 25 + vip8_member_count * 30 + vip9_member_count * 35 \
-                          + float(self.get_live_diamond())
+        ).count() * float(Option.get('count_live_watch') or 1)
+        barrage_count = self.barrages.count() * float(Option.get('count_comment') or 0.2)
+        comment_count = Comment.objects.filter(livewatchlogs__live=self, ).count() * \
+                        float(Option.get('count_comment') or 0.2)
+
+        vip4_member_count = self.watch_logs.filter(
+            models.Q(author__member__vip_level=4) |
+            models.Q(author__member__large_level=2)
+        ).count() * float(Option.get('level_red') or 10)
+
+        vip5_member_count = self.watch_logs.filter(
+            models.Q(author__member__vip_level=5) |
+            models.Q(author__member__large_level=3)
+        ).count() * (float(Option.get('level_red') or 10) + 5)
+
+        vip6_member_count = self.watch_logs.filter(
+            models.Q(author__member__vip_level=6) |
+            models.Q(author__member__large_level=4)
+        ).count() * (float(Option.get('level_red') or 10) + 10)
+
+        vip7_member_count = self.watch_logs.filter(
+            models.Q(author__member__vip_level=7) |
+            models.Q(author__member__large_level=5)
+        ).count() * (float(Option.get('level_red') or 10) + 15)
+
+        vip8_member_count = self.watch_logs.filter(
+            models.Q(author__member__vip_level=8) |
+            models.Q(author__member__large_level=6)
+        ).count() * (float(Option.get('level_red') or 10) + 20)
+
+        vip9_member_count = self.watch_logs.filter(
+            models.Q(author__member__vip_level=9) |
+            models.Q(author__member__large_level=7)
+        ).count() * (float(Option.get('level_red') or 10) + 25)
+
+        diamond_count = float(self.get_live_diamond()) * float(Option.get('count_receive_diamond') or 1)
+        self.hot_rating = watchlog_count + barrage_count + comment_count \
+                          + vip4_member_count + vip5_member_count + vip6_member_count \
+                          + vip7_member_count + vip8_member_count + vip9_member_count \
+                          + diamond_count
         self.save()
 
 

@@ -666,6 +666,11 @@ class Comment(HierarchicalModel,
         verbose_name='内容',
     )
 
+    is_read = models.BooleanField(
+        verbose_name='是否已读',
+        default=False,
+    )
+
     class Meta:
         verbose_name = '评论'
         verbose_name_plural = '评论'
@@ -1300,6 +1305,11 @@ class UserMark(UserOwnedModel):
     object_id = models.PositiveIntegerField()
     object = GenericForeignKey('content_type', 'object_id')
 
+    is_read = models.BooleanField(
+        verbose_name='是否已读',
+        default=False,
+    )
+
     date_created = models.DateTimeField(
         verbose_name='记录时间',
         auto_now_add=True,
@@ -1687,7 +1697,7 @@ class PlannedTask(models.Model):
     @staticmethod
     def update_live_end():
         from core.models import Live
-        limit_date_response = datetime.now() - timedelta(minutes=5)
+        limit_date_response = datetime.now() - timedelta(minutes=6)
         lives = Live.objects.filter(
             models.Q(date_end=None, date_response=None, date_created__lt=limit_date_response) |
             models.Q(date_end=None, date_response__lt=limit_date_response)
