@@ -2820,19 +2820,46 @@ class Live(UserOwnedModel,
         watchlog_count = self.watch_logs.filter(
             models.Q(date_leave=None) |
             models.Q(date_leave__lt=models.F('date_enter'))
-        ).count()
-        barrage_count = self.barrages.count()
-        comment_count = Comment.objects.filter(livewatchlogs__live=self, ).count()
-        vip4_member_count = self.watch_logs.filter(author__member__vip_level=4).count()
-        vip5_member_count = self.watch_logs.filter(author__member__vip_level=5).count()
-        vip6_member_count = self.watch_logs.filter(author__member__vip_level=6).count()
-        vip7_member_count = self.watch_logs.filter(author__member__vip_level=7).count()
-        vip8_member_count = self.watch_logs.filter(author__member__vip_level=8).count()
-        vip9_member_count = self.watch_logs.filter(author__member__vip_level=9).count()
-        self.hot_rating = watchlog_count * 1 + barrage_count * 0.2 + comment_count * 0.2 \
-                          + vip4_member_count * 10 + vip5_member_count * 15 + vip6_member_count * 20 \
-                          + vip7_member_count * 25 + vip8_member_count * 30 + vip9_member_count * 35 \
-                          + float(self.get_live_diamond())
+        ).count() * float(Option.get('count_live_watch') or 1)
+        barrage_count = self.barrages.count() * float(Option.get('count_comment') or 0.2)
+        comment_count = Comment.objects.filter(livewatchlogs__live=self, ).count() * \
+                        float(Option.get('count_comment') or 0.2)
+
+        vip4_member_count = self.watch_logs.filter(
+            models.Q(author__member__vip_level=4) |
+            models.Q(author__member__large_level=2)
+        ).count() * float(Option.get('level_red') or 10)
+
+        vip5_member_count = self.watch_logs.filter(
+            models.Q(author__member__vip_level=5) |
+            models.Q(author__member__large_level=3)
+        ).count() * (float(Option.get('level_red') or 10) + 5)
+
+        vip6_member_count = self.watch_logs.filter(
+            models.Q(author__member__vip_level=6) |
+            models.Q(author__member__large_level=4)
+        ).count() * (float(Option.get('level_red') or 10) + 10)
+
+        vip7_member_count = self.watch_logs.filter(
+            models.Q(author__member__vip_level=7) |
+            models.Q(author__member__large_level=5)
+        ).count() * (float(Option.get('level_red') or 10) + 15)
+
+        vip8_member_count = self.watch_logs.filter(
+            models.Q(author__member__vip_level=8) |
+            models.Q(author__member__large_level=6)
+        ).count() * (float(Option.get('level_red') or 10) + 20)
+
+        vip9_member_count = self.watch_logs.filter(
+            models.Q(author__member__vip_level=9) |
+            models.Q(author__member__large_level=7)
+        ).count() * (float(Option.get('level_red') or 10) + 25)
+
+        diamond_count = float(self.get_live_diamond()) * float(Option.get('count_receive_diamond') or 1)
+        self.hot_rating = watchlog_count + barrage_count + comment_count \
+                          + vip4_member_count + vip5_member_count + vip6_member_count \
+                          + vip7_member_count + vip8_member_count + vip9_member_count \
+                          + diamond_count
         self.save()
 
 

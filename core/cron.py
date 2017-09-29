@@ -50,7 +50,7 @@ class AutomaticShelvesCronJob(CronJobBase):
             date_planned__gt=now,
         ).first()
         if not update_live_hot_ranking:
-            date_planned = now + timedelta(minutes=15)
+            date_planned = now + timedelta(minutes=1)
             m.PlannedTask.make('update_live_hot_ranking', date_planned)
 
         update_live_end = m.PlannedTask.objects.filter(
