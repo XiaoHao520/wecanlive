@@ -2757,7 +2757,7 @@ class Live(UserOwnedModel,
 
     def get_room_id(self):
         from hashlib import md5
-        return md5('live_{}'.format(self.pk).encode()).hexdigest()
+        return md5('live_{}'.format(self.author.id).encode()).hexdigest()
 
     def get_push_url(self):
         """ 獲取推流地址
@@ -3104,6 +3104,110 @@ class LiveWatchLog(UserOwnedModel,
         watch_live_experience.update_level()
         self.author.member.watch_live_extend = (duration + watch_live_extend) % 30
         self.author.member.save()
+
+
+class LiveRecordLog(UserOwnedModel, models.Model):
+    appid = models.IntegerField(
+        verbose_name='推流应用id',
+        default=0,
+    )
+
+    t = models.IntegerField(
+        verbose_name='有效时间',
+        default=0,
+    )
+
+    sign = models.CharField(
+        verbose_name='安全签名',
+        max_length=100,
+    )
+
+    EVENT_TYPE_0 = 0
+    EVENT_TYPE_1 = 1
+    EVENT_TYPE_100 = 100
+    EVENT_TYPE_200 = 200
+    EVENT_TYPE_CHOICES = (
+        (EVENT_TYPE_0, 0),
+        (EVENT_TYPE_1, 1),
+        (EVENT_TYPE_100, 100),
+        (EVENT_TYPE_200, 200),
+    )
+
+    event_type = models.IntegerField(
+        verbose_name='事件类型',
+        choices=EVENT_TYPE_CHOICES,
+        default=EVENT_TYPE_100,
+    )
+
+    stream_id = models.CharField(
+        verbose_name='直播码',
+        max_length=25,
+        help_text='(stream_id)标志事件源于哪一条直播流',
+    )
+
+    channel_id = models.CharField(
+        verbose_name='直播码',
+        max_length=25,
+        help_text='(channel_id)同stream_id',
+    )
+
+    video_id = models.CharField(
+        verbose_name='vid',
+        max_length=100,
+    )
+
+    video_url = models.CharField(
+        verbose_name='下载地址',
+        max_length=255,
+    )
+
+    file_size = models.IntegerField(
+        verbose_name='文件大小',
+        default=0,
+    )
+
+    start_time = models.IntegerField(
+        verbose_name='分片开始时间戳',
+        default=0,
+    )
+
+    end_time = models.IntegerField(
+        verbose_name='分片结束时间戳',
+        default=0,
+    )
+
+    file_id = models.CharField(
+        verbose_name='file_id',
+        max_length=100,
+    )
+
+    file_format = models.CharField(
+        verbose_name='文件格式',
+        max_length=20,
+    )
+
+    record_file_id = models.CharField(
+        verbose_name='录制文件id',
+        max_length=100,
+        blank=True,
+        null=True,
+    )
+
+    duration = models.IntegerField(
+        verbose_name='推流时长',
+        default=0,
+    )
+
+    stream_param = models.TextField(
+        verbose_name='推流url参数',
+        blank=True,
+        null=True,
+    )
+
+    class Meta:
+        verbose_name = '直播录播记录'
+        verbose_name_plural = '直播录播记录'
+        db_table = 'core_live_record_log'
 
 
 class ActiveEvent(UserOwnedModel,

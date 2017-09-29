@@ -1372,3 +1372,9 @@ class LoginRecordSerializer(QueryFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = m.LoginRecord
         fields = '__all__'
+
+
+class LiveRecordLogSerializer(QueryFieldsMixin, serializers.ModelSerializer):
+    class Meta:
+        model = m.LiveRecordLog
+        fields = '__all__'

@@ -3723,3 +3723,43 @@ class PaymentRecordViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return interceptor_get_queryset_kw_field(self)
+
+
+class LiveRecordViewSet(viewsets.ModelViewSet):
+    filter_fields = '__all__'
+    queryset = m.LiveRecordLog.objects.all()
+    serializer_class = s.LiveRecordLogSerializer
+    ordering = ['-pk']
+
+    @list_route(methods=['POST'])
+    def notify(self, request):
+        """
+        参照 腾讯云 帮助与文档 - 事件消息通知
+        https://cloud.tencent.com/document/api/267/5957
+        :param request:
+        :return:
+        """
+        appid = self.request.data.get('appid')
+        t = self.request.data.get('t')
+        sign = self.request.data.get('sign')
+        event_type = self.request.data.get('event_type')
+        stream_id = self.request.data.get('stream_id')
+        channel_id = self.request.data.get('channel_id')
+        video_id = self.request.data.get('video_id')
+        file_size = self.request.data.get('file_size')
+        start_time = self.request.data.get('start_time')
+        end_time = self.request.data.get('end_time')
+        file_id = self.request.data.get('file_id')
+        record_file_id = self.request.data.get('record_file_id')
+        duration = self.request.data.get('duration')
+        stream_param = self.request.data.get('stream_param')
+        # 验签
+        from hashlib import md5
+        str_to_hash = settings.TENCENT_MLVB_API_AUTH_KEY + t
+        my_hash = md5(str_to_hash.encode()).hexdigest()
+        if my_hash.upper() != sign.upper():
+            # 验签失败，直接返回
+            return Response(data=dict(code=0))
+
+    def get_queryset(self):
+        return interceptor_get_queryset_kw_field(self)
