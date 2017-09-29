@@ -666,6 +666,11 @@ class Comment(HierarchicalModel,
         verbose_name='内容',
     )
 
+    is_read = models.BooleanField(
+        verbose_name='是否已读',
+        default=False,
+    )
+
     class Meta:
         verbose_name = '评论'
         verbose_name_plural = '评论'
@@ -1299,6 +1304,11 @@ class UserMark(UserOwnedModel):
     content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
     object_id = models.PositiveIntegerField()
     object = GenericForeignKey('content_type', 'object_id')
+
+    is_read = models.BooleanField(
+        verbose_name='是否已读',
+        default=False,
+    )
 
     date_created = models.DateTimeField(
         verbose_name='记录时间',

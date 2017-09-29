@@ -1612,6 +1612,11 @@ class DailyCheckInLog(UserOwnedModel):
         blank=True,
     )
 
+    continue_check_in = models.IntegerField(
+        verbose_name='连续签到天数',
+        default=1,
+    )
+
     class Meta:
         verbose_name = '每日签到'
         verbose_name_plural = '每日签到'
