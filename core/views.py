@@ -1006,6 +1006,8 @@ class MemberViewSet(viewsets.ModelViewSet):
         new_member = self.request.query_params.get('new_member')
         follow_recommended = self.request.query_params.get('follow_recommended')
 
+        new_login_recommended = self.request.query_params.get('new_login_recommended')
+
         if member_id:
             member = m.Member.objects.filter(user_id=member_id).first()
             if member and is_follow:
@@ -1073,6 +1075,16 @@ class MemberViewSet(viewsets.ModelViewSet):
             qs = m.Member.objects.annotate(
                 credit_diamond_amount=m.models.Sum('user__prizeorders_owned__diamond_transaction__amount')
             ).filter(credit_diamond_amount__gt=0)
+
+        if new_login_recommended:
+            # 第一次登录推荐
+            hot_members = m.Member.objects.filter().annotate(
+                max_hot_rating=m.models.Max('user__lives_owned__hot_rating')
+            ).exclude(max_hot_rating=None).order_by('-max_hot_rating')[:10]
+            qs = m.Member.objects.filter(
+                m.models.Q(is_new_recommended=True) |
+                m.models.Q(user__id__in=[hot_member.user.id for hot_member in hot_members])
+            ).exclude(user__id=self.request.user.id)
 
         return qs
 
@@ -1317,6 +1329,7 @@ class MemberViewSet(viewsets.ModelViewSet):
         # 家族消息
         family_members = m.FamilyMember.objects.filter(
             author=self.request.user,
+            status=m.FamilyMember.STATUS_APPROVED,
         ).all()
         for family_member in family_members:
             if family_member.family.messages.exists():
@@ -1661,6 +1674,7 @@ class MemberViewSet(viewsets.ModelViewSet):
             return Response(data=True)
         family_members = m.FamilyMember.objects.filter(
             author=self.request.user,
+            status=m.FamilyMember.STATUS_APPROVED,
         ).all()
         for family_member in family_members:
             if family_member.family.messages.filter(
@@ -1992,14 +2006,14 @@ class FamilyMemberViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = interceptor_get_queryset_kw_field(self)
-        family_id = self.request.query_params.get('family')
+        # family_id = self.request.query_params.get('family')
         search = self.request.query_params.get('search')
-        if family_id:
-            family = m.Family.objects.get(id=family_id)
-            qs = qs.filter(
-                family=family,
-                status=m.FamilyMember.STATUS_APPROVED,
-            )
+        # if family_id:
+        #     family = m.Family.objects.get(id=family_id)
+        #     qs = qs.filter(
+        #         family=family,
+        #         status=m.FamilyMember.STATUS_APPROVED,
+        #     )
         if search:
             qs = qs.filter(
                 author__member__nickname__contains=search,

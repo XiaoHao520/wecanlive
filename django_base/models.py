@@ -1651,7 +1651,7 @@ class PlannedTask(models.Model):
     def update_member_check_history():
         from core.models import Member
         for member in Member.objects.all():
-            member.check_member_history = None
+            member.check_member_history = []
             member.save()
 
     @staticmethod
