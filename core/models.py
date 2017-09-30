@@ -130,11 +130,17 @@ class Member(AbstractMember,
         help_text='默认过期时间为180天'
     )
 
-    check_member_history = models.TextField(
+    # check_member_history = models.TextField(
+    #     verbose_name='查看谁看过我列表记录',
+    #     null=True,
+    #     blank=True,
+    #     help_text='当天内查看非好友会员的id'
+    # )
+    check_member_history = models.ManyToManyField(
         verbose_name='查看谁看过我列表记录',
-        null=True,
+        related_name='user_check',
+        to=User,
         blank=True,
-        help_text='当天内查看非好友会员的id'
     )
 
     qrcode = models.OneToOneField(
@@ -870,6 +876,7 @@ class Member(AbstractMember,
         如果为会员可以无限查看，
         如果不是会员，只能看非好友关系的人一天十个
         """
+        # daily_check_limit = 11
         contact_form_me = Contact.objects.filter(
             author=self.user,
             user=member.user,
@@ -880,17 +887,12 @@ class Member(AbstractMember,
         ).exists()
         if contact_form_me and contact_to_me:
             return member
-        check_history = self.check_member_history.split(',')
-        if len(check_history) >= 10 and not str(member.user.id) in check_history \
-                and self.get_vip_level() < 1 and self.large_level < 2:
-            # 查看已经超过10个并且没有会员等级
+        if self.check_member_history.count() >= 10 \
+                and not self.check_member_history.filter(id=member.user.id).exists() \
+                and self.vip_level < 1 and self.large_level < 2:
             return False
-        if str(member.user.id) in check_history:
-            check_history.remove(str(member.user.id))
-        check_history.insert(0, str(member.user.id))
-        string = ','.join(check_history)
-        self.check_member_history = string
-        self.save()
+        if not self.check_member_history.filter(id=member.user.id).exists():
+            self.check_member_history.add(member.user)
         return member
 
     def member_activity_award(self, activity, awards, status='COMPLETE'):
@@ -2056,15 +2058,15 @@ class FamilyMember(UserOwnedModel):
         獲得觀看家族長直播的記錄
         :return:
         """
-        family_master = FamilyMember.objects.filter(
-            family=self.family,
-            status=self.STATUS_APPROVED,
-            role=self.ROLE_MASTER,
-        ).first()
-        assert family_master, '家族族長不存在'
+        # family_master = FamilyMember.objects.filter(
+        #     family=self.family,
+        #     status=self.STATUS_APPROVED,
+        #     role=self.ROLE_MASTER,
+        # ).first()
+        # assert family_master, '家族族長不存在'
         watch_logs = LiveWatchLog.objects.filter(
             author=self.author,
-            live__author=family_master.author,
+            live__author=self.family.author,
         )
         return watch_logs
 
