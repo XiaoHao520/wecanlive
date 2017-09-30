@@ -3844,7 +3844,7 @@ class PaymentRecordViewSet(viewsets.ModelViewSet):
         return interceptor_get_queryset_kw_field(self)
 
 
-class LiveRecordViewSet(viewsets.ModelViewSet):
+class LiveRecordLogViewSet(viewsets.ModelViewSet):
     filter_fields = '__all__'
     queryset = m.LiveRecordLog.objects.all()
     serializer_class = s.LiveRecordLogSerializer
@@ -3916,3 +3916,15 @@ class LiveRecordViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return interceptor_get_queryset_kw_field(self)
+
+    @list_route(methods=['GET'])
+    def get_live_record_list(self, request):
+        member_id = self.request.query_params.get('member')
+        print(member_id)
+        member = m.Member.objects.filter(user_id=member_id).first()
+        if not member:
+            return Response(data=False)
+        live_records = m.LiveRecordLog.objects.filter(
+            author=member.user,
+        )
+        return Response(data=live_records)
