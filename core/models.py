@@ -183,6 +183,11 @@ class Member(AbstractMember,
         default=0,
     )
 
+    is_vip_demand = models.BooleanField(
+        verbose_name='是否已续等',
+        default=False,
+    )
+
     credit_diamond_extend = models.DecimalField(
         verbose_name='贈送鑽石餘額',
         decimal_places=2,
@@ -220,6 +225,13 @@ class Member(AbstractMember,
     is_first_login = models.BooleanField(
         verbose_name='是否首次登錄',
         default=True,
+    )
+
+    stream_id = models.CharField(
+        verbose_name='直播码',
+        max_length=100,
+        blank=True,
+        null=True,
     )
 
     class Meta:
@@ -467,6 +479,11 @@ class Member(AbstractMember,
             amount=models.Sum('amount')).get('amount') or 0
         return debit - credit
 
+    def total_recharge(self):
+        amount = self.user.rechargerecords_owned.aggregate(
+            amount=models.Sum('amount')).get('amount') or 0
+        return int(amount)
+
     def diamond_count(self):
         """获得钻石总数
         :return:
@@ -577,6 +594,19 @@ class Member(AbstractMember,
         """
         return self.vip_level
 
+    def get_recharge_this_month(self, date_created=datetime.now()):
+        """
+        獲取最近一個月儲值量
+        :param date_created:
+        :return:
+        """
+        recharge_this_month = RechargeRecord.objects.filter(
+            author=self.user,
+            date_created__lte=date_created,
+            date_created__gt=date_created - timedelta(days=30),
+        ).aggregate(amount=models.Sum('amount')).get('amount') or 0
+        return recharge_this_month
+
     def update_vip_level(self, recharge_record):
         """
         每次储值后，计算新的vip等级
@@ -587,11 +617,7 @@ class Member(AbstractMember,
         vip_rules = json.loads(Option.get('vip_rules'))
         current_vip_level = self.vip_level
         # 最近一个月的储值量
-        amount_this_month = RechargeRecord.objects.filter(
-            author=recharge_record.author,
-            date_created__lte=recharge_record.date_created,
-            date_created__gt=recharge_record.date_created - timedelta(days=30),
-        ).aggregate(amount=models.Sum('amount')).get('amount') or 0
+        amount_this_month = self.get_recharge_this_month(recharge_record.date_created)
         # 当前vip为0，而且最近一个月储值低于vip1的储值要求，直接返回
         if current_vip_level == 0 and amount_this_month < vip_rules[0].get('recharge'):
             return
@@ -638,6 +664,10 @@ class Member(AbstractMember,
         :param date_update_vip:
         :return:
         """
+        if self.vip_level == level:
+            self.is_vip_demand = True
+        else:
+            self.is_vip_demand = False
         self.vip_level = level
         self.vip_upgrade_award(level)
         if date_update_vip:
@@ -700,6 +730,15 @@ class Member(AbstractMember,
         else:
             planned_task.date_planned = date_planned
         planned_task.save()
+
+    def get_vip_end_time(self):
+        planned_task = PlannedTask.objects.filter(
+            method='change_vip_level',
+            args__exact=json.dumps([self.user_id]),
+        ).first()
+        if not planned_task:
+            return None
+        return planned_task.date_planned
 
     def get_today_watch_mission_count(self):
         """当前用户当天完成观看任务次数
@@ -2572,6 +2611,12 @@ class Live(UserOwnedModel,
         help_text='如果设置隐藏，将不能在外部列表查询到此直播',
     )
 
+    is_record = models.BooleanField(
+        verbose_name='是否錄制',
+        default=False,
+        help_text='如果设置錄制，推流同時增加錄制功能',
+    )
+
     paid = models.IntegerField(
         verbose_name='收費',
         default=0,
@@ -2724,7 +2769,7 @@ class Live(UserOwnedModel,
 
     def get_room_id(self):
         from hashlib import md5
-        return md5('live_{}'.format(self.pk).encode()).hexdigest()
+        return md5('live_{}'.format(self.author.id).encode()).hexdigest()
 
     def get_push_url(self):
         """ 獲取推流地址
@@ -2744,15 +2789,26 @@ class Live(UserOwnedModel,
         room_id = self.get_room_id()
         biz_id = settings.TENCENT_MLVB_BIZ_ID
         live_code = biz_id + '_' + room_id
+        if not self.author.member.stream_id:
+            self.author.member.stream_id = live_code
+            self.author.member.save()
         key = settings.TENCENT_MLVB_PUSH_KEY
         # 自動有效期 1 天
         tx_time = hex(int(time()) + 24 * 3600)[2:].upper()
         tx_secret = md5((key + live_code + tx_time).encode()).hexdigest()
-        return 'rtmp://{biz_id}.livepush.myqcloud.com/live/' \
-               '{live_code}?bizid={biz_id}' \
-               '&txSecret={tx_secret}&txTime={tx_time}' \
-            .format(biz_id=biz_id, live_code=live_code,
-                    tx_secret=tx_secret, tx_time=tx_time)
+        if self.is_record:
+            return 'rtmp://{biz_id}.livepush.myqcloud.com/live/' \
+                   '{live_code}?bizid={biz_id}' \
+                   '&txSecret={tx_secret}&txTime={tx_time}' \
+                   '&record={record_type}' \
+                .format(biz_id=biz_id, live_code=live_code,
+                        tx_secret=tx_secret, tx_time=tx_time, record_type='mp4|hls')
+        else:
+            return 'rtmp://{biz_id}.livepush.myqcloud.com/live/' \
+                   '{live_code}?bizid={biz_id}' \
+                   '&txSecret={tx_secret}&txTime={tx_time}' \
+                .format(biz_id=biz_id, live_code=live_code,
+                        tx_secret=tx_secret, tx_time=tx_time)
 
     def get_play_url(self):
         """ 獲取播放地址（FLV)
@@ -3098,6 +3154,110 @@ class LiveWatchLog(UserOwnedModel,
         watch_live_experience.update_level()
         self.author.member.watch_live_extend = (duration + watch_live_extend) % 30
         self.author.member.save()
+
+
+class LiveRecordLog(UserOwnedModel, models.Model):
+    appid = models.IntegerField(
+        verbose_name='推流应用id',
+        default=0,
+    )
+
+    t = models.IntegerField(
+        verbose_name='有效时间',
+        default=0,
+    )
+
+    sign = models.CharField(
+        verbose_name='安全签名',
+        max_length=100,
+    )
+
+    EVENT_TYPE_0 = 0
+    EVENT_TYPE_1 = 1
+    EVENT_TYPE_100 = 100
+    EVENT_TYPE_200 = 200
+    EVENT_TYPE_CHOICES = (
+        (EVENT_TYPE_0, 0),
+        (EVENT_TYPE_1, 1),
+        (EVENT_TYPE_100, 100),
+        (EVENT_TYPE_200, 200),
+    )
+
+    event_type = models.IntegerField(
+        verbose_name='事件类型',
+        choices=EVENT_TYPE_CHOICES,
+        default=EVENT_TYPE_100,
+    )
+
+    stream_id = models.CharField(
+        verbose_name='直播码',
+        max_length=25,
+        help_text='(stream_id)标志事件源于哪一条直播流',
+    )
+
+    channel_id = models.CharField(
+        verbose_name='直播码',
+        max_length=25,
+        help_text='(channel_id)同stream_id',
+    )
+
+    video_id = models.CharField(
+        verbose_name='vid',
+        max_length=100,
+    )
+
+    video_url = models.CharField(
+        verbose_name='下载地址',
+        max_length=255,
+    )
+
+    file_size = models.IntegerField(
+        verbose_name='文件大小',
+        default=0,
+    )
+
+    start_time = models.IntegerField(
+        verbose_name='分片开始时间戳',
+        default=0,
+    )
+
+    end_time = models.IntegerField(
+        verbose_name='分片结束时间戳',
+        default=0,
+    )
+
+    file_id = models.CharField(
+        verbose_name='file_id',
+        max_length=100,
+    )
+
+    file_format = models.CharField(
+        verbose_name='文件格式',
+        max_length=20,
+    )
+
+    record_file_id = models.CharField(
+        verbose_name='录制文件id',
+        max_length=100,
+        blank=True,
+        null=True,
+    )
+
+    duration = models.IntegerField(
+        verbose_name='推流时长',
+        default=0,
+    )
+
+    stream_param = models.TextField(
+        verbose_name='推流url参数',
+        blank=True,
+        null=True,
+    )
+
+    class Meta:
+        verbose_name = '直播录播记录'
+        verbose_name_plural = '直播录播记录'
+        db_table = 'core_live_record_log'
 
 
 class ActiveEvent(UserOwnedModel,

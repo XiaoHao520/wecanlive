@@ -571,6 +571,7 @@ class UserViewSet(viewsets.ModelViewSet):
         session = request.data.get('session')
         aes = u.AESCipher(settings.WECAN_AES_KEY_SERVER)
         data = aes.decrypt(session)
+        # return u.response_fail(data)
         account = data.split('|')[1]
         user = m.User.objects.filter(username=account).first() or \
                m.User.objects.create_user(username=account)
@@ -1667,41 +1668,41 @@ class MemberViewSet(viewsets.ModelViewSet):
             ).exclude(users_read=self.request.user).exclude(sender=self.request.user).exists():
                 return Response(data=True)
         activity_message = m.Message.objects.filter(
-                sender=None,
-                receiver=self.request.user,
-                broadcast__target=m.Broadcast.TARGET_ACTIVITY,
-            ).exclude(users_read=self.request.user).exists()
+            sender=None,
+            receiver=self.request.user,
+            broadcast__target=m.Broadcast.TARGET_ACTIVITY,
+        ).exclude(users_read=self.request.user).exists()
         if activity_message:
             return Response(data=True)
 
         system_message = m.Message.objects.filter(
-                m.models.Q(broadcast__target=m.Broadcast.TARGET_SYSTEM,
-                           sender=None, receiver=self.request.user, ) |
-                m.models.Q(broadcast__target=m.Broadcast.TARGET_SYSTEM_NOT_FAMILYS,
-                           sender=None, receiver=self.request.user, ) |
-                m.models.Q(broadcast__target=m.Broadcast.TARGET_SYSTEM_FAMILYS,
-                           sender=None, receiver=self.request.user, )
-            ).exclude(users_read=self.request.user).exists()
+            m.models.Q(broadcast__target=m.Broadcast.TARGET_SYSTEM,
+                       sender=None, receiver=self.request.user, ) |
+            m.models.Q(broadcast__target=m.Broadcast.TARGET_SYSTEM_NOT_FAMILYS,
+                       sender=None, receiver=self.request.user, ) |
+            m.models.Q(broadcast__target=m.Broadcast.TARGET_SYSTEM_FAMILYS,
+                       sender=None, receiver=self.request.user, )
+        ).exclude(users_read=self.request.user).exists()
         if system_message:
             return Response(data=True)
 
         activeevents = self.request.user.activeevents_owned.all()
         activeevents_comments = m.Comment.objects.filter(
-                activeevents__id__in=[activeevent.id for activeevent in activeevents],
-            ).exclude(is_read=True).exists()
+            activeevents__id__in=[activeevent.id for activeevent in activeevents],
+        ).exclude(is_read=True).exists()
         activeevents_marks = m.UserMark.objects.filter(
-                object_id__in=[activeevent.id for activeevent in activeevents],
-                subject='like',
-                content_type=m.ContentType.objects.get(model='activeevent'),
-            ).exclude(is_read=True).exists()
+            object_id__in=[activeevent.id for activeevent in activeevents],
+            subject='like',
+            content_type=m.ContentType.objects.get(model='activeevent'),
+        ).exclude(is_read=True).exists()
         if activeevents_comments or activeevents_marks:
             return Response(data=True)
 
         follow_marks = m.UserMark.objects.filter(
-                object_id=self.request.user.id,
-                subject='follow',
-                content_type=m.ContentType.objects.get(model='member'),
-            ).exclude(is_read=True).exists()
+            object_id=self.request.user.id,
+            subject='follow',
+            content_type=m.ContentType.objects.get(model='member'),
+        ).exclude(is_read=True).exists()
         if follow_marks:
             return Response(data=True)
 
@@ -1764,6 +1765,35 @@ class MemberViewSet(viewsets.ModelViewSet):
                 comment.is_read = True
                 comment.save()
         return Response(data=True)
+
+    @list_route(methods=['GET'])
+    def vip_upgrade_demand(self, request):
+        user = self.request.user
+        member = user.member
+        current_level = member.vip_level
+        recharge_this_month = member.get_recharge_this_month()
+        demand = []
+        if not m.Option.get('vip_rules'):
+            return Response(data=False)
+        vip_rules = json.loads(m.Option.get('vip_rules'))
+        while current_level > 0:
+            demand.append(0)
+            current_level -= 1
+        for level in range(member.vip_level, 9):
+            demand.append(vip_rules[level].get('recharge') - recharge_this_month)
+        return Response(data=demand)
+
+    @list_route(methods=['GET'])
+    def get_vip_demand(self, request):
+        user = self.request.user
+        member = user.member
+        demand = 0
+        if not m.Option.get('vip_rules'):
+            return Response(data=False)
+        vip_rules = json.loads(m.Option.get('vip_rules'))
+        if member.vip_level > 0:
+            demand = vip_rules[member.vip_level - 1].get('recharge_next_month') - member.amount_extend
+        return Response(data=demand)
 
 
 class RobotViewSet(viewsets.ModelViewSet):
@@ -2220,6 +2250,7 @@ class LiveViewSet(viewsets.ModelViewSet):
         category = m.LiveCategory.objects.get(id=request.data.get('category'))
         cover = request.data.get('cover')
         is_private = request.data.get('is_private')
+        is_record = request.data.get('is_record')
         live = m.Live.objects.create(
             name=name,
             password=password,
@@ -2228,7 +2259,8 @@ class LiveViewSet(viewsets.ModelViewSet):
             category=category,
             author=request.user,
             cover=m.ImageModel.objects.get(pk=cover['id']) if cover else None,
-            is_private=is_private
+            is_private=is_private,
+            is_record=is_record
         )
         return Response(data=s.LiveSerializer(live).data)
 
@@ -3807,6 +3839,80 @@ class PaymentRecordViewSet(viewsets.ModelViewSet):
     queryset = m.PaymentRecord.objects.all()
     serializer_class = s.PaymentRecordSerializer
     ordering = ['-pk']
+
+    def get_queryset(self):
+        return interceptor_get_queryset_kw_field(self)
+
+
+class LiveRecordViewSet(viewsets.ModelViewSet):
+    filter_fields = '__all__'
+    queryset = m.LiveRecordLog.objects.all()
+    serializer_class = s.LiveRecordLogSerializer
+    ordering = ['-pk']
+
+    @list_route(methods=['POST'])
+    def notify(self, request):
+        """
+        参照 腾讯云 帮助与文档 - 事件消息通知
+        https://cloud.tencent.com/document/api/267/5957
+        :param request:
+        :return:
+        """
+        appid = self.request.data.get('appid')
+        t = self.request.data.get('t')
+        sign = self.request.data.get('sign')
+        event_type = self.request.data.get('event_type')
+        stream_id = self.request.data.get('stream_id')
+        channel_id = self.request.data.get('channel_id')
+        video_id = self.request.data.get('video_id')
+        file_size = self.request.data.get('file_size')
+        start_time = self.request.data.get('start_time')
+        end_time = self.request.data.get('end_time')
+        file_id = self.request.data.get('file_id')
+        record_file_id = self.request.data.get('record_file_id')
+        duration = self.request.data.get('duration')
+        stream_param = self.request.data.get('stream_param')
+        file_format = self.request.data.get('file_format')
+        video_url = self.request.data.get('video_url')
+        # 验签
+        from hashlib import md5
+        str_to_hash = settings.TENCENT_MLVB_API_AUTH_KEY + t.__str__()
+        my_hash = md5(str_to_hash.encode()).hexdigest()
+        if my_hash.upper() != sign.upper():
+            # 验签失败，直接返回
+            print(my_hash)
+            print(sign)
+            return Response(data=dict(code=0))
+        member = m.Member.objects.filter(stream_id=stream_id).first()
+        if not member:
+            print('>>>>>>>>>> 用户匹配失败 <<<<<<<<<<')
+            return Response(data=dict(code=0))
+        live_record, is_created = m.LiveRecordLog.objects.get_or_create(
+            file_id=file_id,
+            defaults=dict(
+                author=member.user,
+                appid=appid,
+                t=t,
+                sign=sign,
+                event_type=m.LiveRecordLog.EVENT_TYPE_100 if int(event_type) == 100 else int(event_type),
+                stream_id=stream_id,
+                channel_id=channel_id,
+                video_id=video_id,
+                file_size=file_size,
+                file_format=file_format,
+                start_time=start_time,
+                end_time=end_time,
+                file_id=file_id,
+                record_file_id=record_file_id,
+                duration=duration,
+                stream_param=stream_param,
+                video_url=video_url,
+            )
+        )
+        if not is_created:
+            print('>>>>>>>>>> 已存在该录制记录 <<<<<<<<<<')
+            return Response(data=dict(code=0))
+        return Response(data=dict(code=0))
 
     def get_queryset(self):
         return interceptor_get_queryset_kw_field(self)
