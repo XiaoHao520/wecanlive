@@ -925,6 +925,10 @@ class ActiveEventSerializer(QueryFieldsMixin, serializers.ModelSerializer):
         source='author.member.get_level'
     )
 
+    author_large_level = serializers.ReadOnlyField(
+        source='author.member.large_level'
+    )
+
     author_vip_level = serializers.ReadOnlyField(
         source='author.member.get_vip_level'
     )

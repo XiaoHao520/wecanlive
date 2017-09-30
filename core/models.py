@@ -831,6 +831,7 @@ class Member(AbstractMember,
         如果为会员可以无限查看，
         如果不是会员，只能看非好友关系的人一天十个
         """
+        daily_check_limit = 11
         contact_form_me = Contact.objects.filter(
             author=self.user,
             user=member.user,
@@ -842,7 +843,7 @@ class Member(AbstractMember,
         if contact_form_me and contact_to_me:
             return member
         check_history = self.check_member_history.split(',')
-        if len(check_history) >= 10 and not str(member.user.id) in check_history \
+        if len(check_history) >= daily_check_limit and not str(member.user.id) in check_history \
                 and self.get_vip_level() < 1 and self.large_level < 2:
             # 查看已经超过10个并且没有会员等级
             return False

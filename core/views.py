@@ -2314,7 +2314,7 @@ class LiveViewSet(viewsets.ModelViewSet):
                 author=member.user,
                 live_watch_log__live=live,
                 diamond_transaction__id__gt=0,
-            ).aggregate(amount=models.Sum('diamond_transaction__amount')).get('amount') or 6
+            ).aggregate(amount=models.Sum('diamond_transaction__amount')).get('amount') or 0
             rank_item['amount'] = amount
             rank_item['member'] = s.MemberSerializer(member).data
             rank.append(rank_item)
