@@ -1668,41 +1668,41 @@ class MemberViewSet(viewsets.ModelViewSet):
             ).exclude(users_read=self.request.user).exclude(sender=self.request.user).exists():
                 return Response(data=True)
         activity_message = m.Message.objects.filter(
-                sender=None,
-                receiver=self.request.user,
-                broadcast__target=m.Broadcast.TARGET_ACTIVITY,
-            ).exclude(users_read=self.request.user).exists()
+            sender=None,
+            receiver=self.request.user,
+            broadcast__target=m.Broadcast.TARGET_ACTIVITY,
+        ).exclude(users_read=self.request.user).exists()
         if activity_message:
             return Response(data=True)
 
         system_message = m.Message.objects.filter(
-                m.models.Q(broadcast__target=m.Broadcast.TARGET_SYSTEM,
-                           sender=None, receiver=self.request.user, ) |
-                m.models.Q(broadcast__target=m.Broadcast.TARGET_SYSTEM_NOT_FAMILYS,
-                           sender=None, receiver=self.request.user, ) |
-                m.models.Q(broadcast__target=m.Broadcast.TARGET_SYSTEM_FAMILYS,
-                           sender=None, receiver=self.request.user, )
-            ).exclude(users_read=self.request.user).exists()
+            m.models.Q(broadcast__target=m.Broadcast.TARGET_SYSTEM,
+                       sender=None, receiver=self.request.user, ) |
+            m.models.Q(broadcast__target=m.Broadcast.TARGET_SYSTEM_NOT_FAMILYS,
+                       sender=None, receiver=self.request.user, ) |
+            m.models.Q(broadcast__target=m.Broadcast.TARGET_SYSTEM_FAMILYS,
+                       sender=None, receiver=self.request.user, )
+        ).exclude(users_read=self.request.user).exists()
         if system_message:
             return Response(data=True)
 
         activeevents = self.request.user.activeevents_owned.all()
         activeevents_comments = m.Comment.objects.filter(
-                activeevents__id__in=[activeevent.id for activeevent in activeevents],
-            ).exclude(is_read=True).exists()
+            activeevents__id__in=[activeevent.id for activeevent in activeevents],
+        ).exclude(is_read=True).exists()
         activeevents_marks = m.UserMark.objects.filter(
-                object_id__in=[activeevent.id for activeevent in activeevents],
-                subject='like',
-                content_type=m.ContentType.objects.get(model='activeevent'),
-            ).exclude(is_read=True).exists()
+            object_id__in=[activeevent.id for activeevent in activeevents],
+            subject='like',
+            content_type=m.ContentType.objects.get(model='activeevent'),
+        ).exclude(is_read=True).exists()
         if activeevents_comments or activeevents_marks:
             return Response(data=True)
 
         follow_marks = m.UserMark.objects.filter(
-                object_id=self.request.user.id,
-                subject='follow',
-                content_type=m.ContentType.objects.get(model='member'),
-            ).exclude(is_read=True).exists()
+            object_id=self.request.user.id,
+            subject='follow',
+            content_type=m.ContentType.objects.get(model='member'),
+        ).exclude(is_read=True).exists()
         if follow_marks:
             return Response(data=True)
 
@@ -3872,29 +3872,46 @@ class LiveRecordViewSet(viewsets.ModelViewSet):
         record_file_id = self.request.data.get('record_file_id')
         duration = self.request.data.get('duration')
         stream_param = self.request.data.get('stream_param')
+        file_format = self.request.data.get('file_format')
+        video_url = self.request.data.get('video_url')
         # 验签
         from hashlib import md5
-        str_to_hash = settings.TENCENT_MLVB_API_AUTH_KEY + t
+        str_to_hash = settings.TENCENT_MLVB_API_AUTH_KEY + t.__str__()
         my_hash = md5(str_to_hash.encode()).hexdigest()
         if my_hash.upper() != sign.upper():
             # 验签失败，直接返回
+            print(my_hash)
+            print(sign)
             return Response(data=dict(code=0))
-        m.LiveRecordLog.objects.create(
-            appid=appid,
-            t=t,
-            sign=sign,
-            event_type=m.LiveRecordLog.EVENT_TYPE_100 if int(event_type) == 100 else int(event_type),
-            stream_id=stream_id,
-            channel_id=channel_id,
-            video_id=video_id,
-            file_size=file_size,
-            start_time=start_time,
-            end_time=end_time,
+        member = m.Member.objects.filter(stream_id=stream_id).first()
+        if not member:
+            print('>>>>>>>>>> 用户匹配失败 <<<<<<<<<<')
+            return Response(data=dict(code=0))
+        live_record, is_created = m.LiveRecordLog.objects.get_or_create(
             file_id=file_id,
-            record_file_id=record_file_id,
-            duration=duration,
-            stream_param=stream_param,
+            defaults=dict(
+                author=member.user,
+                appid=appid,
+                t=t,
+                sign=sign,
+                event_type=m.LiveRecordLog.EVENT_TYPE_100 if int(event_type) == 100 else int(event_type),
+                stream_id=stream_id,
+                channel_id=channel_id,
+                video_id=video_id,
+                file_size=file_size,
+                file_format=file_format,
+                start_time=start_time,
+                end_time=end_time,
+                file_id=file_id,
+                record_file_id=record_file_id,
+                duration=duration,
+                stream_param=stream_param,
+                video_url=video_url,
+            )
         )
+        if not is_created:
+            print('>>>>>>>>>> 已存在该录制记录 <<<<<<<<<<')
+            return Response(data=dict(code=0))
         return Response(data=dict(code=0))
 
     def get_queryset(self):
