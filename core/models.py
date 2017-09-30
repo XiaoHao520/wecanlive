@@ -227,6 +227,13 @@ class Member(AbstractMember,
         default=True,
     )
 
+    stream_id = models.CharField(
+        verbose_name='直播码',
+        max_length=100,
+        blank=True,
+        null=True,
+    )
+
     class Meta:
         verbose_name = '会员'
         verbose_name_plural = '会员'
@@ -2781,6 +2788,9 @@ class Live(UserOwnedModel,
         room_id = self.get_room_id()
         biz_id = settings.TENCENT_MLVB_BIZ_ID
         live_code = biz_id + '_' + room_id
+        if not self.author.member.stream_id:
+            self.author.member.stream_id = live_code
+            self.author.member.save()
         key = settings.TENCENT_MLVB_PUSH_KEY
         # 自動有效期 1 天
         tx_time = hex(int(time()) + 24 * 3600)[2:].upper()
