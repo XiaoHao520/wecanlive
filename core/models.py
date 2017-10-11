@@ -3192,13 +3192,13 @@ class LiveRecordLog(UserOwnedModel, models.Model):
 
     stream_id = models.CharField(
         verbose_name='直播码',
-        max_length=25,
+        max_length=50,
         help_text='(stream_id)标志事件源于哪一条直播流',
     )
 
     channel_id = models.CharField(
         verbose_name='直播码',
-        max_length=25,
+        max_length=50,
         help_text='(channel_id)同stream_id',
     )
 
