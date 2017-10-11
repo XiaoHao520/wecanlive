@@ -1055,7 +1055,7 @@ class MemberViewSet(viewsets.ModelViewSet):
                 live_count=Count('user__lives_owned')
             ).filter(
                 live_count__lte=3,
-                live_count__gt=0,
+                # live_count__gt=0,
             ).order_by('live_count', '-date_created')
 
         if follow_recommended:
@@ -1263,11 +1263,16 @@ class MemberViewSet(viewsets.ModelViewSet):
             content_type=m.ContentType.objects.get(model='member'),
         ).order_by('-date_created')
         if follow_user_mark.exists():
-            is_read = True if follow_user_mark.first().is_read else False
+            unread_count = m.UserMark.objects.filter(
+                object_id=self.request.user.id,
+                subject='follow',
+                content_type=m.ContentType.objects.get(model='member'),
+                is_read=False,
+            ).count()
             data.append(dict(
                 type='follow',
                 message_content='{} 追蹤了你'.format(follow_user_mark.first().author.member.nickname),
-                is_read=is_read,
+                unread_count=unread_count,
                 date_created=follow_user_mark.first().date_created,
             ))
         # 最新動態消息
@@ -1278,8 +1283,9 @@ class MemberViewSet(viewsets.ModelViewSet):
             content_type=m.ContentType.objects.get(model='activeevent'),
         ).order_by('-date_created').first()
         activeevent_comment = m.Comment.objects.filter(
-            activeevents__id__in=[activeevent.id for activeevent in activeevents],
-        ).order_by('-date_created').first()
+            m.models.Q(activeevents__id__in=[activeevent.id for activeevent in activeevents]) |
+            m.models.Q(activeevents__id__gt=0, parent__author=self.request.user)
+        ).exclude(author=self.request.user, ).order_by('-date_created').first()
         last_activeevent_message = None
         if like_activeevent_mark and activeevent_comment:
             if like_activeevent_mark.date_created > activeevent_comment.date_created:
@@ -1288,22 +1294,31 @@ class MemberViewSet(viewsets.ModelViewSet):
                 last_activeevent_message = 'comment'
         else:
             last_activeevent_message = 'mark' if like_activeevent_mark else 'comment' if activeevent_comment else None
+
+        unread_count = m.UserMark.objects.filter(
+            object_id__in=[activeevent.id for activeevent in activeevents],
+            subject='like',
+            content_type=m.ContentType.objects.get(model='activeevent'),
+            is_read=False,
+        ).count() + m.Comment.objects.filter(
+            m.models.Q(activeevents__id__in=[activeevent.id for activeevent in activeevents], is_read=False) |
+            m.models.Q(activeevents__id__gt=0, parent__author=self.request.user, is_read=False)
+        ).exclude(author=self.request.user).count()
+
         if last_activeevent_message and last_activeevent_message == 'mark':
-            is_read = True if like_activeevent_mark.is_read else False
             data.append(dict(
                 date_created=like_activeevent_mark.date_created,
                 message_content='{} 給你點了一個讃'.format(like_activeevent_mark.author.member.nickname),
                 type='activeevent',
-                is_read=is_read,
+                unread_count=unread_count,
             ))
 
         if last_activeevent_message and last_activeevent_message == 'comment':
-            is_read = True if activeevent_comment.is_read else False
             data.append(dict(
                 date_created=activeevent_comment.date_created,
                 message_content=activeevent_comment.content,
                 type='activeevent',
-                is_read=is_read,
+                unread_count=unread_count,
             ))
 
         # 活動消息
@@ -1314,7 +1329,7 @@ class MemberViewSet(viewsets.ModelViewSet):
         ).order_by('-date_created')
 
         if activity_message.exists():
-            is_read = m.Message.objects.filter(
+            unread_count = m.Message.objects.filter(
                 sender=None,
                 receiver=self.request.user,
                 broadcast__target=m.Broadcast.TARGET_ACTIVITY,
@@ -1322,7 +1337,7 @@ class MemberViewSet(viewsets.ModelViewSet):
             data.append(dict(
                 date_created=activity_message.first().date_created,
                 message_content=activity_message.first().content,
-                is_read=is_read,
+                unread_count=unread_count,
                 type='activity',
             ))
 
@@ -1398,7 +1413,7 @@ class MemberViewSet(viewsets.ModelViewSet):
         ).order_by('-date_created')
         last_system_message = None
         if system_message.exists():
-            is_read = m.Message.objects.filter(
+            unread_count = m.Message.objects.filter(
                 m.models.Q(broadcast__target=m.Broadcast.TARGET_SYSTEM,
                            sender=None, receiver=self.request.user, ) |
                 m.models.Q(broadcast__target=m.Broadcast.TARGET_SYSTEM_NOT_FAMILYS,
@@ -1409,7 +1424,7 @@ class MemberViewSet(viewsets.ModelViewSet):
             last_system_message = dict(
                 date_created=system_message.first().date_created,
                 content=system_message.first().content,
-                is_read=is_read,
+                unread_count=unread_count,
             )
         return Response(data=last_system_message)
 
@@ -1702,8 +1717,9 @@ class MemberViewSet(viewsets.ModelViewSet):
 
         activeevents = self.request.user.activeevents_owned.all()
         activeevents_comments = m.Comment.objects.filter(
-            activeevents__id__in=[activeevent.id for activeevent in activeevents],
-        ).exclude(is_read=True).exists()
+            m.models.Q(activeevents__id__in=[activeevent.id for activeevent in activeevents], is_read=False) |
+            m.models.Q(activeevents__id__gt=0, parent__author=self.request.user, is_read=False)
+        ).exclude(author=self.request.user, ).exists()
         activeevents_marks = m.UserMark.objects.filter(
             object_id__in=[activeevent.id for activeevent in activeevents],
             subject='like',
@@ -1768,8 +1784,9 @@ class MemberViewSet(viewsets.ModelViewSet):
                 content_type=m.ContentType.objects.get(model='activeevent'),
             ).exclude(is_read=True).all()
             comments = m.Comment.objects.filter(
-                activeevents__id__in=[activeevent.id for activeevent in activeevents],
-            ).exclude(is_read=True).all()
+                m.models.Q(activeevents__id__in=[activeevent.id for activeevent in activeevents], is_read=False) |
+                m.models.Q(activeevents__id__gt=0, parent__author=self.request.user, is_read=False)
+            ).exclude(author=self.request.user, ).all()
 
         for mark in marks:
             mark.is_read = True
@@ -2349,8 +2366,12 @@ class LiveViewSet(viewsets.ModelViewSet):
     def get_live_diamond_rank(self, request, pk):
         live = m.Live.objects.get(pk=pk)
 
+        # members = m.Member.objects.filter(
+        #     user__prizeorders_owned__live_watch_log__live=live,
+        #     user__prizeorders_owned__diamond_transaction__user_debit=live.author,
+        # ).distinct().all()
         members = m.Member.objects.filter(
-            user__prizeorders_owned__live_watch_log__live=live,
+            user__prizeorders_owned__live_watch_log__live__author=live.author,
             user__prizeorders_owned__diamond_transaction__user_debit=live.author,
         ).distinct().all()
         rank = []
@@ -2358,7 +2379,8 @@ class LiveViewSet(viewsets.ModelViewSet):
             rank_item = dict()
             amount = m.PrizeOrder.objects.filter(
                 author=member.user,
-                live_watch_log__live=live,
+                # live_watch_log__live=live,
+                live_watch_log__live__author=live.author,
                 diamond_transaction__id__gt=0,
             ).aggregate(amount=models.Sum('diamond_transaction__amount')).get('amount') or 0
             rank_item['amount'] = amount
@@ -2469,6 +2491,22 @@ class LiveViewSet(viewsets.ModelViewSet):
             m.models.Q(live=live, date_leave__lt=m.models.F('date_enter'))
         ).count()
         return Response(data=count)
+
+    @list_route(methods=['GET'])
+    def get_hot_live(self, request):
+        id_not_in = request.data.get('id_not_in')
+        id_list = []
+        if id_not_in:
+            id_list = [int(x) for x in id_not_in.split(',') if x]
+        qs = m.Live.objects.filter(
+            date_end=None,
+        ).exclude(id__in=id_list).exclude(is_private=True).order_by('-hot_rating')
+        if not qs.exists():
+            qs = m.Live.objects.exclude(date_end=None).exclude(is_private=True).exclude(
+                id__in=id_list
+            ).order_by('-hot_rating')
+
+        return Response(data=s.LiveSerializer(qs[:5], many=True).data)
 
 
 class LiveBarrageViewSet(viewsets.ModelViewSet):
@@ -3213,8 +3251,9 @@ class CommentViewSet(viewsets.ModelViewSet):
         if own_activeevent_comment:
             activeevents = me.activeevents_owned.all()
             qs = qs.filter(
-                activeevents__id__in=[activeevent.id for activeevent in activeevents],
-            ).order_by('-date_created')
+                m.models.Q(activeevents__id__in=[activeevent.id for activeevent in activeevents]) |
+                m.models.Q(activeevents__id__gt=0, parent__author=self.request.user)
+            ).exclude(author=self.request.user).order_by('-date_created')
 
         return qs
 
@@ -3222,11 +3261,13 @@ class CommentViewSet(viewsets.ModelViewSet):
     def add_comment(self, request):
         activeevent_id = request.data.get('activeevent')
         content = request.data.get('content')
-
+        parent = request.data.get('parent')
         if activeevent_id:
             activeevent = m.ActiveEvent.objects.get(pk=activeevent_id)
-            activeevent.comments.create(author=self.request.user, content=content)
-
+            comment = activeevent.comments.create(author=self.request.user, content=content)
+            if parent:
+                comment.parent = m.Comment.objects.get(pk=parent)
+                comment.save()
         return Response(data=True)
 
     @list_route(methods=['POST'])

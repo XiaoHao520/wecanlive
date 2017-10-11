@@ -1297,6 +1297,10 @@ class CommentSerializer(QueryFieldsMixin, serializers.ModelSerializer):
         source='get_activeevent'
     )
 
+    parent_name = serializers.ReadOnlyField(
+        source='parent.author.member.nickname'
+    )
+
     class Meta:
         model = m.Comment
         fields = '__all__'

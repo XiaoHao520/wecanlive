@@ -1269,6 +1269,23 @@ class Contact(UserOwnedModel):
         contact.save()
         return contact
 
+    def save(self, *args, **kwargs):
+        if Contact.objects.filter(author=self.user,user=self.author).exists():
+            # 建立好友關係
+            user_follow = UserMark.objects.get_or_create(
+                author=self.user,
+                subject='follow',
+                content_type=ContentType.objects.get(model='member'),
+                object_id=self.author.id,
+            )
+            author_follow = UserMark.objects.get_or_create(
+                author=self.author,
+                subject='follow',
+                content_type=ContentType.objects.get(model='member'),
+                object_id=self.user.id,
+            )
+        super().save(*args, **kwargs)
+
 
 class ContactSetting(models.Model):
     contact = models.ForeignKey(
