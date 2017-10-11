@@ -1283,8 +1283,9 @@ class MemberViewSet(viewsets.ModelViewSet):
             content_type=m.ContentType.objects.get(model='activeevent'),
         ).order_by('-date_created').first()
         activeevent_comment = m.Comment.objects.filter(
-            activeevents__id__in=[activeevent.id for activeevent in activeevents],
-        ).order_by('-date_created').first()
+            m.models.Q(activeevents__id__in=[activeevent.id for activeevent in activeevents]) |
+            m.models.Q(activeevents__id__gt=0, parent__author=self.request.user)
+        ).exclude(author=self.request.user, ).order_by('-date_created').first()
         last_activeevent_message = None
         if like_activeevent_mark and activeevent_comment:
             if like_activeevent_mark.date_created > activeevent_comment.date_created:
@@ -1300,8 +1301,9 @@ class MemberViewSet(viewsets.ModelViewSet):
             content_type=m.ContentType.objects.get(model='activeevent'),
             is_read=False,
         ).count() + m.Comment.objects.filter(
-            activeevents__id__in=[activeevent.id for activeevent in activeevents],
-        ).count()
+            m.models.Q(activeevents__id__in=[activeevent.id for activeevent in activeevents], is_read=False) |
+            m.models.Q(activeevents__id__gt=0, parent__author=self.request.user, is_read=False)
+        ).exclude(author=self.request.user).count()
 
         if last_activeevent_message and last_activeevent_message == 'mark':
             data.append(dict(
@@ -1715,8 +1717,9 @@ class MemberViewSet(viewsets.ModelViewSet):
 
         activeevents = self.request.user.activeevents_owned.all()
         activeevents_comments = m.Comment.objects.filter(
-            activeevents__id__in=[activeevent.id for activeevent in activeevents],
-        ).exclude(is_read=True).exists()
+            m.models.Q(activeevents__id__in=[activeevent.id for activeevent in activeevents], is_read=False) |
+            m.models.Q(activeevents__id__gt=0, parent__author=self.request.user, is_read=False)
+        ).exclude(author=self.request.user, ).exists()
         activeevents_marks = m.UserMark.objects.filter(
             object_id__in=[activeevent.id for activeevent in activeevents],
             subject='like',
@@ -1781,8 +1784,9 @@ class MemberViewSet(viewsets.ModelViewSet):
                 content_type=m.ContentType.objects.get(model='activeevent'),
             ).exclude(is_read=True).all()
             comments = m.Comment.objects.filter(
-                activeevents__id__in=[activeevent.id for activeevent in activeevents],
-            ).exclude(is_read=True).all()
+                m.models.Q(activeevents__id__in=[activeevent.id for activeevent in activeevents], is_read=False) |
+                m.models.Q(activeevents__id__gt=0, parent__author=self.request.user, is_read=False)
+            ).exclude(author=self.request.user, ).all()
 
         for mark in marks:
             mark.is_read = True
@@ -2487,6 +2491,22 @@ class LiveViewSet(viewsets.ModelViewSet):
             m.models.Q(live=live, date_leave__lt=m.models.F('date_enter'))
         ).count()
         return Response(data=count)
+
+    @list_route(methods=['GET'])
+    def get_hot_live(self, request):
+        id_not_in = request.data.get('id_not_in')
+        id_list = []
+        if id_not_in:
+            id_list = [int(x) for x in id_not_in.split(',') if x]
+        qs = m.Live.objects.filter(
+            date_end=None,
+        ).exclude(id__in=id_list).exclude(is_private=True).order_by('-hot_rating')
+        if not qs.exists():
+            qs = m.Live.objects.exclude(date_end=None).exclude(is_private=True).exclude(
+                id__in=id_list
+            ).order_by('-hot_rating')
+
+        return Response(data=s.LiveSerializer(qs[:5], many=True).data)
 
 
 class LiveBarrageViewSet(viewsets.ModelViewSet):
@@ -3231,8 +3251,9 @@ class CommentViewSet(viewsets.ModelViewSet):
         if own_activeevent_comment:
             activeevents = me.activeevents_owned.all()
             qs = qs.filter(
-                activeevents__id__in=[activeevent.id for activeevent in activeevents],
-            ).order_by('-date_created')
+                m.models.Q(activeevents__id__in=[activeevent.id for activeevent in activeevents]) |
+                m.models.Q(activeevents__id__gt=0, parent__author=self.request.user)
+            ).exclude(author=self.request.user).order_by('-date_created')
 
         return qs
 
